@@ -3,7 +3,7 @@ export type FlakeSize = {
   height: number;
 };
 
-export type CannonPosition = {
+export type Position = {
   x: number;
   y: number;
 };
@@ -72,7 +72,23 @@ export type ConfettiProps = {
   /**
    * @description An array of positions from which confetti flakes should blast.
    */
-  cannonsPositions?: CannonPosition[];
+  cannonsPositions?: Position[];
+};
+
+export type PIConfettiProps = Omit<
+  ConfettiProps,
+  'autoPlay' | 'verticalSpacing' | 'autoStartDelay' | 'cannonsPositions'
+> & {
+  /**
+   * @description The position from which confetti flakes should blast.
+   * @default { x: containerWidth / 2, y: 150 }
+   */
+  blastPosition?: Position;
+  /**
+   * @description The radius of the blast.
+   * @default 180
+   */
+  blastRadius?: number;
 };
 
 export type ConfettiMethods = {

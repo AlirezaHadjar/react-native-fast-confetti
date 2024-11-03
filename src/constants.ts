@@ -24,3 +24,5 @@ export const DEFAULT_AUTOSTART_DELAY = 0;
 export const DEFAULT_VERTICAL_SPACING = 30;
 
 export const RANDOM_INITIAL_Y_JIGGLE = 20;
+
+export const DEFAULT_BLAST_RADIUS = 180;
