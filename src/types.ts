@@ -44,6 +44,11 @@ export type ConfettiProps = {
    */
   autoplay?: boolean;
   /**
+   * @description Wether the animation should play again after it ends.
+   * @default true
+   */
+  isInfinite?: boolean;
+  /**
    * @description The array of confetti flakes color.
    */
   colors?: string[];

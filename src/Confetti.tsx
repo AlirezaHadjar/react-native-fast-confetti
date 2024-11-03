@@ -54,6 +54,7 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
       width: _width,
       height: _height,
       autoplay = true,
+      isInfinite = autoplay,
       fadeOutOnEnd = false,
       cannonsPositions = [],
     },
@@ -165,7 +166,7 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
       JSOnStart();
 
       progress.value = runAnimation(
-        { infinite: autoplay, blastDuration, fallDuration },
+        { infinite: isInfinite, blastDuration, fallDuration },
         (finished) => {
           'worklet';
           if (!finished) return;
@@ -187,7 +188,7 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
         {
           blastDuration: isBlasting ? blastRemaining : undefined,
           fallDuration: isBlasting ? fallDuration : fallingRemaining,
-          infinite: false,
+          infinite: isInfinite,
         },
         (finished) => {
           'worklet';
@@ -198,7 +199,7 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
 
           if (autoplay)
             progress.value = runAnimation(
-              { infinite: true, blastDuration, fallDuration },
+              { infinite: isInfinite, blastDuration, fallDuration },
               (_finished) => {
                 'worklet';
                 if (!_finished) return;
