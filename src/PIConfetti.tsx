@@ -73,11 +73,6 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
     const containerHeight = _height || DEFAULT_SCREEN_HEIGHT;
     const blastPosition = _blastPosition || { x: containerWidth / 2, y: 150 };
 
-    const columnsNum = Math.floor(containerWidth / flakeSize.width);
-    const rowsNum = Math.ceil(count / columnsNum);
-    const rowHeight = flakeSize.height + 0;
-    const columnWidth = flakeSize.width;
-
     const sizeSteps = 10;
     const sizeVariations = useMemo(() => {
       const sizeVariations = [];
@@ -119,7 +114,7 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
         sizeVariations.length
       );
       runOnJS(setBoxes)(newBoxes);
-    }, [count, colors]);
+    }, [count, colors, sizeVariations.length]);
 
     const JSOnStart = () => onAnimationStart?.();
     const JSOnEnd = () => onAnimationEnd?.();
@@ -168,14 +163,6 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
       resume,
       restart,
     }));
-
-    const getInitialPosition = (index: number) => {
-      'worklet';
-      const x = (index % columnsNum) * flakeSize.width;
-      const y = Math.floor(index / columnsNum) * rowHeight;
-
-      return { x, y };
-    };
 
     const getPosition = (index: number) => {
       'worklet';

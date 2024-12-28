@@ -89,7 +89,6 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
     const columnsNum = Math.floor(containerWidth / flakeSize.width);
     const rowsNum = Math.ceil(count / columnsNum);
     const rowHeight = flakeSize.height + verticalSpacing;
-    const columnWidth = flakeSize.width;
     const verticalOffset =
       -rowsNum * rowHeight * (hasCannons ? 0.2 : 1) +
       verticalSpacing -
