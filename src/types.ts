@@ -80,7 +80,8 @@ export type ConfettiProps = {
   cannonsPositions?: Position[];
   /**
    * @description Controls the random size variation of confetti flakes. Value between 0 and 1.
-   * A value of 0.5 means flakes can randomly vary between 50% smaller to 50% larger than the base size.
+   * A value of 0.1 means flakes can randomly vary between 10% smaller to 10% larger than the base size.
+   * Recommended value is between 0 and 0.2
    * @default 0
    */
   sizeVariation?: number;

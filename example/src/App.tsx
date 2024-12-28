@@ -25,6 +25,7 @@ export default function App() {
         fallDuration={8000}
         verticalSpacing={20}
         cannonsPositions={cannonPositions}
+        sizeVariation={0.1}
         fadeOutOnEnd
       />
       <Button title="Resume" onPress={() => confettiRef.current?.resume()} />
