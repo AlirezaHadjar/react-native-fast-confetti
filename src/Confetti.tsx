@@ -86,9 +86,15 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
       useWindowDimensions();
     const containerWidth = _width || DEFAULT_SCREEN_WIDTH;
     const containerHeight = _height || DEFAULT_SCREEN_HEIGHT;
-    const columnsNum = Math.floor(containerWidth / flakeSize.width);
-    const rowsNum = Math.ceil(count / columnsNum);
+    // if the count * flakeSize.width is less than to fill the first row, we need to add horizontal spacing
+    const horizontalSpacing = Math.max(
+      0,
+      containerWidth / count - flakeSize.width
+    );
+    const columnWidth = flakeSize.width + horizontalSpacing;
     const rowHeight = flakeSize.height + verticalSpacing;
+    const columnsNum = Math.floor(containerWidth / columnWidth);
+    const rowsNum = Math.ceil(count / columnsNum);
     const verticalOffset =
       -rowsNum * rowHeight * (hasCannons ? 0.2 : 1) +
       verticalSpacing -
@@ -239,7 +245,7 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
 
     const getPosition = (index: number) => {
       'worklet';
-      const x = (index % columnsNum) * flakeSize.width;
+      const x = (index % columnsNum) * columnWidth;
       const y = Math.floor(index / columnsNum) * rowHeight;
 
       return { x, y };
