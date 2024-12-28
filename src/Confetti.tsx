@@ -27,7 +27,7 @@ import {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { generateBoxesArray } from './utils';
+import { generateBoxesArray, generateEvenlyDistributedValues } from './utils';
 import {
   DEFAULT_AUTOSTART_DELAY,
   DEFAULT_BLAST_DURATION,
@@ -133,7 +133,7 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
         sizeVariations.length
       );
       runOnJS(setBoxes)(newBoxes);
-    }, [count, colors]);
+    }, [count, colors, sizeVariations.length]);
 
     const JSOnStart = () => onAnimationStart?.();
     const JSOnEnd = () => onAnimationEnd?.();
@@ -291,8 +291,8 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
       const { x, y } = getPosition(i); // Already includes random offsets
 
       if (progress.value < 1 && aHasCannon.value) {
-        // Determine the corresponding index in initialBlasts based on i and count
-        const blastIndex = Math.floor((i / count) * cannonsPositions.length);
+        // Distribute confetti evenly across cannons by using modulo
+        const blastIndex = i % cannonsPositions.length;
         const blastPosX = cannonsPositions[blastIndex]?.x || 0;
         const blastPosY = cannonsPositions[blastIndex]?.y || 0;
 
@@ -304,13 +304,13 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
 
         tx = interpolate(
           progress.value,
-          [0, 1],
+          [piece.blastThreshold, 1],
           [blastPosX, initialX],
           Extrapolation.CLAMP
         );
         ty = interpolate(
           progress.value,
-          [0, 1],
+          [piece.blastThreshold, 1],
           [blastPosY, initialY],
           Extrapolation.CLAMP
         );
@@ -330,7 +330,7 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
         // Interpolate between randomX values for smooth left-right movement
         const randomX = interpolate(
           progress.value,
-          [1, 1.25, 1.5, 1.75, 2],
+          generateEvenlyDistributedValues(1, 2, piece.randomXs.length),
           piece.randomXs, // Use the randomX array for horizontal movement
           Extrapolation.CLAMP
         );

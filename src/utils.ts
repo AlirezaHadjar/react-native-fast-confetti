@@ -21,6 +21,16 @@ export const randomXArray = (num: number, min: number, max: number) => {
   return new Array(num).fill(0).map(() => getRandomValue(min, max));
 };
 
+export const generateEvenlyDistributedValues = (
+  lowerBound: number,
+  upperBound: number,
+  chunks: number
+) => {
+  'worklet';
+  const step = (upperBound - lowerBound) / (chunks - 1);
+  return Array.from({ length: chunks }, (_, i) => lowerBound + step * i);
+};
+
 export const generateBoxesArray = (
   count: number,
   colorsVariations: number,
@@ -40,6 +50,7 @@ export const generateBoxesArray = (
       -RANDOM_INITIAL_Y_JIGGLE,
       RANDOM_INITIAL_Y_JIGGLE
     ),
+    blastThreshold: getRandomValue(0, 0.3),
     initialRotation: getRandomValue(0.1 * Math.PI, Math.PI),
     randomSpeed: getRandomValue(0.9, 1.3), // Random speed multiplier
     randomOffsetX: getRandomValue(-10, 10), // Random X offset for initial position
