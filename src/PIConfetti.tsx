@@ -7,7 +7,13 @@ import {
   Canvas,
   Atlas,
 } from '@shopify/react-native-skia';
-import { forwardRef, useCallback, useImperativeHandle, useState } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useImperativeHandle,
+  useMemo,
+  useState,
+} from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import {
   cancelAnimation,
@@ -34,6 +40,7 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
     {
       count = DEFAULT_BOXES_COUNT,
       flakeSize = DEFAULT_FLAKE_SIZE,
+      sizeVariation = 0,
       fallDuration = DEFAULT_FALL_DURATION,
       blastDuration = DEFAULT_BLAST_DURATION,
       colors = DEFAULT_COLORS,
@@ -71,12 +78,23 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
     const rowHeight = flakeSize.height + 0;
     const columnWidth = flakeSize.width;
 
-    const textureSize = {
-      width: columnWidth * columnsNum,
-      height: rowHeight * rowsNum,
-    };
+    const sizeSteps = 10;
+    const sizeVariations = useMemo(() => {
+      const sizeVariations = [];
+      for (let i = 0; i < sizeSteps; i++) {
+        const variationScale = -1 + (2 * i) / (sizeSteps - 1);
+        const multiplier = 1 + sizeVariation * variationScale;
+
+        sizeVariations.push({
+          width: flakeSize.width * multiplier,
+          height: flakeSize.height * multiplier,
+        });
+      }
+      return sizeVariations;
+    }, [sizeSteps, sizeVariation, flakeSize]);
+
     const [boxes, setBoxes] = useState(() =>
-      generatePIBoxesArray(count, colors)
+      generatePIBoxesArray(count, colors.length, sizeVariations.length)
     );
 
     const pause = () => {
@@ -95,7 +113,11 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
     const refreshBoxes = useCallback(() => {
       'worklet';
 
-      const newBoxes = generatePIBoxesArray(count, colors);
+      const newBoxes = generatePIBoxesArray(
+        count,
+        colors.length,
+        sizeVariations.length
+      );
       runOnJS(setBoxes)(newBoxes);
     }, [count, colors]);
 
@@ -172,29 +194,37 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
       return { x, y };
     };
 
+    const height = sizeVariations.reduce((acc, size) => acc + size.height, 0);
+    const maxWidth = Math.max(...sizeVariations.map((size) => size.width));
+
     const texture = useTexture(
       <Group>
-        {boxes.map((box, index) => {
-          const { x, y } = getInitialPosition(index);
-
-          return (
-            <Rect
-              key={index}
-              rect={rect(x, y, flakeSize.width, flakeSize.height)}
-              color={box.color}
-            />
-          );
+        {colors.map((color, index) => {
+          return sizeVariations.map((size, sizeIndex) => {
+            return (
+              <Rect
+                key={`${index}-${sizeIndex}`}
+                rect={rect(0, index * size.height, size.width, size.height)}
+                color={color}
+              />
+            );
+          });
         })}
       </Group>,
-      textureSize
+      {
+        width: maxWidth,
+        height: height * colors.length,
+      }
     );
 
-    const sprites = boxes.map((_, index) => {
-      const { x, y } = getInitialPosition(index);
-      return rect(x, y, flakeSize.width, flakeSize.height);
+    const sprites = boxes.map((box) => {
+      const colorIndex = box.colorIndex;
+      const sizeIndex = box.sizeIndex;
+      const size = sizeVariations[sizeIndex]!;
+      return rect(0, colorIndex * size.height, size.width, size.height);
     });
 
-    const transforms = useRSXformBuffer(count, (val, i) => {
+    const transforms = useRSXformBuffer(boxes.length, (val, i) => {
       'worklet';
       const piece = boxes[i];
       if (!piece) return;
@@ -284,8 +314,10 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
       );
       const scale = blastScale * oscillatingScale;
 
-      const px = flakeSize.width / 2;
-      const py = flakeSize.height / 2;
+      const size = sizeVariations[piece.sizeIndex]!;
+
+      const px = size.width / 2;
+      const py = size.height / 2;
 
       // Apply the transformation, including the flipping effect and randomX oscillation
       const s = Math.sin(rz) * scale;

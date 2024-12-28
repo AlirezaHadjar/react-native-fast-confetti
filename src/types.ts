@@ -78,6 +78,12 @@ export type ConfettiProps = {
    * @description An array of positions from which confetti flakes should blast.
    */
   cannonsPositions?: Position[];
+  /**
+   * @description Controls the random size variation of confetti flakes. Value between 0 and 1.
+   * A value of 0.5 means flakes can randomly vary between 50% smaller to 50% larger than the base size.
+   * @default 0
+   */
+  sizeVariation?: number;
 };
 
 export type PIConfettiProps = Omit<
