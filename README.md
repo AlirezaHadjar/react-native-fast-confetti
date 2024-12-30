@@ -77,6 +77,7 @@ return (
 | `fadeOutOnEnd`     | No       | N/A                      | Should the confetti flakes fade out as they reach the bottom.                                     |
 | `onAnimationStart` | No       | N/A                      | Callback function triggered when the falling animation starts.                                    |
 | `onAnimationEnd`   | No       | N/A                      | Callback function triggered when the falling animation ends.                                      |
+| `sizeVariation`    | No       | 0                      | Controls the random size variation of confetti flakes. Value between 0 and 1. A value of 0.1 means flakes can randomly vary between 10% smaller to 10% larger than the base size (`flakeSize`). Recommended value is between 0 and 0.2                                     |
 
 ## `<PIConfetti />` Props
 
@@ -94,6 +95,7 @@ return (
 | `fadeOutOnEnd`     | No       | N/A                      | Should the confetti flakes fade out as they reach the bottom.                                     |
 | `onAnimationStart` | No       | N/A                      | Callback function triggered when the falling animation starts.                                    |
 | `onAnimationEnd`   | No       | N/A                      | Callback function triggered when the falling animation ends.                                      |
+| `sizeVariation`    | No       | 0                      | Controls the random size variation of confetti flakes. Value between 0 and 1. A value of 0.1 means flakes can randomly vary between 10% smaller to 10% larger than the base size (`flakeSize`). Recommended value is between 0 and 0.2                                     |
 
 
 ## Methods
