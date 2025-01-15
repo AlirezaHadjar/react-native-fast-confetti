@@ -245,9 +245,28 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
 
     const getPosition = (index: number) => {
       'worklet';
-      const x = (index % columnsNum) * columnWidth;
-      const y = Math.floor(index / columnsNum) * rowHeight;
+      const rowIndex = Math.floor(index / columnsNum);
+      const isLastRow = rowIndex === rowsNum - 1;
 
+      let x: number;
+      // if the last row is not full, we need to calculate the spacing to spread items evenly
+      if (isLastRow) {
+        // Calculate remaining items in last row
+        const itemsInLastRow = count - (rowsNum - 1) * columnsNum;
+        // Calculate spacing to spread items evenly
+        const lastRowSpacing =
+          (containerWidth - itemsInLastRow * flakeSize.width) /
+          (itemsInLastRow + 1);
+        // Get position within last row (0 to itemsInLastRow-1)
+        const positionInLastRow = index - (rowsNum - 1) * columnsNum;
+        x =
+          lastRowSpacing +
+          positionInLastRow * (flakeSize.width + lastRowSpacing);
+      } else {
+        x = (index % columnsNum) * columnWidth;
+      }
+
+      const y = rowIndex * rowHeight;
       return { x, y };
     };
 
