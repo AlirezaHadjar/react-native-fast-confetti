@@ -265,7 +265,9 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
     useEffect(() => {
       runOnUI(() => {
         if (autoplay && !running.value) {
-          animatedTimeout.value = setAnimatedTimeout(restart, autoStartDelay);
+          if (autoStartDelay > 0)
+            animatedTimeout.value = setAnimatedTimeout(restart, autoStartDelay);
+          else restart();
         }
       })();
 
