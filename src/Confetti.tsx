@@ -275,26 +275,24 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [autoplay]);
 
-    const height = sizeVariations.reduce((acc, size) => acc + size.height, 0);
     const maxWidth = Math.max(...sizeVariations.map((size) => size.width));
+    const maxHeight = Math.max(...sizeVariations.map((size) => size.height));
 
     const texture = useTexture(
       <Group>
         {colors.map((color, index) => {
-          return sizeVariations.map((size, sizeIndex) => {
-            return (
-              <Rect
-                key={`${index}-${sizeIndex}`}
-                rect={rect(0, index * size.height, size.width, size.height)}
-                color={color}
-              />
-            );
-          });
+          return (
+            <Rect
+              key={`${index}`}
+              rect={rect(0, index * maxHeight, maxWidth, maxHeight)}
+              color={color}
+            />
+          );
         })}
       </Group>,
       {
         width: maxWidth,
-        height: height * colors.length,
+        height: maxHeight * colors.length,
       }
     );
 
@@ -302,7 +300,7 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
       const colorIndex = box.colorIndex;
       const sizeIndex = box.sizeIndex;
       const size = sizeVariations[sizeIndex]!;
-      return rect(0, colorIndex * size.height, size.width, size.height);
+      return rect(0, colorIndex * maxHeight, size.width, size.height);
     });
 
     const transforms = useRSXformBuffer(boxes.length, (val, i) => {
