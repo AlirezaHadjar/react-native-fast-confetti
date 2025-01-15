@@ -19,7 +19,7 @@ export const DEFAULT_COLORS = [
   '#FF33A5',
 ];
 
-export const DEFAULT_AUTOSTART_DELAY = 0;
+export const DEFAULT_AUTOSTART_DELAY = 5000;
 
 export const DEFAULT_VERTICAL_SPACING = 30;
 

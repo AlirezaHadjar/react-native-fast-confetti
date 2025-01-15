@@ -123,11 +123,12 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
     };
 
     const restart = () => {
+      'worklet';
       refreshBoxes();
       running.value = true;
 
       reset();
-      JSOnStart();
+      runOnJS(JSOnStart)();
       runBlastAnimation({ blastDuration, fallDuration });
     };
 

@@ -6,6 +6,7 @@ import {
   Extrapolation,
   interpolate,
   runOnJS,
+  runOnUI,
   useDerivedValue,
   useSharedValue,
   withRepeat,
@@ -26,6 +27,11 @@ import {
 import type { ConfettiMethods, ConfettiProps } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useVariations } from './hooks/sizeVariations';
+import {
+  clearAnimatedTimeout,
+  setAnimatedTimeout,
+  type AnimatedTimeoutID,
+} from './hooks/useAnimatedTimeout';
 
 export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
   (
@@ -169,10 +175,11 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
     };
 
     const restart = () => {
+      'worklet';
       refreshBoxes();
       progress.value = initialProgress;
       running.value = true;
-      JSOnStart();
+      runOnJS(JSOnStart)();
 
       progress.value = runAnimation(
         { infinite: isInfinite, blastDuration, fallDuration },
@@ -254,8 +261,20 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
       return { x, y };
     };
 
+    const animatedTimeout = useSharedValue<AnimatedTimeoutID>(-1);
     useEffect(() => {
-      if (autoplay && !running.value) setTimeout(restart, autoStartDelay);
+      runOnUI(() => {
+        if (autoplay && !running.value) {
+          animatedTimeout.value = setAnimatedTimeout(restart, autoStartDelay);
+        }
+      })();
+
+      return () => {
+        if (animatedTimeout.value !== -1) {
+          clearAnimatedTimeout(animatedTimeout.value);
+          animatedTimeout.value = -1;
+        }
+      };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [autoplay]);
 
