@@ -1,11 +1,11 @@
 import {
   useTexture,
   Group,
-  Rect,
   rect,
   useRSXformBuffer,
   Canvas,
   Atlas,
+  RoundedRect,
 } from '@shopify/react-native-skia';
 import {
   forwardRef,
@@ -27,7 +27,11 @@ import {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { generateBoxesArray, generateEvenlyDistributedValues } from './utils';
+import {
+  generateBoxesArray,
+  generateEvenlyDistributedValues,
+  getRandomValue,
+} from './utils';
 import {
   DEFAULT_AUTOSTART_DELAY,
   DEFAULT_BLAST_DURATION,
@@ -51,6 +55,7 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
       colors = DEFAULT_COLORS,
       autoStartDelay = DEFAULT_AUTOSTART_DELAY,
       verticalSpacing = DEFAULT_VERTICAL_SPACING,
+      radiusRange: _radiusRange,
       onAnimationEnd,
       onAnimationStart,
       width: _width,
@@ -99,21 +104,34 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
       -rowsNum * rowHeight * (hasCannons ? 0.2 : 1) +
       verticalSpacing -
       RANDOM_INITIAL_Y_JIGGLE;
+    const DEFAULT_RADIUS_RANGE: ConfettiProps['radiusRange'] = [
+      0,
+      Math.max(flakeSize.width, flakeSize.height) / 2,
+    ];
+    const radiusRange = _radiusRange || DEFAULT_RADIUS_RANGE;
 
     const sizeSteps = 10;
     const sizeVariations = useMemo(() => {
       const sizeVariations = [];
+      // Nested loops to create all possible width-height combinations
       for (let i = 0; i < sizeSteps; i++) {
-        const variationScale = -1 + (2 * i) / (sizeSteps - 1);
-        const multiplier = 1 + sizeVariation * variationScale;
+        for (let j = 0; j < sizeSteps; j++) {
+          // Using quadratic curve to skew distribution towards larger sizes
+          // Math.pow(x, 2) creates a curve that produces more values closer to 0
+          const widthScale = -Math.pow(i / (sizeSteps - 1), 2);
+          const heightScale = -Math.pow(j / (sizeSteps - 1), 2);
+          const widthMultiplier = 1 + sizeVariation * widthScale;
+          const heightMultiplier = 1 + sizeVariation * heightScale;
 
-        sizeVariations.push({
-          width: flakeSize.width * multiplier,
-          height: flakeSize.height * multiplier,
-        });
+          sizeVariations.push({
+            width: flakeSize.width * widthMultiplier,
+            height: flakeSize.height * heightMultiplier,
+            radius: getRandomValue(radiusRange[0], radiusRange[1]),
+          });
+        }
       }
       return sizeVariations;
-    }, [sizeSteps, sizeVariation, flakeSize]);
+    }, [sizeSteps, sizeVariation, flakeSize, radiusRange]);
 
     const [boxes, setBoxes] = useState(() =>
       generateBoxesArray(count, colors.length, sizeVariations.length)
@@ -280,18 +298,24 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
 
     const texture = useTexture(
       <Group>
-        {colors.map((color, index) => {
-          return (
-            <Rect
-              key={`${index}`}
-              rect={rect(0, index * maxHeight, maxWidth, maxHeight)}
-              color={color}
-            />
-          );
+        {colors.map((color, colorIndex) => {
+          return sizeVariations.map((size, sizeIndex) => {
+            return (
+              <RoundedRect
+                key={`${colorIndex}-${sizeIndex}`}
+                x={sizeIndex * maxWidth}
+                y={colorIndex * maxHeight}
+                width={size.width}
+                height={size.height}
+                r={size.radius}
+                color={color}
+              />
+            );
+          });
         })}
       </Group>,
       {
-        width: maxWidth,
+        width: maxWidth * sizeVariations.length,
         height: maxHeight * colors.length,
       }
     );
@@ -300,7 +324,12 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
       const colorIndex = box.colorIndex;
       const sizeIndex = box.sizeIndex;
       const size = sizeVariations[sizeIndex]!;
-      return rect(0, colorIndex * maxHeight, size.width, size.height);
+      return rect(
+        sizeIndex * maxWidth,
+        colorIndex * maxHeight,
+        size.width,
+        size.height
+      );
     });
 
     const transforms = useRSXformBuffer(boxes.length, (val, i) => {
