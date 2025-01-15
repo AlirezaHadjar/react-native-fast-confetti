@@ -89,7 +89,7 @@ export type ConfettiProps = {
   /**
    * @description The range of the radius of the confetti flakes.
    * A tuple of [min, max] values from which a random radius will be selected for each flake.
-   * @default '[0, flakeSize / 2]'
+   * @default '[0, 0]'
    */
   radiusRange?: [number, number];
 };
