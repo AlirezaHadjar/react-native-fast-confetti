@@ -1,5 +1,5 @@
 import { useRSXformBuffer, Canvas, Atlas } from '@shopify/react-native-skia';
-import { forwardRef, useCallback, useImperativeHandle, useState } from 'react';
+import { forwardRef, useCallback, useImperativeHandle } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import {
   cancelAnimation,
@@ -66,7 +66,7 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
       flakeSize,
       _radiusRange,
     });
-    const [boxes, setBoxes] = useState(() =>
+    const boxes = useSharedValue(
       generatePIBoxesArray(count, colors.length, sizeVariations.length)
     );
     const { texture, sprites } = useConfettiLogic({
@@ -97,8 +97,9 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
         colors.length,
         sizeVariations.length
       );
-      runOnJS(setBoxes)(newBoxes);
-    }, [count, colors, sizeVariations.length, setBoxes]);
+      boxes.value = newBoxes;
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [count, colors, sizeVariations.length]);
 
     const JSOnStart = () => onAnimationStart?.();
     const JSOnEnd = () => onAnimationEnd?.();
@@ -165,9 +166,9 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
       return { x, y };
     };
 
-    const transforms = useRSXformBuffer(boxes.length, (val, i) => {
+    const transforms = useRSXformBuffer(count, (val, i) => {
       'worklet';
-      const piece = boxes[i];
+      const piece = boxes.value[i];
       if (!piece) return;
 
       const { x, y } = getPosition(i);

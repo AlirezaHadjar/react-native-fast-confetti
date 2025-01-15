@@ -1,3 +1,4 @@
+import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import type { ConfettiProps } from '../types';
 import {
   useTexture,
@@ -15,10 +16,12 @@ export const useConfettiLogic = ({
 }: {
   count: Strict<ConfettiProps['count']>;
   colors: Strict<ConfettiProps['colors']>;
-  boxes: {
-    colorIndex: number;
-    sizeIndex: number;
-  }[];
+  boxes: SharedValue<
+    {
+      colorIndex: number;
+      sizeIndex: number;
+    }[]
+  >;
   sizeVariations: {
     width: number;
     height: number;
@@ -52,16 +55,18 @@ export const useConfettiLogic = ({
     }
   );
 
-  const sprites = boxes.map((box) => {
-    const colorIndex = box.colorIndex;
-    const sizeIndex = box.sizeIndex;
-    const size = sizeVariations[sizeIndex]!;
-    return rect(
-      sizeIndex * maxWidth,
-      colorIndex * maxHeight,
-      size.width,
-      size.height
-    );
+  const sprites = useDerivedValue(() => {
+    return boxes.value.map((box) => {
+      const colorIndex = box.colorIndex;
+      const sizeIndex = box.sizeIndex;
+      const size = sizeVariations[sizeIndex]!;
+      return rect(
+        sizeIndex * maxWidth,
+        colorIndex * maxHeight,
+        size.width,
+        size.height
+      );
+    });
   });
 
   return {
