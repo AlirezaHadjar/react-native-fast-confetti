@@ -66,8 +66,8 @@ export default function App() {
           cannonsPositions={cannons ? cannonPositions : undefined}
           radiusRange={[0, 15]}
           sizeVariation={0.5}
-          flakeSize={{ width: 15, height: 12 }}
-          fadeOutOnEnd
+          flakeSize={{ width: 15, height: 10 }}
+          count={500}
         />
       )}
 
