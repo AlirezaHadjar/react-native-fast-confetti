@@ -1,19 +1,5 @@
-import {
-  useTexture,
-  Group,
-  Rect,
-  rect,
-  useRSXformBuffer,
-  Canvas,
-  Atlas,
-} from '@shopify/react-native-skia';
-import {
-  forwardRef,
-  useCallback,
-  useImperativeHandle,
-  useMemo,
-  useState,
-} from 'react';
+import { useRSXformBuffer, Canvas, Atlas } from '@shopify/react-native-skia';
+import { forwardRef, useCallback, useImperativeHandle, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import {
   cancelAnimation,
@@ -34,6 +20,8 @@ import {
   DEFAULT_FLAKE_SIZE,
 } from './constants';
 import type { ConfettiMethods, PIConfettiProps } from './types';
+import { useConfettiLogic } from './hooks/useConfettiLogic';
+import { useVariations } from './hooks/sizeVariations';
 
 export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
   (
@@ -43,6 +31,7 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
       sizeVariation = 0,
       fallDuration = DEFAULT_FALL_DURATION,
       blastDuration = DEFAULT_BLAST_DURATION,
+      radiusRange: _radiusRange,
       colors = DEFAULT_COLORS,
       blastPosition: _blastPosition,
       onAnimationEnd,
@@ -72,25 +61,20 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
     const containerWidth = _width || DEFAULT_SCREEN_WIDTH;
     const containerHeight = _height || DEFAULT_SCREEN_HEIGHT;
     const blastPosition = _blastPosition || { x: containerWidth / 2, y: 150 };
-
-    const sizeSteps = 10;
-    const sizeVariations = useMemo(() => {
-      const sizeVariations = [];
-      for (let i = 0; i < sizeSteps; i++) {
-        const variationScale = -1 + (2 * i) / (sizeSteps - 1);
-        const multiplier = 1 + sizeVariation * variationScale;
-
-        sizeVariations.push({
-          width: flakeSize.width * multiplier,
-          height: flakeSize.height * multiplier,
-        });
-      }
-      return sizeVariations;
-    }, [sizeSteps, sizeVariation, flakeSize]);
-
+    const sizeVariations = useVariations({
+      sizeVariation,
+      flakeSize,
+      _radiusRange,
+    });
     const [boxes, setBoxes] = useState(() =>
       generatePIBoxesArray(count, colors.length, sizeVariations.length)
     );
+    const { texture, sprites } = useConfettiLogic({
+      sizeVariations,
+      count,
+      colors,
+      boxes,
+    });
 
     const pause = () => {
       running.value = false;
@@ -114,7 +98,7 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
         sizeVariations.length
       );
       runOnJS(setBoxes)(newBoxes);
-    }, [count, colors, sizeVariations.length]);
+    }, [count, colors, sizeVariations.length, setBoxes]);
 
     const JSOnStart = () => onAnimationStart?.();
     const JSOnEnd = () => onAnimationEnd?.();
@@ -180,36 +164,6 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
 
       return { x, y };
     };
-
-    const height = sizeVariations.reduce((acc, size) => acc + size.height, 0);
-    const maxWidth = Math.max(...sizeVariations.map((size) => size.width));
-
-    const texture = useTexture(
-      <Group>
-        {colors.map((color, index) => {
-          return sizeVariations.map((size, sizeIndex) => {
-            return (
-              <Rect
-                key={`${index}-${sizeIndex}`}
-                rect={rect(0, index * size.height, size.width, size.height)}
-                color={color}
-              />
-            );
-          });
-        })}
-      </Group>,
-      {
-        width: maxWidth,
-        height: height * colors.length,
-      }
-    );
-
-    const sprites = boxes.map((box) => {
-      const colorIndex = box.colorIndex;
-      const sizeIndex = box.sizeIndex;
-      const size = sizeVariations[sizeIndex]!;
-      return rect(0, colorIndex * size.height, size.width, size.height);
-    });
 
     const transforms = useRSXformBuffer(boxes.length, (val, i) => {
       'worklet';

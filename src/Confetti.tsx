@@ -1,18 +1,9 @@
-import {
-  useTexture,
-  Group,
-  rect,
-  useRSXformBuffer,
-  Canvas,
-  Atlas,
-  RoundedRect,
-} from '@shopify/react-native-skia';
+import { useRSXformBuffer, Canvas, Atlas } from '@shopify/react-native-skia';
 import {
   forwardRef,
   useCallback,
   useEffect,
   useImperativeHandle,
-  useMemo,
   useState,
 } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -27,11 +18,7 @@ import {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import {
-  generateBoxesArray,
-  generateEvenlyDistributedValues,
-  getRandomValue,
-} from './utils';
+import { generateBoxesArray, generateEvenlyDistributedValues } from './utils';
 import {
   DEFAULT_AUTOSTART_DELAY,
   DEFAULT_BLAST_DURATION,
@@ -43,6 +30,8 @@ import {
   RANDOM_INITIAL_Y_JIGGLE,
 } from './constants';
 import type { ConfettiMethods, ConfettiProps } from './types';
+import { useConfettiLogic } from './hooks/useConfettiLogic';
+import { useVariations } from './hooks/sizeVariations';
 
 export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
   (
@@ -104,38 +93,20 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
       -rowsNum * rowHeight * (hasCannons ? 0.2 : 1) +
       verticalSpacing -
       RANDOM_INITIAL_Y_JIGGLE;
-    const DEFAULT_RADIUS_RANGE: ConfettiProps['radiusRange'] = [
-      0,
-      Math.max(flakeSize.width, flakeSize.height) / 2,
-    ];
-    const radiusRange = _radiusRange || DEFAULT_RADIUS_RANGE;
-
-    const sizeSteps = 10;
-    const sizeVariations = useMemo(() => {
-      const sizeVariations = [];
-      // Nested loops to create all possible width-height combinations
-      for (let i = 0; i < sizeSteps; i++) {
-        for (let j = 0; j < sizeSteps; j++) {
-          // Using quadratic curve to skew distribution towards larger sizes
-          // Math.pow(x, 2) creates a curve that produces more values closer to 0
-          const widthScale = -Math.pow(i / (sizeSteps - 1), 2);
-          const heightScale = -Math.pow(j / (sizeSteps - 1), 2);
-          const widthMultiplier = 1 + sizeVariation * widthScale;
-          const heightMultiplier = 1 + sizeVariation * heightScale;
-
-          sizeVariations.push({
-            width: flakeSize.width * widthMultiplier,
-            height: flakeSize.height * heightMultiplier,
-            radius: getRandomValue(radiusRange[0], radiusRange[1]),
-          });
-        }
-      }
-      return sizeVariations;
-    }, [sizeSteps, sizeVariation, flakeSize, radiusRange]);
-
+    const sizeVariations = useVariations({
+      sizeVariation,
+      flakeSize,
+      _radiusRange,
+    });
     const [boxes, setBoxes] = useState(() =>
       generateBoxesArray(count, colors.length, sizeVariations.length)
     );
+    const { texture, sprites } = useConfettiLogic({
+      sizeVariations,
+      count,
+      colors,
+      boxes,
+    });
 
     const pause = () => {
       running.value = false;
@@ -156,7 +127,7 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
         sizeVariations.length
       );
       runOnJS(setBoxes)(newBoxes);
-    }, [count, colors, sizeVariations.length]);
+    }, [count, colors, sizeVariations.length, setBoxes]);
 
     const JSOnStart = () => onAnimationStart?.();
     const JSOnEnd = () => onAnimationEnd?.();
@@ -292,45 +263,6 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
       if (autoplay && !running.value) setTimeout(restart, autoStartDelay);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [autoplay]);
-
-    const maxWidth = Math.max(...sizeVariations.map((size) => size.width));
-    const maxHeight = Math.max(...sizeVariations.map((size) => size.height));
-
-    const texture = useTexture(
-      <Group>
-        {colors.map((color, colorIndex) => {
-          return sizeVariations.map((size, sizeIndex) => {
-            return (
-              <RoundedRect
-                key={`${colorIndex}-${sizeIndex}`}
-                x={sizeIndex * maxWidth}
-                y={colorIndex * maxHeight}
-                width={size.width}
-                height={size.height}
-                r={size.radius}
-                color={color}
-              />
-            );
-          });
-        })}
-      </Group>,
-      {
-        width: maxWidth * sizeVariations.length,
-        height: maxHeight * colors.length,
-      }
-    );
-
-    const sprites = boxes.map((box) => {
-      const colorIndex = box.colorIndex;
-      const sizeIndex = box.sizeIndex;
-      const size = sizeVariations[sizeIndex]!;
-      return rect(
-        sizeIndex * maxWidth,
-        colorIndex * maxHeight,
-        size.width,
-        size.height
-      );
-    });
 
     const transforms = useRSXformBuffer(boxes.length, (val, i) => {
       'worklet';
