@@ -1,26 +1,12 @@
-import {
-  useTexture,
-  Group,
-  Rect,
-  rect,
-  useRSXformBuffer,
-  Canvas,
-  Atlas,
-} from '@shopify/react-native-skia';
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  useState,
-} from 'react';
+import { useRSXformBuffer, Canvas, Atlas } from '@shopify/react-native-skia';
+import { forwardRef, useCallback, useEffect, useImperativeHandle } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import {
   cancelAnimation,
   Extrapolation,
   interpolate,
   runOnJS,
+  runOnUI,
   useDerivedValue,
   useSharedValue,
   withRepeat,
@@ -39,6 +25,13 @@ import {
   RANDOM_INITIAL_Y_JIGGLE,
 } from './constants';
 import type { ConfettiMethods, ConfettiProps } from './types';
+import { useConfettiLogic } from './hooks/useConfettiLogic';
+import { useVariations } from './hooks/sizeVariations';
+import {
+  clearAnimatedTimeout,
+  setAnimatedTimeout,
+  type AnimatedTimeoutID,
+} from './hooks/useAnimatedTimeout';
 
 export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
   (
@@ -51,6 +44,7 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
       colors = DEFAULT_COLORS,
       autoStartDelay = DEFAULT_AUTOSTART_DELAY,
       verticalSpacing = DEFAULT_VERTICAL_SPACING,
+      radiusRange: _radiusRange,
       onAnimationEnd,
       onAnimationStart,
       width: _width,
@@ -99,25 +93,20 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
       -rowsNum * rowHeight * (hasCannons ? 0.2 : 1) +
       verticalSpacing -
       RANDOM_INITIAL_Y_JIGGLE;
-
-    const sizeSteps = 10;
-    const sizeVariations = useMemo(() => {
-      const sizeVariations = [];
-      for (let i = 0; i < sizeSteps; i++) {
-        const variationScale = -1 + (2 * i) / (sizeSteps - 1);
-        const multiplier = 1 + sizeVariation * variationScale;
-
-        sizeVariations.push({
-          width: flakeSize.width * multiplier,
-          height: flakeSize.height * multiplier,
-        });
-      }
-      return sizeVariations;
-    }, [sizeSteps, sizeVariation, flakeSize]);
-
-    const [boxes, setBoxes] = useState(() =>
+    const sizeVariations = useVariations({
+      sizeVariation,
+      flakeSize,
+      _radiusRange,
+    });
+    const boxes = useSharedValue(
       generateBoxesArray(count, colors.length, sizeVariations.length)
     );
+    const { texture, sprites } = useConfettiLogic({
+      sizeVariations,
+      count,
+      colors,
+      boxes,
+    });
 
     const pause = () => {
       running.value = false;
@@ -137,8 +126,9 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
         colors.length,
         sizeVariations.length
       );
-      runOnJS(setBoxes)(newBoxes);
-    }, [count, colors, sizeVariations.length]);
+      boxes.value = newBoxes;
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [count, colors.length, sizeVariations.length]);
 
     const JSOnStart = () => onAnimationStart?.();
     const JSOnEnd = () => onAnimationEnd?.();
@@ -185,10 +175,11 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
     };
 
     const restart = () => {
+      'worklet';
       refreshBoxes();
       progress.value = initialProgress;
       running.value = true;
-      JSOnStart();
+      runOnJS(JSOnStart)();
 
       progress.value = runAnimation(
         { infinite: isInfinite, blastDuration, fallDuration },
@@ -270,42 +261,28 @@ export const Confetti = forwardRef<ConfettiMethods, ConfettiProps>(
       return { x, y };
     };
 
+    const animatedTimeout = useSharedValue<AnimatedTimeoutID>(-1);
     useEffect(() => {
-      if (autoplay && !running.value) setTimeout(restart, autoStartDelay);
+      runOnUI(() => {
+        if (autoplay && !running.value) {
+          if (autoStartDelay > 0)
+            animatedTimeout.value = setAnimatedTimeout(restart, autoStartDelay);
+          else restart();
+        }
+      })();
+
+      return () => {
+        if (animatedTimeout.value !== -1) {
+          clearAnimatedTimeout(animatedTimeout.value);
+          animatedTimeout.value = -1;
+        }
+      };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [autoplay]);
 
-    const maxWidth = Math.max(...sizeVariations.map((size) => size.width));
-    const maxHeight = Math.max(...sizeVariations.map((size) => size.height));
-
-    const texture = useTexture(
-      <Group>
-        {colors.map((color, index) => {
-          return (
-            <Rect
-              key={`${index}`}
-              rect={rect(0, index * maxHeight, maxWidth, maxHeight)}
-              color={color}
-            />
-          );
-        })}
-      </Group>,
-      {
-        width: maxWidth,
-        height: maxHeight * colors.length,
-      }
-    );
-
-    const sprites = boxes.map((box) => {
-      const colorIndex = box.colorIndex;
-      const sizeIndex = box.sizeIndex;
-      const size = sizeVariations[sizeIndex]!;
-      return rect(0, colorIndex * maxHeight, size.width, size.height);
-    });
-
-    const transforms = useRSXformBuffer(boxes.length, (val, i) => {
+    const transforms = useRSXformBuffer(count, (val, i) => {
       'worklet';
-      const piece = boxes[i];
+      const piece = boxes.value[i];
       if (!piece) return;
 
       let tx = 0,

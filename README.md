@@ -15,7 +15,7 @@ yarn add react-native-fast-confetti
 
 ## Usage
 ### `<Confetti />`
-This animation creates a basic confetti effect where pieces fall from the top in a straight line. 
+This animation creates a basic confetti effect where pieces fall from the top in a straight line.
 
 https://github.com/user-attachments/assets/d89ef248-6b27-435e-a322-fb62a3550343
 
@@ -77,7 +77,8 @@ return (
 | `fadeOutOnEnd`     | No       | N/A                      | Should the confetti flakes fade out as they reach the bottom.                                     |
 | `onAnimationStart` | No       | N/A                      | Callback function triggered when the falling animation starts.                                    |
 | `onAnimationEnd`   | No       | N/A                      | Callback function triggered when the falling animation ends.                                      |
-| `sizeVariation`    | No       | 0                      | Controls the random size variation of confetti flakes. Value between 0 and 1. A value of 0.1 means flakes can randomly vary between 10% smaller to 10% larger than the base size (`flakeSize`). Recommended value is between 0 and 0.2                                     |
+| `sizeVariation`    | No       | 0                      | A value of 0.1 means flakes can vary up to 10% smaller than the base (`flakeSize`), with more flakes clustering towards the original size and fewer towards the minimum size. Recommended value is between 0 and 0.5                                    |
+| `radiusRange`      | No       | [0, 0]                  | The range of the radius of the confetti flakes. A tuple of [min, max] values from which a random radius will be selected for each flake.                                                     |
 
 ## `<PIConfetti />` Props
 
@@ -95,7 +96,8 @@ return (
 | `fadeOutOnEnd`     | No       | N/A                      | Should the confetti flakes fade out as they reach the bottom.                                     |
 | `onAnimationStart` | No       | N/A                      | Callback function triggered when the falling animation starts.                                    |
 | `onAnimationEnd`   | No       | N/A                      | Callback function triggered when the falling animation ends.                                      |
-| `sizeVariation`    | No       | 0                      | Controls the random size variation of confetti flakes. Value between 0 and 1. A value of 0.1 means flakes can randomly vary between 10% smaller to 10% larger than the base size (`flakeSize`). Recommended value is between 0 and 0.2                                     |
+| `sizeVariation`    | No       | 0                      | A value of 0.1 means flakes can vary up to 10% smaller than the base (`flakeSize`), with more flakes clustering towards the original size and fewer towards the minimum size. Recommended value is between 0 and 0.5                       |
+| `radiusRange`      | No       | [0, 0]                  | The range of the radius of the confetti flakes. A tuple of [min, max] values from which a random radius will be selected for each flake.
 
 
 ## Methods

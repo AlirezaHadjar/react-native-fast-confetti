@@ -8,6 +8,7 @@ export const getRandomBoolean = () => {
 
 export const getRandomValue = (min: number, max: number): number => {
   'worklet';
+  if (min === max) return min;
   return Math.random() * (max - min) + min;
 };
 
@@ -43,8 +44,8 @@ export const generateBoxesArray = (
       x: getRandomValue(2 * Math.PI, 20 * Math.PI),
       z: getRandomValue(2 * Math.PI, 20 * Math.PI),
     },
-    colorIndex: Math.floor(getRandomValue(0, colorsVariations - 1)),
-    sizeIndex: Math.floor(getRandomValue(0, sizeVariations - 1)),
+    colorIndex: Math.round(getRandomValue(0, colorsVariations - 1)),
+    sizeIndex: Math.round(getRandomValue(0, sizeVariations - 1)),
     randomXs: randomXArray(5, -50, 50), // Array of randomX values for horizontal movement
     initialRandomY: getRandomValue(
       -RANDOM_INITIAL_Y_JIGGLE,
@@ -70,8 +71,8 @@ export const generatePIBoxesArray = (
       x: getRandomValue(1 * Math.PI, 3 * Math.PI),
       z: getRandomValue(1 * Math.PI, 3 * Math.PI),
     },
-    colorIndex: Math.floor(getRandomValue(0, colorsVariations - 1)),
-    sizeIndex: Math.floor(getRandomValue(0, sizeVariations - 1)),
+    colorIndex: Math.round(getRandomValue(0, colorsVariations - 1)),
+    sizeIndex: Math.round(getRandomValue(0, sizeVariations - 1)),
     randomXs: randomXArray(6, -5, 5), // Array of randomX values for horizontal movement
     initialRandomY: getRandomValue(
       -RANDOM_INITIAL_Y_JIGGLE,

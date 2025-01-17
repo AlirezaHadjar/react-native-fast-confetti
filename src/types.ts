@@ -80,11 +80,18 @@ export type ConfettiProps = {
   cannonsPositions?: Position[];
   /**
    * @description Controls the random size variation of confetti flakes. Value between 0 and 1.
-   * A value of 0.1 means flakes can randomly vary between 10% smaller to 10% larger than the base size.
-   * Recommended value is between 0 and 0.2
+   * A value of 0.1 means flakes can vary up to 10% smaller than the base size, with more flakes
+   * clustering towards the original size and fewer towards the minimum size.
+   * Recommended value is between 0 and 0.5
    * @default 0
    */
   sizeVariation?: number;
+  /**
+   * @description The range of the radius of the confetti flakes.
+   * A tuple of [min, max] values from which a random radius will be selected for each flake.
+   * @default '[0, 0]'
+   */
+  radiusRange?: [number, number];
 };
 
 export type PIConfettiProps = Omit<
