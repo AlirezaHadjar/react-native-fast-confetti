@@ -7,19 +7,19 @@ const TIMEOUT_ID = makeMutable(0);
 
 export type AnimatedTimeoutID = number;
 
-function removeFromPendingTimeouts(id: AnimatedTimeoutID): void {
+const removeFromPendingTimeouts = (id: AnimatedTimeoutID): void => {
   'worklet';
   PENDING_TIMEOUTS.modify((pendingTimeouts) => {
     'worklet';
     delete pendingTimeouts[id];
     return pendingTimeouts;
   });
-}
+};
 
-export function setAnimatedTimeout<F extends AnyFunction>(
+export const setAnimatedTimeout = <F extends AnyFunction>(
   callback: F,
   delay: number
-): AnimatedTimeoutID {
+): AnimatedTimeoutID => {
   'worklet';
   let startTimestamp: number;
 
@@ -45,9 +45,9 @@ export function setAnimatedTimeout<F extends AnyFunction>(
   requestAnimationFrame(step);
 
   return currentId;
-}
+};
 
-export function clearAnimatedTimeout(handle: AnimatedTimeoutID): void {
+export const clearAnimatedTimeout = (handle: AnimatedTimeoutID): void => {
   'worklet';
   removeFromPendingTimeouts(handle);
-}
+};
