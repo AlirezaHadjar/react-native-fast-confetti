@@ -61,7 +61,7 @@ export default function App() {
         <Confetti
           ref={confettiRef}
           autoplay={true}
-          verticalSpacing={20}
+          verticalSpacing={cannons ? 0 : 20}
           cannonsPositions={cannons ? cannonPositions : undefined}
           radiusRange={[0, 15]}
           sizeVariation={0.5}

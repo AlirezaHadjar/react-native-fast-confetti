@@ -9,19 +9,19 @@ import {
 
 type Strict<T> = T extends undefined ? never : T;
 
-export const useConfettiLogic = ({
+type MinimalBox = {
+  colorIndex: number;
+  sizeIndex: number;
+};
+
+export const useConfettiLogic = <T extends MinimalBox>({
   sizeVariations,
   colors,
   boxes,
 }: {
   count: Strict<ConfettiProps['count']>;
   colors: Strict<ConfettiProps['colors']>;
-  boxes: SharedValue<
-    {
-      colorIndex: number;
-      sizeIndex: number;
-    }[]
-  >;
+  boxes: SharedValue<T[]>;
   sizeVariations: {
     width: number;
     height: number;
