@@ -7,8 +7,8 @@ https://github.com/user-attachments/assets/968a376f-f20c-4a94-886b-65b1625891ae
 https://github.com/user-attachments/assets/97184ffd-4146-4806-8262-8f97373e612c
 
 ### Sreenshots
-[PI Confetti](https://github.com/user-attachments/assets/61bfd570-5fb5-4e1c-a6ab-b6a3472e49c4)
-[Confetti](https://github.com/user-attachments/assets/bf703f85-5ea2-4b0f-ac69-3c826fa01737)
+[PI Confetti](https://github.com/AlirezaHadjar/react-native-fast-confetti/blob/main/images/piconfetti.png)
+[Confetti](https://github.com/AlirezaHadjar/react-native-fast-confetti/blob/main/images/confetti.png)
 
 
 ## Installation
