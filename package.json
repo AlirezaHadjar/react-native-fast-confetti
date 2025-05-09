@@ -1,6 +1,6 @@
 {
   "name": "react-native-fast-confetti",
-  "version": "0.8.3-beta.0",
+  "version": "0.8.3-beta.1",
   "description": "The fastest confetti animation library in react native",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
@@ -67,7 +67,7 @@
     "@react-native/babel-preset": "0.78.2",
     "@react-native/eslint-config": "^0.79.2",
     "@release-it/conventional-changelog": "^9.0.2",
-    "@shopify/react-native-skia": "^2.0.0-next.3",
+    "@shopify/react-native-skia": "2.0.0-next.4",
     "@types/jest": "^29.5.5",
     "@types/react": "^19.0.12",
     "commitlint": "^19.6.1",
