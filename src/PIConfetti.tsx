@@ -48,7 +48,7 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
     const opacity = useDerivedValue(() => {
       if (!fadeOutOnEnd) return 1;
       return interpolate(
-        fallProgress.value,
+        fallProgress.get(),
         [0, 1],
         [1, 0],
         Extrapolation.CLAMP
@@ -77,7 +77,7 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
     });
 
     const pause = () => {
-      running.value = false;
+      running.set(false);
       cancelAnimation(blastProgress);
       cancelAnimation(fallProgress);
     };
@@ -85,8 +85,8 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
     const reset = () => {
       pause();
 
-      blastProgress.value = 0;
-      fallProgress.value = 0;
+      blastProgress.set(0);
+      fallProgress.set(0);
     };
 
     const refreshBoxes = useCallback(() => {
@@ -97,7 +97,7 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
         colors.length,
         sizeVariations.length
       );
-      boxes.value = newBoxes;
+      boxes.set(newBoxes);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [count, colors, sizeVariations.length]);
 
@@ -113,19 +113,21 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
     }) => {
       'worklet';
       if (_blastDuration > 0)
-        blastProgress.value = withTiming(1, { duration: _blastDuration });
-      else blastProgress.value = 1;
+        blastProgress.set(withTiming(1, { duration: _blastDuration }));
+      else blastProgress.set(1);
       if (_fallDuration > 0)
-        fallProgress.value = withTiming(1, { duration: _fallDuration }, () => {
-          runOnJS(JSOnEnd)();
-        });
-      else fallProgress.value = 1;
+        fallProgress.set(
+          withTiming(1, { duration: _fallDuration }, () => {
+            runOnJS(JSOnEnd)();
+          })
+        );
+      else fallProgress.set(1);
     };
 
     const restart = () => {
       'worklet';
       refreshBoxes();
-      running.value = true;
+      running.set(true);
 
       reset();
       runOnJS(JSOnStart)();
@@ -133,10 +135,10 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
     };
 
     const resume = () => {
-      if (running.value) return;
-      running.value = true;
-      const blastTimeLeft = (1 - blastProgress.value) * blastDuration;
-      const fallTimeLeft = (1 - fallProgress.value) * fallDuration;
+      if (running.get()) return;
+      running.set(true);
+      const blastTimeLeft = (1 - blastProgress.get()) * blastDuration;
+      const fallTimeLeft = (1 - fallProgress.get()) * fallDuration;
       runBlastAnimation({
         blastDuration: blastTimeLeft,
         fallDuration: fallTimeLeft,
@@ -169,7 +171,7 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
 
     const transforms = useRSXformBuffer(count, (val, i) => {
       'worklet';
-      const piece = boxes.value[i];
+      const piece = boxes.get()[i];
       if (!piece) return;
 
       const { x, y } = getPosition(i);
@@ -181,7 +183,7 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
       const diffY = y - blastPosition.y;
 
       const delayedBlastProgress = interpolate(
-        blastProgress.value,
+        blastProgress.get(),
         [piece.delayBlast, 1],
         [0, 1],
         Extrapolation.IDENTITY
@@ -191,18 +193,18 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
       ty += -diffY * (1 - delayedBlastProgress);
 
       const fallDistance = interpolate(
-        fallProgress.value,
+        fallProgress.get(),
         [0, 1],
         [0, containerHeight - blastPosition.y + blastRadius]
       );
 
       const spreadDistanceX = interpolate(
-        fallProgress.value,
+        fallProgress.get(),
         [0, 1],
         [0, piece.randomOffsetX]
       );
       const spreadDistanceY = interpolate(
-        fallProgress.value,
+        fallProgress.get(),
         [0, 1],
         [0, piece.randomOffsetY]
       );
@@ -213,7 +215,7 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
       // Interpolate between randomX values for smooth left-right movement
       const jigglingStartPos = 0.1;
       const randomX = interpolate(
-        fallProgress.value,
+        fallProgress.get(),
         [
           0,
           jigglingStartPos,
@@ -234,7 +236,7 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
       const rz =
         piece.initialRotation +
         interpolate(
-          fallProgress.value,
+          fallProgress.get(),
           [0, 1],
           [0, rotationDirection * piece.maxRotation.z],
           Extrapolation.CLAMP
@@ -242,7 +244,7 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
       const rx =
         piece.initialRotation +
         interpolate(
-          fallProgress.value,
+          fallProgress.get(),
           [0, 1],
           [0, rotationDirection * piece.maxRotation.x],
           Extrapolation.CLAMP
@@ -250,7 +252,7 @@ export const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
 
       const oscillatingScale = Math.abs(Math.cos(rx)); // Scale goes from 1 -> 0 -> 1
       const blastScale = interpolate(
-        blastProgress.value,
+        blastProgress.get(),
         [0, 0.2, 1],
         [0, 1, 1],
         Extrapolation.CLAMP

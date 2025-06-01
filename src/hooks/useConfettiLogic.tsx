@@ -56,7 +56,7 @@ export const useConfettiLogic = <T extends MinimalBox>({
   );
 
   const sprites = useDerivedValue(() => {
-    return boxes.value.map((box) => {
+    return boxes.get().map((box) => {
       const colorIndex = box.colorIndex;
       const sizeIndex = box.sizeIndex;
       const size = sizeVariations[sizeIndex]!;

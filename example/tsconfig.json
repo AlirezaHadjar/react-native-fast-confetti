@@ -1,6 +1,8 @@
 {
   "extends": "../tsconfig",
   "compilerOptions": {
-    // Avoid expo-cli auto-generating a tsconfig
+    "paths": {
+      "react-native-fast-confetti": ["../src/index"]
+    }
   }
 }

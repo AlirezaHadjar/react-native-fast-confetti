@@ -23,12 +23,17 @@ export const setAnimatedTimeout = <F extends AnyFunction>(
   'worklet';
   let startTimestamp: number;
 
-  const currentId = TIMEOUT_ID.value;
-  PENDING_TIMEOUTS.value[currentId] = true;
-  TIMEOUT_ID.value += 1;
+  const currentId = TIMEOUT_ID.get();
+  PENDING_TIMEOUTS.modify((pendingTimeouts) => {
+    'worklet';
+    // @ts-ignore
+    pendingTimeouts[currentId] = true;
+    return pendingTimeouts;
+  });
+  TIMEOUT_ID.set(TIMEOUT_ID.get() + 1);
 
   const step = (newTimestamp: number) => {
-    if (!PENDING_TIMEOUTS.value[currentId]) {
+    if (!PENDING_TIMEOUTS.get()[currentId]) {
       return;
     }
     if (startTimestamp === undefined) {
