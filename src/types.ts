@@ -1,3 +1,5 @@
+type StrictOmit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
+
 export type FlakeSize = {
   width: number;
   height: number;
@@ -94,9 +96,9 @@ export type ConfettiProps = {
   radiusRange?: [number, number];
 };
 
-export type PIConfettiProps = Omit<
+export type PIConfettiProps = StrictOmit<
   ConfettiProps,
-  'autoPlay' | 'verticalSpacing' | 'autoStartDelay' | 'cannonsPositions'
+  'autoplay' | 'verticalSpacing' | 'autoStartDelay' | 'cannonsPositions'
 > & {
   /**
    * @description The position from which confetti flakes should blast.

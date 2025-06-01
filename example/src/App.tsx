@@ -50,7 +50,6 @@ export default function App() {
       {isPIConfetti ? (
         <PIConfetti
           ref={confettiRef}
-          autoplay={true}
           fallDuration={2000}
           blastDuration={250}
           sizeVariation={0.3}
