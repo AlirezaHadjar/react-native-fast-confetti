@@ -39,9 +39,9 @@ import {
   type AnimatedTimeoutID,
 } from './hooks/useAnimatedTimeout';
 
-interface Props extends ConfettiProps {
+type Props = ConfettiProps & {
   ref: RefObject<ConfettiMethods | null>;
-}
+};
 
 const Confetti: FC<Props> = ({
   count = DEFAULT_BOXES_COUNT,
@@ -52,7 +52,7 @@ const Confetti: FC<Props> = ({
   colors = DEFAULT_COLORS,
   autoStartDelay = DEFAULT_AUTOSTART_DELAY,
   verticalSpacing = DEFAULT_VERTICAL_SPACING,
-  radiusRange: _radiusRange,
+  rotation,
   onAnimationEnd,
   onAnimationStart,
   width: _width,
@@ -62,7 +62,10 @@ const Confetti: FC<Props> = ({
   fadeOutOnEnd = false,
   cannonsPositions = [],
   ref,
+  ...flakeProps
 }) => {
+  const _radiusRange =
+    'radiusRange' in flakeProps ? flakeProps.radiusRange : undefined;
   const hasCannons = cannonsPositions.length > 0;
   const initialProgress = hasCannons ? 0 : 1;
   const endProgress = 2;
@@ -92,27 +95,40 @@ const Confetti: FC<Props> = ({
     0,
     containerWidth / count - flakeSize.width
   );
-  const columnWidth = flakeSize.width + horizontalSpacing;
-  const rowHeight = flakeSize.height + verticalSpacing;
+  const columnWidth = Math.min(flakeSize.width, 20) + horizontalSpacing;
+  const rowHeight = Math.min(flakeSize.height, 20) + verticalSpacing;
   const columnsNum = Math.floor(containerWidth / columnWidth);
   const rowsNum = Math.ceil(count / columnsNum);
+  const baseVerticalOffset = flakeSize.height * 0.5;
   const verticalOffset =
     -rowsNum * rowHeight * (hasCannons ? 0.2 : 1) +
     verticalSpacing -
-    RANDOM_INITIAL_Y_JIGGLE;
+    RANDOM_INITIAL_Y_JIGGLE -
+    baseVerticalOffset;
   const sizeVariations = useVariations({
     sizeVariation,
     flakeSize,
     _radiusRange,
   });
   const boxes = useSharedValue(
-    generateBoxesArray(count, colors.length, sizeVariations.length)
+    generateBoxesArray({
+      count,
+      colorsVariations: colors.length,
+      sizeVariations: sizeVariations.length,
+      duration: fallDuration,
+      rotation,
+    })
   );
   const { texture, sprites } = useConfettiLogic({
     sizeVariations,
-    count,
     colors,
     boxes,
+    textureProps:
+      flakeProps.type === 'image' && flakeProps.flakeImage
+        ? { type: 'image', content: flakeProps.flakeImage }
+        : flakeProps.type === 'svg' && flakeProps.flakeSvg
+          ? { type: 'svg', content: flakeProps.flakeSvg }
+          : undefined,
   });
 
   const pause = () => {
@@ -128,13 +144,22 @@ const Confetti: FC<Props> = ({
   const refreshBoxes = useCallback(() => {
     'worklet';
 
-    const newBoxes = generateBoxesArray(
+    const newBoxes = generateBoxesArray({
       count,
-      colors.length,
-      sizeVariations.length
-    );
+      colorsVariations: colors.length,
+      sizeVariations: sizeVariations.length,
+      duration: fallDuration,
+      rotation,
+    });
     boxes.set(newBoxes);
-  }, [count, colors.length, sizeVariations.length, boxes]);
+  }, [
+    count,
+    colors.length,
+    sizeVariations.length,
+    boxes,
+    fallDuration,
+    rotation,
+  ]);
 
   const JSOnStart = useCallback(() => onAnimationStart?.(), [onAnimationStart]);
   const JSOnEnd = useCallback(() => onAnimationEnd?.(), [onAnimationEnd]);

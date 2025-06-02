@@ -1,10 +1,14 @@
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
-import type { ConfettiProps } from '../types';
+import { type ConfettiProps } from '../types';
 import {
   useTexture,
   Group,
   RoundedRect,
   rect,
+  type SkSVG,
+  ImageSVG,
+  type SkImage,
+  Image,
 } from '@shopify/react-native-skia';
 
 type Strict<T> = T extends undefined ? never : T;
@@ -18,8 +22,8 @@ export const useConfettiLogic = <T extends MinimalBox>({
   sizeVariations,
   colors,
   boxes,
+  textureProps,
 }: {
-  count: Strict<ConfettiProps['count']>;
   colors: Strict<ConfettiProps['colors']>;
   boxes: SharedValue<T[]>;
   sizeVariations: {
@@ -27,6 +31,15 @@ export const useConfettiLogic = <T extends MinimalBox>({
     height: number;
     radius: number;
   }[];
+  textureProps?:
+    | {
+        type: 'image';
+        content: SkImage;
+      }
+    | {
+        type: 'svg';
+        content: SkSVG;
+      };
 }) => {
   const maxWidth = Math.max(...sizeVariations.map((size) => size.width));
   const maxHeight = Math.max(...sizeVariations.map((size) => size.height));
@@ -35,6 +48,30 @@ export const useConfettiLogic = <T extends MinimalBox>({
     <Group>
       {colors.map((color, colorIndex) => {
         return sizeVariations.map((size, sizeIndex) => {
+          if (textureProps?.type === 'svg') {
+            return (
+              <ImageSVG
+                key={`${colorIndex}-${sizeIndex}`}
+                x={sizeIndex * maxWidth}
+                y={colorIndex * maxHeight}
+                width={size.width}
+                height={size.height}
+                svg={textureProps.content}
+              />
+            );
+          }
+          if (textureProps?.type === 'image') {
+            return (
+              <Image
+                key={`${colorIndex}-${sizeIndex}`}
+                x={sizeIndex * maxWidth}
+                y={colorIndex * maxHeight}
+                width={size.width}
+                height={size.height}
+                image={textureProps.content}
+              />
+            );
+          }
           return (
             <RoundedRect
               key={`${colorIndex}-${sizeIndex}`}

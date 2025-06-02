@@ -1,4 +1,13 @@
+import type { SkImage, SkSVG } from '@shopify/react-native-skia';
+
 type StrictOmit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
+
+/**
+ * Utility type that recursively makes all optional properties required (including nested ones)
+ */
+export type DeepRequired<T> = {
+  [K in keyof T]: Required<DeepRequired<T[K]>>;
+};
 
 export type FlakeSize = {
   width: number;
@@ -10,7 +19,17 @@ export type Position = {
   y: number;
 };
 
-export type ConfettiProps = {
+export type RotationRange = {
+  min?: number;
+  max?: number;
+};
+
+export type Rotation = {
+  x?: RotationRange;
+  z?: RotationRange;
+};
+
+type BaseConfettiProps = {
   /**
    * @description number of confetti pieces to render.
    * @default 200
@@ -89,28 +108,79 @@ export type ConfettiProps = {
    */
   sizeVariation?: number;
   /**
-   * @description The range of the radius of the confetti flakes.
-   * A tuple of [min, max] values from which a random radius will be selected for each flake.
-   * @default '[0, 0]'
+   * @description The rotation configuration for confetti flakes.
+   * Object with optional x and y properties, each containing optional min and max values.
+   * @default { x: { min: 2 * Math.PI, max: 20 * Math.PI }, y: { min: 2 * Math.PI, max: 20 * Math.PI } }
    */
-  radiusRange?: [number, number];
+  rotation?: Rotation;
 };
 
-export type PIConfettiProps = StrictOmit<
-  ConfettiProps,
-  'autoplay' | 'verticalSpacing' | 'autoStartDelay' | 'cannonsPositions'
-> & {
-  /**
-   * @description The position from which confetti flakes should blast.
-   * @default { x: containerWidth / 2, y: 150 }
-   */
-  blastPosition?: Position;
-  /**
-   * @description The radius of the blast.
-   * @default 180
-   */
-  blastRadius?: number;
-};
+type TextureProps =
+  | {
+      /**
+       * @description Use this to render images as confetti flakes.
+       */
+      type: 'image';
+      /**
+       * @description The image to use as confetti flake.
+       */
+      flakeImage: SkImage;
+    }
+  | {
+      /**
+       * @description Use this to render custom SVGs as confetti flakes.
+       */
+      type: 'svg';
+      /**
+       * @description The SVG to use as confetti flake.
+       */
+      flakeSvg: SkSVG;
+    }
+  | {
+      /**
+       * @description Use this to render default confetti flakes.
+       */
+      type?: 'default';
+
+      /**
+       * @description The range of the radius of the confetti flakes.
+       * A tuple of [min, max] values from which a random radius will be selected for each flake.
+       * @default '[0, 0]'
+       */
+      radiusRange?: [number, number];
+    };
+
+export type ConfettiProps = BaseConfettiProps & TextureProps;
+
+type PIBaseProps = StrictOmit<
+  BaseConfettiProps,
+  | 'autoplay'
+  | 'verticalSpacing'
+  | 'autoStartDelay'
+  | 'cannonsPositions'
+  | 'isInfinite'
+  | 'rotation'
+>;
+
+export type PIConfettiProps = PIBaseProps &
+  TextureProps & {
+    /**
+     * @description The position from which confetti flakes should blast.
+     * @default { x: containerWidth / 2, y: 150 }
+     */
+    blastPosition?: Position;
+    /**
+     * @description The radius of the blast.
+     * @default 180
+     */
+    blastRadius?: number;
+    /**
+     * @description The rotation configuration for confetti flakes.
+     * Object with optional x and y properties, each containing optional min and max values.
+     * @default { x: { min: 1 * Math.PI, max: 3 * Math.PI }, y: { min: 1 * Math.PI, max: 3 * Math.PI } }
+     */
+    rotation?: Rotation;
+  };
 
 export type ConfettiMethods = {
   /**

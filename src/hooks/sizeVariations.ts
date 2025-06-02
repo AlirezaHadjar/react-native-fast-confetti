@@ -11,9 +11,9 @@ export const useVariations = ({
 }: {
   sizeVariation: Strict<ConfettiProps['sizeVariation']>;
   flakeSize: Strict<ConfettiProps['flakeSize']>;
-  _radiusRange: ConfettiProps['radiusRange'];
+  _radiusRange?: [number, number];
 }) => {
-  const DEFAULT_RADIUS_RANGE: ConfettiProps['radiusRange'] = [0, 0];
+  const DEFAULT_RADIUS_RANGE: [number, number] = [0, 0];
   const radiusRange = _radiusRange || DEFAULT_RADIUS_RANGE;
 
   const sizeSteps = 10;

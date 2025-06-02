@@ -1,5 +1,11 @@
-import { vec } from '@shopify/react-native-skia';
-import { RANDOM_INITIAL_Y_JIGGLE } from './constants';
+import { vec, type SkImage, type SkSVG } from '@shopify/react-native-skia';
+import {
+  RANDOM_INITIAL_Y_JIGGLE,
+  DEFAULT_CONFETTI_ROTATION,
+  DEFAULT_PICONFETTI_ROTATION,
+} from './constants';
+import { Extrapolation, interpolate } from 'react-native-reanimated';
+import type { Rotation } from './types';
 
 export const getRandomBoolean = () => {
   'worklet';
@@ -32,21 +38,53 @@ export const generateEvenlyDistributedValues = (
   return Array.from({ length: chunks }, (_, i) => lowerBound + step * i);
 };
 
-export const generateBoxesArray = (
-  count: number,
-  colorsVariations: number,
-  sizeVariations: number
+const resolveRotationRange = (
+  range?: { min?: number; max?: number },
+  defaultRange?: { min: number; max: number }
 ) => {
   'worklet';
+  const finalMin = range?.min ?? defaultRange?.min ?? 0;
+  const finalMax = range?.max ?? defaultRange?.max ?? 0;
+  return { min: finalMin, max: finalMax };
+};
+
+export const generateBoxesArray = ({
+  colorsVariations,
+  count,
+  duration,
+  sizeVariations,
+  rotation = DEFAULT_CONFETTI_ROTATION,
+}: {
+  count: number;
+  colorsVariations: number;
+  sizeVariations: number;
+  duration: number;
+  rotation?: Rotation;
+}) => {
+  'worklet';
+
+  const xRotationRange = resolveRotationRange(rotation.x);
+  const zRotationRange = resolveRotationRange(
+    rotation.z,
+    DEFAULT_CONFETTI_ROTATION.z
+  );
+
+  const maxRandomX = interpolate(
+    duration,
+    [0, 8000],
+    [5, 50],
+    Extrapolation.CLAMP
+  );
+
   return new Array(count).fill(0).map(() => ({
     clockwise: getRandomBoolean(),
     maxRotation: {
-      x: getRandomValue(2 * Math.PI, 20 * Math.PI),
-      z: getRandomValue(2 * Math.PI, 20 * Math.PI),
+      x: getRandomValue(xRotationRange.min, xRotationRange.max),
+      z: getRandomValue(zRotationRange.min, zRotationRange.max),
     },
     colorIndex: Math.round(getRandomValue(0, colorsVariations - 1)),
     sizeIndex: Math.round(getRandomValue(0, sizeVariations - 1)),
-    randomXs: randomXArray(5, -50, 50), // Array of randomX values for horizontal movement
+    randomXs: randomXArray(5, -maxRandomX, maxRandomX), // Array of randomX values for horizontal movement
     initialRandomY: getRandomValue(
       -RANDOM_INITIAL_Y_JIGGLE,
       RANDOM_INITIAL_Y_JIGGLE
@@ -59,17 +97,33 @@ export const generateBoxesArray = (
   }));
 };
 
-export const generatePIBoxesArray = (
-  count: number,
-  colorsVariations: number,
-  sizeVariations: number
-) => {
+export const generatePIBoxesArray = ({
+  count,
+  colorsVariations,
+  sizeVariations,
+  rotation = DEFAULT_PICONFETTI_ROTATION,
+}: {
+  count: number;
+  colorsVariations: number;
+  sizeVariations: number;
+  rotation?: Rotation;
+}) => {
   'worklet';
+
+  const xRotationRange = resolveRotationRange(
+    rotation.x,
+    DEFAULT_PICONFETTI_ROTATION.x
+  );
+  const zRotationRange = resolveRotationRange(
+    rotation.z,
+    DEFAULT_PICONFETTI_ROTATION.z
+  );
+
   return new Array(count).fill(0).map(() => ({
     clockwise: getRandomBoolean(),
     maxRotation: {
-      x: getRandomValue(1 * Math.PI, 3 * Math.PI),
-      z: getRandomValue(1 * Math.PI, 3 * Math.PI),
+      x: getRandomValue(xRotationRange.min, xRotationRange.max),
+      z: getRandomValue(zRotationRange.min, zRotationRange.max),
     },
     colorIndex: Math.round(getRandomValue(0, colorsVariations - 1)),
     sizeIndex: Math.round(getRandomValue(0, sizeVariations - 1)),
@@ -86,3 +140,11 @@ export const generatePIBoxesArray = (
     randomAcceleration: vec(getRandomValue(0.1, 0.3), getRandomValue(0.1, 0.3)), // Random acceleration multiplier
   }));
 };
+
+export const createTextureProps = <T extends 'svg' | 'image'>(
+  type: T,
+  content: any
+) =>
+  ({ type, content }) as T extends 'svg'
+    ? { type: 'svg'; content: SkSVG }
+    : { type: 'image'; content: SkImage };

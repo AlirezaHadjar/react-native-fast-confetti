@@ -1,10 +1,10 @@
-const { defineConfig } = require('eslint/config');
+const { defineConfig, globalIgnores } = require('eslint/config');
 const expoConfig = require('eslint-config-expo/flat');
 
 module.exports = defineConfig([
+  [globalIgnores(['.lib/*', 'dist/*', 'example/ios/*', 'example/android/*'])],
   expoConfig,
   {
-    ignores: ['dist/*'],
     plugins: {
       'react-compiler': require('eslint-plugin-react-compiler'),
     },

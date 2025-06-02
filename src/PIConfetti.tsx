@@ -23,9 +23,9 @@ import type { ConfettiMethods, PIConfettiProps } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useVariations } from './hooks/sizeVariations';
 
-interface Props extends PIConfettiProps {
+type Props = PIConfettiProps & {
   ref: RefObject<ConfettiMethods | null>;
-}
+};
 
 const PIConfetti: FC<Props> = ({
   count = DEFAULT_BOXES_COUNT,
@@ -33,7 +33,7 @@ const PIConfetti: FC<Props> = ({
   sizeVariation = 0,
   fallDuration = DEFAULT_FALL_DURATION,
   blastDuration = DEFAULT_BLAST_DURATION,
-  radiusRange: _radiusRange,
+  rotation,
   colors = DEFAULT_COLORS,
   blastPosition: _blastPosition,
   onAnimationEnd,
@@ -43,7 +43,10 @@ const PIConfetti: FC<Props> = ({
   blastRadius = DEFAULT_BLAST_RADIUS,
   fadeOutOnEnd = false,
   ref,
+  ...flakeProps
 }) => {
+  const _radiusRange =
+    'radiusRange' in flakeProps ? flakeProps.radiusRange : undefined;
   const blastProgress = useSharedValue(0);
   const fallProgress = useSharedValue(0);
   const opacity = useDerivedValue(() => {
@@ -55,7 +58,7 @@ const PIConfetti: FC<Props> = ({
   const { width: DEFAULT_SCREEN_WIDTH, height: DEFAULT_SCREEN_HEIGHT } =
     useWindowDimensions();
   const containerWidth = _width || DEFAULT_SCREEN_WIDTH;
-  const containerHeight = _height || DEFAULT_SCREEN_HEIGHT;
+  const containerHeight = _height || DEFAULT_SCREEN_HEIGHT + 100;
   const blastPosition = _blastPosition || { x: containerWidth / 2, y: 150 };
   const sizeVariations = useVariations({
     sizeVariation,
@@ -63,13 +66,23 @@ const PIConfetti: FC<Props> = ({
     _radiusRange,
   });
   const boxes = useSharedValue(
-    generatePIBoxesArray(count, colors.length, sizeVariations.length)
+    generatePIBoxesArray({
+      count,
+      colorsVariations: colors.length,
+      sizeVariations: sizeVariations.length,
+      rotation,
+    })
   );
   const { texture, sprites } = useConfettiLogic({
     sizeVariations,
-    count,
     colors,
     boxes,
+    textureProps:
+      flakeProps.type === 'image' && flakeProps.flakeImage
+        ? { type: 'image', content: flakeProps.flakeImage }
+        : flakeProps.type === 'svg' && flakeProps.flakeSvg
+          ? { type: 'svg', content: flakeProps.flakeSvg }
+          : undefined,
   });
 
   const pause = () => {
@@ -88,11 +101,12 @@ const PIConfetti: FC<Props> = ({
   const refreshBoxes = () => {
     'worklet';
 
-    const newBoxes = generatePIBoxesArray(
+    const newBoxes = generatePIBoxesArray({
       count,
-      colors.length,
-      sizeVariations.length
-    );
+      colorsVariations: colors.length,
+      sizeVariations: sizeVariations.length,
+      rotation,
+    });
     boxes.set(newBoxes);
   };
 
