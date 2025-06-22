@@ -93,7 +93,7 @@ You can pass a custom svg or image to use as the confetti flake
 
 | Money Stack | Snow Simulation |
 |-------------|-----------------|
-| https://github.com/user-attachments/assets/a4e94186-b906-44bb-a2f6-8232ca2a1436 | https://github.com/user-attachments/assets/caa2985b-1717-41f8-bbb6-7d4da1ac0c32 |
+| <video src="https://github.com/user-attachments/assets/a4e94186-b906-44bb-a2f6-8232ca2a1436" autoplay loop muted></video> | <video src="https://github.com/user-attachments/assets/caa2985b-1717-41f8-bbb6-7d4da1ac0c32" autoplay loop muted></video> |
 
 ```tsx
 import { Confetti } from 'react-native-fast-confetti';
