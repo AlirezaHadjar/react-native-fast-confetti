@@ -69,7 +69,8 @@ export default function App() {
 
   if (!snowFlakeSVG || !moneyStackImage) return null;
 
-  const effectiveVerticalSpacing = mode === 'canon' ? 5 : verticalSpacing;
+  const effectiveVerticalSpacing =
+    mode === 'canon' ? 5 : mode === 'continuous' ? 200 : verticalSpacing;
 
   const confettiKey = `${mode}-${effectiveVerticalSpacing}-${radiusRange}-${textureType}`;
 
@@ -171,7 +172,7 @@ export default function App() {
             }}
           />
         </View>
-        {mode !== 'pi' && mode !== 'canon' && (
+        {mode !== 'pi' && mode !== 'canon' && mode !== 'continuous' && (
           <View style={styles.dropdownContainer}>
             <Text style={styles.dropdownLabel}>Vertical Spacing:</Text>
             <Dropdown
@@ -247,7 +248,7 @@ export default function App() {
             flakeSize={flakeSize}
             {...textureProps}
             rotation={rotation}
-            verticalSpacing={200}
+            verticalSpacing={effectiveVerticalSpacing}
             count={200}
           />
         </>
