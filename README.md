@@ -52,15 +52,66 @@ https://github.com/user-attachments/assets/30008c3b-0f1a-4dff-afdb-2ded80809291
 
 
 ```tsx
-import { PIConfetti } from 'react-native-fast-confetti';
+import { PIConfetti, ConfettiMethods } from 'react-native-fast-confetti';
+
+const confettiRef = useRef<ConfettiMethods>(null);
+
+// Call confettiRef.restart() to render the confetti
+
+return (
+    <View>
+    {...Your other components}
+    <PIConfetti ref={confettiRef} />
+    {...Your other components}
+    </View>
+)
+```
+
+
+### `<ContinuousConfetti />`
+This confetti type creates a continuous confetti effect where flakes continuously fall from the top without stopping.
+
+https://github.com/user-attachments/assets/d2b029c6-ffb8-46cb-9050-e71f95c4b4d7
+
+
+```tsx
+import { ContinuousConfetti } from 'react-native-fast-confetti';
 
 // ...
 
 return (
     <View>
     {...Your other components}
-    <PIConfetti />
+    <ContinuousConfetti />
     {...Your other components}
+    </View>
+)
+```
+
+### Custom texture
+You can pass a custom svg or image to use as the confetti flake
+
+| Money Stack | Snow Simulation |
+|-------------|-----------------|
+| <video src="https://github.com/user-attachments/assets/a4e94186-b906-44bb-a2f6-8232ca2a1436" autoplay loop muted></video> | <video src="https://github.com/user-attachments/assets/caa2985b-1717-41f8-bbb6-7d4da1ac0c32" autoplay loop muted></video> |
+
+```tsx
+import { Confetti } from 'react-native-fast-confetti';
+import { useImage, useSVG } from '@shopify/react-native-skia';
+
+const snowFlakeSVG = useSVG(require('../assets/snow-flake.svg'));
+const moneyStackImage = useImage(require('../assets/money-stack.png'));
+
+return (
+    <View>
+    <Confetti
+      type="image"
+      flakeImage={moneyStackImage}
+    />
+    <Confetti
+      type="svg"
+      flakeSvg={snowFlakeSVG}
+    />
     </View>
 )
 ```
@@ -85,7 +136,14 @@ return (
 | `onAnimationStart` | No       | N/A                      | Callback function triggered when the falling animation starts.                                    |
 | `onAnimationEnd`   | No       | N/A                      | Callback function triggered when the falling animation ends.                                      |
 | `sizeVariation`    | No       | 0                      | A value of 0.1 means flakes can vary up to 10% smaller than the base (`flakeSize`), with more flakes clustering towards the original size and fewer towards the minimum size. Recommended value is between 0 and 0.5                                    |
-| `radiusRange`      | No       | [0, 0]                  | The range of the radius of the confetti flakes. A tuple of [min, max] values from which a random radius will be selected for each flake.                                                     |
+| `rotation`         | No       | `{ x: { min: 2π, max: 20π }, z: { min: 2π, max: 20π } }` | The rotation configuration for confetti flakes. Object with optional x and z properties, each containing optional min and max values. |
+| `randomSpeed`      | No       | `{ min: 0.9, max: 1.3 }` | The random speed multiplier for confetti flakes.                                               |
+| `randomOffset`     | No       | `{ x: { min: -50, max: 50 }, y: { min: 0, max: 150 } }` | The random offset for confetti flakes.                           |
+| `easing`           | No       | `Easing.inOut(Easing.quad)`                    | The easing function for the animation.                                                          |
+| `type`             | No       | 'default'                | The texture type for confetti flakes. Can be 'default', 'image', or 'svg'.                     |
+| `flakeImage`       | No       | N/A                      | The image to use as confetti flake (required when `type` is 'image').                          |
+| `flakeSvg`         | No       | N/A                      | The SVG to use as confetti flake (required when `type` is 'svg').                              |
+| `radiusRange`      | No       | [0, 0]                  | The range of the radius of the confetti flakes. A tuple of [min, max] values from which a random radius will be selected for each flake (only for 'default' type). |
 
 ## `<PIConfetti />` Props
 
@@ -104,7 +162,39 @@ return (
 | `onAnimationStart` | No       | N/A                      | Callback function triggered when the falling animation starts.                                    |
 | `onAnimationEnd`   | No       | N/A                      | Callback function triggered when the falling animation ends.                                      |
 | `sizeVariation`    | No       | 0                      | A value of 0.1 means flakes can vary up to 10% smaller than the base (`flakeSize`), with more flakes clustering towards the original size and fewer towards the minimum size. Recommended value is between 0 and 0.5                       |
-| `radiusRange`      | No       | [0, 0]                  | The range of the radius of the confetti flakes. A tuple of [min, max] values from which a random radius will be selected for each flake.
+| `rotation`         | No       | `{ x: { min: π, max: 3π }, z: { min: π, max: 3π } }` | The rotation configuration for confetti flakes. Object with optional x and z properties, each containing optional min and max values. |
+| `randomSpeed`      | No       | `{ min: 0.9, max: 1.3 }` | The random speed multiplier for confetti flakes.                                               |
+| `randomOffset`     | No       | `{ x: { min: -50, max: 50 }, y: { min: 0, max: 150 } }` | The random offset for confetti flakes.                           |
+| `type`             | No       | 'default'                | The texture type for confetti flakes. Can be 'default', 'image', or 'svg'.                     |
+| `flakeImage`       | No       | N/A                      | The image to use as confetti flake (required when `type` is 'image').                          |
+| `flakeSvg`         | No       | N/A                      | The SVG to use as confetti flake (required when `type` is 'svg').                              |
+| `radiusRange`      | No       | [0, 0]                  | The range of the radius of the confetti flakes. A tuple of [min, max] values from which a random radius will be selected for each flake (only for 'default' type). |
+
+## `<ContinuousConfetti />` Props
+
+| Name               | Required | Default Value            | Description                                                                                       |
+| ------------------ | -------- | ------------------------ | ------------------------------------------------------------------------------------------------- |
+| `count`            | No       | 200                      | Number of confetti pieces to render.                                                              |
+| `flakeSize`        | No       | { width: 8, height: 16 } | The size of each confetti flake (object with `width` and `height`).                               |
+| `width`            | No       | SCREEN_WIDTH             | The width of the confetti's container.                                                            |
+| `height`           | No       | SCREEN_HEIGHT            | The height of the confetti's container.                                                           |
+| `fallDuration`         | No       | 8000 ms                  | The duration of confetti falling down (milliseconds).                                       |
+| `blastDuration`         | No       | 300 ms                  | The duration of confetti blast (milliseconds).                                   |
+| `cannonsPositions`         | No       | N/A                  | An array of positions from which confetti flakes should blast.                                  |
+| `colors`           | No       | N/A                      | The array of confetti flakes colors.                                                              |
+| `autoStartDelay`   | No       | 0                        | Delay before the confetti animation starts automatically (in ms).                                 |
+| `verticalSpacing`  | No       | 30                       | The approximate space between confetti flakes vertically. Lower value results in denser confetti. |
+| `fadeOutOnEnd`     | No       | N/A                      | Should the confetti flakes fade out as they reach the bottom.                                     |
+| `onAnimationStart` | No       | N/A                      | Callback function triggered when the falling animation starts.                                    |
+| `onAnimationEnd`   | No       | N/A                      | Callback function triggered when the falling animation ends.                                      |
+| `sizeVariation`    | No       | 0                      | A value of 0.1 means flakes can vary up to 10% smaller than the base (`flakeSize`), with more flakes clustering towards the original size and fewer towards the minimum size. Recommended value is between 0 and 0.5                                    |
+| `rotation`         | No       | `{ x: { min: 2π, max: 20π }, z: { min: 2π, max: 20π } }` | The rotation configuration for confetti flakes. Object with optional x and z properties, each containing optional min and max values. |
+| `randomSpeed`      | No       | `{ min: 1, max: 1.2 }` | The random speed multiplier for confetti flakes.                                               |
+| `randomOffset`     | No       | `{ x: { min: -50, max: 50 }, y: { min: 0, max: 150 } }` | The random offset for confetti flakes.                           |
+| `type`             | No       | 'default'                | The texture type for confetti flakes. Can be 'default', 'image', or 'svg'.                     |
+| `flakeImage`       | No       | N/A                      | The image to use as confetti flake (required when `type` is 'image').                          |
+| `flakeSvg`         | No       | N/A                      | The SVG to use as confetti flake (required when `type` is 'svg').                              |
+| `radiusRange`      | No       | [0, 0]                  | The range of the radius of the confetti flakes. A tuple of [min, max] values from which a random radius will be selected for each flake (only for 'default' type). |
 
 
 ## Methods

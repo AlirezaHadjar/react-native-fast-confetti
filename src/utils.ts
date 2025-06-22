@@ -3,9 +3,13 @@ import {
   RANDOM_INITIAL_Y_JIGGLE,
   DEFAULT_CONFETTI_ROTATION,
   DEFAULT_PICONFETTI_ROTATION,
+  DEFAULT_CONFETTI_RANDOM_SPEED,
+  DEFAULT_CONFETTI_RANDOM_OFFSET,
+  DEFAULT_PICONFETTI_RANDOM_OFFSET,
+  DEFAULT_PICONFETTI_RANDOM_SPEED,
 } from './constants';
 import { Extrapolation, interpolate } from 'react-native-reanimated';
-import type { Rotation } from './types';
+import type { RandomOffset, Range, Rotation } from './types';
 
 export const getRandomBoolean = () => {
   'worklet';
@@ -38,7 +42,7 @@ export const generateEvenlyDistributedValues = (
   return Array.from({ length: chunks }, (_, i) => lowerBound + step * i);
 };
 
-const resolveRotationRange = (
+const resolveRange = (
   range?: { min?: number; max?: number },
   defaultRange?: { min: number; max: number }
 ) => {
@@ -54,19 +58,32 @@ export const generateBoxesArray = ({
   duration,
   sizeVariations,
   rotation = DEFAULT_CONFETTI_ROTATION,
+  randomSpeed = DEFAULT_CONFETTI_RANDOM_SPEED,
+  randomOffset = DEFAULT_CONFETTI_RANDOM_OFFSET,
 }: {
   count: number;
   colorsVariations: number;
   sizeVariations: number;
   duration: number;
   rotation?: Rotation;
+  randomSpeed?: Range;
+  randomOffset?: RandomOffset;
 }) => {
   'worklet';
 
-  const xRotationRange = resolveRotationRange(rotation.x);
-  const zRotationRange = resolveRotationRange(
-    rotation.z,
-    DEFAULT_CONFETTI_ROTATION.z
+  const xRotationRange = resolveRange(rotation.x, DEFAULT_CONFETTI_ROTATION.x);
+  const zRotationRange = resolveRange(rotation.z, DEFAULT_CONFETTI_ROTATION.z);
+  const randomSpeedRange = resolveRange(
+    randomSpeed,
+    DEFAULT_CONFETTI_RANDOM_SPEED
+  );
+  const randomXOffsetRange = resolveRange(
+    randomOffset.x,
+    DEFAULT_CONFETTI_RANDOM_OFFSET.x
+  );
+  const randomYOffsetRange = resolveRange(
+    randomOffset.y,
+    DEFAULT_CONFETTI_RANDOM_OFFSET.y
   );
 
   const maxRandomX = interpolate(
@@ -91,9 +108,15 @@ export const generateBoxesArray = ({
     ),
     blastThreshold: getRandomValue(0, 0.3),
     initialRotation: getRandomValue(0.1 * Math.PI, Math.PI),
-    randomSpeed: getRandomValue(0.9, 1.3), // Random speed multiplier
-    randomOffsetX: getRandomValue(-10, 10), // Random X offset for initial position
-    randomOffsetY: getRandomValue(-10, 10), // Random Y offset for initial position
+    randomSpeed: getRandomValue(randomSpeedRange.min, randomSpeedRange.max), // Random speed multiplier
+    randomOffsetX: getRandomValue(
+      randomXOffsetRange.min,
+      randomXOffsetRange.max
+    ), // Random X offset for initial position
+    randomOffsetY: getRandomValue(
+      randomYOffsetRange.min,
+      randomYOffsetRange.max
+    ), // Random Y offset for initial position
   }));
 };
 
@@ -102,21 +125,37 @@ export const generatePIBoxesArray = ({
   colorsVariations,
   sizeVariations,
   rotation = DEFAULT_PICONFETTI_ROTATION,
+  randomSpeed = DEFAULT_PICONFETTI_RANDOM_SPEED,
+  randomOffset = DEFAULT_PICONFETTI_RANDOM_OFFSET,
 }: {
   count: number;
   colorsVariations: number;
   sizeVariations: number;
   rotation?: Rotation;
+  randomSpeed?: Range;
+  randomOffset?: RandomOffset;
 }) => {
   'worklet';
 
-  const xRotationRange = resolveRotationRange(
+  const xRotationRange = resolveRange(
     rotation.x,
     DEFAULT_PICONFETTI_ROTATION.x
   );
-  const zRotationRange = resolveRotationRange(
+  const zRotationRange = resolveRange(
     rotation.z,
     DEFAULT_PICONFETTI_ROTATION.z
+  );
+  const randomSpeedRange = resolveRange(
+    randomSpeed,
+    DEFAULT_PICONFETTI_RANDOM_SPEED
+  );
+  const randomXOffsetRange = resolveRange(
+    randomOffset.x,
+    DEFAULT_PICONFETTI_RANDOM_OFFSET.x
+  );
+  const randomYOffsetRange = resolveRange(
+    randomOffset.y,
+    DEFAULT_PICONFETTI_RANDOM_OFFSET.y
   );
 
   return new Array(count).fill(0).map(() => ({
@@ -133,9 +172,15 @@ export const generatePIBoxesArray = ({
       RANDOM_INITIAL_Y_JIGGLE
     ),
     initialRotation: getRandomValue(0.1 * Math.PI, Math.PI),
-    randomSpeed: getRandomValue(0.9, 1.3), // Random speed multiplier
-    randomOffsetX: getRandomValue(-50, 50), // Random X offset for initial position
-    randomOffsetY: getRandomValue(0, 150), // Random X offset for initial position
+    randomSpeed: getRandomValue(randomSpeedRange.min, randomSpeedRange.max), // Random speed multiplier
+    randomOffsetX: getRandomValue(
+      randomXOffsetRange.min,
+      randomXOffsetRange.max
+    ), // Random X offset for initial position
+    randomOffsetY: getRandomValue(
+      randomYOffsetRange.min,
+      randomYOffsetRange.max
+    ), // Random X offset for initial position
     delayBlast: getRandomValue(0, 0.6), // Random velocity multiplier
     randomAcceleration: vec(getRandomValue(0.1, 0.3), getRandomValue(0.1, 0.3)), // Random acceleration multiplier
   }));

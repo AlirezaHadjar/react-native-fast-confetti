@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   type FC,
   type RefObject,
 } from 'react';
@@ -15,7 +16,7 @@ import {
   runOnUI,
   useDerivedValue,
   useSharedValue,
-  withRepeat,
+  withDelay,
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
@@ -25,25 +26,30 @@ import {
   DEFAULT_BLAST_DURATION,
   DEFAULT_BOXES_COUNT,
   DEFAULT_COLORS,
+  DEFAULT_CONFETTI_EASING,
+  DEFAULT_CONFETTI_RANDOM_OFFSET,
   DEFAULT_FALL_DURATION,
   DEFAULT_FLAKE_SIZE,
   DEFAULT_VERTICAL_SPACING,
   RANDOM_INITIAL_Y_JIGGLE,
 } from './constants';
-import type { ConfettiMethods, ConfettiProps } from './types';
+import type {
+  ConfettiMethods,
+  ConfettiProps,
+  InternalConfettiProps,
+} from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useVariations } from './hooks/sizeVariations';
-import {
-  clearAnimatedTimeout,
-  setAnimatedTimeout,
-  type AnimatedTimeoutID,
-} from './hooks/useAnimatedTimeout';
 
-type Props = ConfettiProps & {
-  ref: RefObject<ConfettiMethods | null>;
+type InternalProps = InternalConfettiProps & {
+  ref?: RefObject<ConfettiMethods | null>;
 };
 
-const Confetti: FC<Props> = ({
+type Props = ConfettiProps & {
+  ref?: RefObject<ConfettiMethods | null>;
+};
+
+const InternalConfetti: FC<InternalProps> = ({
   count = DEFAULT_BOXES_COUNT,
   flakeSize = DEFAULT_FLAKE_SIZE,
   sizeVariation = 0,
@@ -53,6 +59,9 @@ const Confetti: FC<Props> = ({
   autoStartDelay = DEFAULT_AUTOSTART_DELAY,
   verticalSpacing = DEFAULT_VERTICAL_SPACING,
   rotation,
+  randomSpeed,
+  randomOffset,
+  isContinuous,
   onAnimationEnd,
   onAnimationStart,
   width: _width,
@@ -61,6 +70,7 @@ const Confetti: FC<Props> = ({
   isInfinite = autoplay,
   fadeOutOnEnd = false,
   cannonsPositions = [],
+  easing = DEFAULT_CONFETTI_EASING,
   ref,
   ...flakeProps
 }) => {
@@ -117,8 +127,33 @@ const Confetti: FC<Props> = ({
       sizeVariations: sizeVariations.length,
       duration: fallDuration,
       rotation,
+      randomSpeed,
+      randomOffset,
     })
   );
+  const delayStartTime = useSharedValue(0);
+  const initialVertical = useMemo(() => {
+    const randomYOffset =
+      randomOffset?.y?.max || DEFAULT_CONFETTI_RANDOM_OFFSET.y?.max || 0;
+
+    if (hasCannons) return 0;
+    return randomYOffset;
+  }, [randomOffset?.y?.max, hasCannons]);
+
+  const fallingMaxYMovement =
+    Math.abs(verticalOffset) +
+    containerHeight +
+    verticalSpacing +
+    Math.abs(initialVertical) +
+    Math.min(1 - (randomSpeed?.min || 0), 1) * containerHeight;
+
+  //Calculate the time it takes for a single confetti flake to traverse the visible screen area.
+  const singleFlakeFallDuration =
+    (containerHeight * fallDuration) / fallingMaxYMovement;
+  const continuousDelay =
+    isContinuous === 2 ? (fallDuration - singleFlakeFallDuration) * 0.9 : 0;
+  const delay = autoStartDelay + continuousDelay;
+
   const { texture, sprites } = useConfettiLogic({
     sizeVariations,
     colors,
@@ -132,11 +167,15 @@ const Confetti: FC<Props> = ({
   });
 
   const pause = () => {
+    'worklet';
+
     running.set(false);
     cancelAnimation(progress);
   };
 
   const reset = () => {
+    'worklet';
+
     pause();
     progress.set(initialProgress);
   };
@@ -150,6 +189,8 @@ const Confetti: FC<Props> = ({
       sizeVariations: sizeVariations.length,
       duration: fallDuration,
       rotation,
+      randomSpeed,
+      randomOffset,
     });
     boxes.set(newBoxes);
   }, [
@@ -159,10 +200,17 @@ const Confetti: FC<Props> = ({
     boxes,
     fallDuration,
     rotation,
+    randomSpeed,
+    randomOffset,
   ]);
 
   const JSOnStart = useCallback(() => onAnimationStart?.(), [onAnimationStart]);
   const JSOnEnd = useCallback(() => onAnimationEnd?.(), [onAnimationEnd]);
+
+  const UIOnStart = useCallback(() => {
+    'worklet';
+    runOnJS(JSOnStart)();
+  }, [JSOnStart]);
 
   const UIOnEnd = useCallback(() => {
     'worklet';
@@ -174,11 +222,11 @@ const Confetti: FC<Props> = ({
       {
         blastDuration: _blastDuration,
         fallDuration: _fallDuration,
-        infinite,
+        delay = 0,
       }: {
         blastDuration?: number;
         fallDuration?: number;
-        infinite: boolean;
+        delay?: number;
       },
       onEnd?: (finished: boolean | undefined) => void
     ) => {
@@ -188,58 +236,100 @@ const Confetti: FC<Props> = ({
 
       if (_blastDuration && aHasCannon.get())
         animations.push(
-          withTiming(1, { duration: _blastDuration }, (finished) => {
+          withTiming(1, { duration: _blastDuration, easing }, (finished) => {
             if (!_fallDuration) onEnd?.(finished);
           })
         );
       if (_fallDuration)
         animations.push(
-          withTiming(2, { duration: _fallDuration }, (finished) => {
+          withTiming(2, { duration: _fallDuration, easing }, (finished) => {
             onEnd?.(finished);
           })
         );
 
-      const finalAnimation = withSequence(...animations);
+      const finalAnimation =
+        delay > 0
+          ? withDelay(delay, withSequence(...animations))
+          : withSequence(...animations);
 
-      if (infinite) return withRepeat(finalAnimation, -1, false);
+      if (delay > 0) {
+        delayStartTime.set(Date.now());
+      }
 
       return finalAnimation;
     },
-    [aHasCannon]
+    [aHasCannon, delayStartTime, easing]
   );
 
-  const restart = useCallback(() => {
-    'worklet';
-    refreshBoxes();
-    progress.set(initialProgress);
-    running.set(true);
-    runOnJS(JSOnStart)();
+  const restart = useCallback(
+    ({ skipDelay }: { skipDelay?: boolean } = {}) => {
+      'worklet';
+      refreshBoxes();
+      progress.set(initialProgress);
+      running.set(true);
+      if (isContinuous !== 2) UIOnStart();
 
-    progress.set(
-      runAnimation(
-        { infinite: isInfinite, blastDuration, fallDuration },
-        (finished) => {
-          'worklet';
-          if (!finished) return;
-          UIOnEnd();
-          refreshBoxes();
+      function repeatAnimation() {
+        'worklet';
+        if (!isContinuous) UIOnEnd();
+        refreshBoxes();
+        if (isInfinite) {
+          cancelAnimation(progress);
+          progress.set(aInitialProgress.get());
+          progress.set(
+            runAnimation(
+              {
+                blastDuration,
+                fallDuration,
+                delay: fallDuration - 2.5 * singleFlakeFallDuration,
+              },
+              (finished) => {
+                'worklet';
+                if (!finished || !isInfinite) return;
+                repeatAnimation();
+              }
+            )
+          );
         }
-      )
-    );
-  }, [
-    JSOnStart,
-    UIOnEnd,
-    blastDuration,
-    fallDuration,
-    initialProgress,
-    isInfinite,
-    progress,
-    refreshBoxes,
-    runAnimation,
-    running,
-  ]);
+      }
+
+      const startAnimation = (delay: number) => {
+        'worklet';
+        progress.set(
+          runAnimation({ blastDuration, fallDuration, delay }, (finished) => {
+            'worklet';
+            if (!finished || !isInfinite) return;
+            repeatAnimation();
+          })
+        );
+      };
+
+      const startDelay =
+        delay > 0 && isContinuous === 2 && !skipDelay ? delay : 0;
+
+      startAnimation(startDelay);
+    },
+    [
+      UIOnEnd,
+      UIOnStart,
+      aInitialProgress,
+      blastDuration,
+      delay,
+      fallDuration,
+      initialProgress,
+      isContinuous,
+      isInfinite,
+      progress,
+      refreshBoxes,
+      runAnimation,
+      running,
+      singleFlakeFallDuration,
+    ]
+  );
 
   const resume = () => {
+    'worklet';
+
     if (running.get()) return;
     running.set(true);
 
@@ -247,42 +337,61 @@ const Confetti: FC<Props> = ({
     const blastRemaining = blastDuration * (1 - progress.get());
     const fallingRemaining = fallDuration * (2 - progress.get());
 
+    function repeatAnimation() {
+      'worklet';
+      if (!isContinuous) UIOnEnd();
+      refreshBoxes();
+      if (isInfinite) {
+        cancelAnimation(progress);
+        progress.set(aInitialProgress.get());
+        progress.set(
+          runAnimation(
+            {
+              blastDuration,
+              fallDuration,
+              delay: fallDuration - 2.5 * singleFlakeFallDuration,
+            },
+            (finished) => {
+              'worklet';
+              if (!finished || !isInfinite) return;
+              repeatAnimation();
+            }
+          )
+        );
+      }
+    }
+
+    let _delay = 0;
+
+    //  we're resuming when the animation is not running and is in the delay phase
+    if (isContinuous === 2 && progress.get() === aInitialProgress.get()) {
+      const elapsed = Date.now() - delayStartTime.get();
+      const remaining = delay - elapsed;
+      _delay = remaining;
+    }
+
     progress.set(
       runAnimation(
         {
           blastDuration: isBlasting ? blastRemaining : undefined,
           fallDuration: isBlasting ? fallDuration : fallingRemaining,
-          infinite: isInfinite,
+          delay: _delay,
         },
         (finished) => {
           'worklet';
-          if (!finished) return;
-          progress.set(aInitialProgress.get());
-          UIOnEnd();
-          refreshBoxes();
+          if (!finished || !isInfinite) return;
 
-          if (autoplay)
-            progress.set(
-              runAnimation(
-                { infinite: isInfinite, blastDuration, fallDuration },
-                (_finished) => {
-                  'worklet';
-                  if (!_finished) return;
-                  UIOnEnd();
-                  refreshBoxes();
-                }
-              )
-            );
+          repeatAnimation();
         }
       )
     );
   };
 
   useImperativeHandle(ref, () => ({
-    pause,
-    reset,
-    resume,
-    restart,
+    pause: runOnUI(pause),
+    reset: runOnUI(reset),
+    resume: runOnUI(resume),
+    restart: runOnUI(restart),
   }));
 
   const getPosition = (index: number) => {
@@ -307,27 +416,19 @@ const Confetti: FC<Props> = ({
       x = (index % columnsNum) * columnWidth;
     }
 
-    const y = rowIndex * rowHeight;
+    let y = rowIndex * rowHeight;
+
+    y -= Math.abs(initialVertical);
     return { x, y };
   };
 
-  const animatedTimeout = useSharedValue<AnimatedTimeoutID>(-1);
   useEffect(() => {
     runOnUI(() => {
       if (autoplay && !running.get()) {
-        if (autoStartDelay > 0)
-          animatedTimeout.set(setAnimatedTimeout(restart, autoStartDelay));
-        else restart();
+        restart();
       }
     })();
-
-    return () => {
-      if (animatedTimeout.get() !== -1) {
-        clearAnimatedTimeout(animatedTimeout.get());
-        animatedTimeout.set(-1);
-      }
-    };
-  }, [animatedTimeout, autoStartDelay, autoplay, restart, running]);
+  }, [autoplay, restart, running]);
 
   const transforms = useRSXformBuffer(count, (val, i) => {
     'worklet';
@@ -366,13 +467,12 @@ const Confetti: FC<Props> = ({
       const initialRandomY = piece.initialRandomY;
       tx = x + piece.randomOffsetX;
       ty = y + piece.randomOffsetY + initialRandomY + verticalOffset;
-      const maxYMovement = -verticalOffset + containerHeight * 1.5; // Add extra to compensate for different speeds
 
       // Apply random speed to the fall height
       const yChange = interpolate(
         progress.get(),
         [1, 2],
-        [0, maxYMovement * piece.randomSpeed], // Use random speed here
+        [0, fallingMaxYMovement * piece.randomSpeed], // Use random speed here
         Extrapolation.CLAMP
       );
       // Interpolate between randomX values for smooth left-right movement
@@ -440,8 +540,13 @@ const Confetti: FC<Props> = ({
   );
 };
 
+const Confetti: FC<Props> = (props) => {
+  return <InternalConfetti {...props} />;
+};
+
 Confetti.displayName = 'Confetti';
-export { Confetti };
+InternalConfetti.displayName = 'InternalConfetti';
+export { Confetti, InternalConfetti };
 
 const styles = StyleSheet.create({
   container: {

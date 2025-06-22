@@ -5,11 +5,14 @@ import {
   View,
   Button,
   useWindowDimensions,
-  Switch,
   Text,
 } from 'react-native';
 import { Dropdown } from 'react-native-element-dropdown';
-import { Confetti, PIConfetti } from 'react-native-fast-confetti';
+import {
+  Confetti,
+  ContinuousConfetti,
+  PIConfetti,
+} from 'react-native-fast-confetti';
 import type {
   ConfettiMethods,
   ConfettiProps,
@@ -38,16 +41,23 @@ const textureOptions: DropdownOption<string>[] = [
   { label: 'Snowflake ❄️', value: 'snowflake' },
 ];
 
+const modeOptions: DropdownOption<'continuous' | 'single' | 'pi' | 'canon'>[] =
+  [
+    { label: 'Continuous', value: 'continuous' },
+    { label: 'Single', value: 'single' },
+    { label: 'PI', value: 'pi' },
+    { label: 'Canon', value: 'canon' },
+  ];
+
 export default function App() {
   const confettiRef = useRef<ConfettiMethods>(null);
   const { height, width } = useWindowDimensions();
-
-  const [isPIConfetti, setIsPIConfetti] = useState(false);
-
   const [verticalSpacing, setVerticalSpacing] = useState(20);
   const [radiusRange, setRadiusRange] = useState<'square' | 'circle'>('square');
+  const [mode, setMode] = useState<'continuous' | 'single' | 'pi' | 'canon'>(
+    'single'
+  );
   const [textureType, setTextureType] = useState('default');
-  const [cannonMode, setCannonMode] = useState(false);
 
   const snowFlakeSVG = useSVG(require('../assets/snow-flake.svg'));
   const moneyStackImage = useImage(require('../assets/money-stack-2.png'));
@@ -59,9 +69,10 @@ export default function App() {
 
   if (!snowFlakeSVG || !moneyStackImage) return null;
 
-  const effectiveVerticalSpacing = cannonMode ? 5 : verticalSpacing;
+  const effectiveVerticalSpacing =
+    mode === 'canon' ? 5 : mode === 'continuous' ? 200 : verticalSpacing;
 
-  const confettiKey = `${isPIConfetti}-${effectiveVerticalSpacing}-${radiusRange}-${textureType}-${cannonMode}`;
+  const confettiKey = `${mode}-${effectiveVerticalSpacing}-${radiusRange}-${textureType}`;
 
   const getTextureProps = (): ConfettiProps => {
     switch (textureType) {
@@ -98,7 +109,7 @@ export default function App() {
   };
 
   const getRotation = () => {
-    if (isPIConfetti) {
+    if (mode === 'pi') {
       switch (textureType) {
         case 'money':
           return {
@@ -130,38 +141,38 @@ export default function App() {
         };
       default:
         return {
-          x: { min: 0.5 * Math.PI, max: 20 * Math.PI },
-          z: { min: 1 * Math.PI, max: 20 * Math.PI },
+          x: { min: 2 * Math.PI, max: 20 * Math.PI },
+          z: { min: 2 * Math.PI, max: 20 * Math.PI },
         };
     }
   };
 
+  const rotation = getRotation();
+  const flakeSize = getFlakeSize();
+  const textureProps = getTextureProps();
+
   return (
     <View style={styles.container}>
-      <View style={styles.switchContainer}>
-        <Text>Regular Confetti</Text>
-        <Switch
-          value={isPIConfetti}
-          onValueChange={setIsPIConfetti}
-          trackColor={{ false: '#767577', true: '#81b0ff' }}
-        />
-        <Text>PI Confetti</Text>
-      </View>
-
       <View style={styles.controlsContainer}>
-        {!isPIConfetti && (
-          <View style={styles.switchContainer}>
-            <Text>Normal Mode</Text>
-            <Switch
-              value={cannonMode}
-              onValueChange={setCannonMode}
-              trackColor={{ false: '#767577', true: '#ff6b6b' }}
-            />
-            <Text>Cannons Mode 🎯</Text>
-          </View>
-        )}
-
-        {!isPIConfetti && !cannonMode && (
+        <View style={styles.dropdownContainer}>
+          <Text style={styles.dropdownLabel}>Mode:</Text>
+          <Dropdown
+            style={styles.dropdown}
+            placeholderStyle={styles.placeholderStyle}
+            selectedTextStyle={styles.selectedTextStyle}
+            data={modeOptions}
+            labelField="label"
+            valueField="value"
+            placeholder="Select Mode"
+            value={mode}
+            onChange={(
+              item: DropdownOption<'continuous' | 'single' | 'pi' | 'canon'>
+            ) => {
+              setMode(item.value);
+            }}
+          />
+        </View>
+        {mode !== 'pi' && mode !== 'canon' && mode !== 'continuous' && (
           <View style={styles.dropdownContainer}>
             <Text style={styles.dropdownLabel}>Vertical Spacing:</Text>
             <Dropdown
@@ -217,30 +228,40 @@ export default function App() {
         </View>
       </View>
 
-      {isPIConfetti ? (
+      {mode === 'pi' ? (
         <PIConfetti
           key={confettiKey}
           ref={confettiRef}
           fallDuration={2000}
           blastDuration={250}
           sizeVariation={0.3}
-          flakeSize={getFlakeSize()}
           count={500}
-          {...getTextureProps()}
-          rotation={getRotation()}
+          flakeSize={flakeSize}
+          {...textureProps}
+          rotation={rotation}
         />
+      ) : mode === 'continuous' ? (
+        <>
+          <ContinuousConfetti
+            key={confettiKey}
+            ref={confettiRef}
+            flakeSize={flakeSize}
+            {...textureProps}
+            rotation={rotation}
+            verticalSpacing={effectiveVerticalSpacing}
+            count={200}
+          />
+        </>
       ) : (
         <Confetti
           key={confettiKey}
           ref={confettiRef}
-          autoplay={true}
-          verticalSpacing={effectiveVerticalSpacing}
-          cannonsPositions={cannonMode ? cannonPositions : undefined}
-          flakeSize={getFlakeSize()}
-          count={500}
-          fallDuration={4000}
-          {...getTextureProps()}
-          rotation={getRotation()}
+          flakeSize={flakeSize}
+          {...textureProps}
+          rotation={rotation}
+          cannonsPositions={mode === 'canon' ? cannonPositions : undefined}
+          autoplay
+          isInfinite
         />
       )}
 
