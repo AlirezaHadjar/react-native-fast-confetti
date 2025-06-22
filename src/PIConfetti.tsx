@@ -6,6 +6,7 @@ import {
   Extrapolation,
   interpolate,
   runOnJS,
+  runOnUI,
   useDerivedValue,
   useSharedValue,
   withTiming,
@@ -86,12 +87,16 @@ const PIConfetti: FC<Props> = ({
   });
 
   const pause = () => {
+    'worklet';
+
     running.set(false);
     cancelAnimation(blastProgress);
     cancelAnimation(fallProgress);
   };
 
   const reset = () => {
+    'worklet';
+
     pause();
 
     blastProgress.set(0);
@@ -144,6 +149,8 @@ const PIConfetti: FC<Props> = ({
   };
 
   const resume = () => {
+    'worklet';
+
     if (running.get()) return;
     running.set(true);
     const blastTimeLeft = (1 - blastProgress.get()) * blastDuration;
@@ -155,10 +162,10 @@ const PIConfetti: FC<Props> = ({
   };
 
   useImperativeHandle(ref, () => ({
-    pause,
-    reset,
-    resume,
-    restart,
+    pause: runOnUI(pause),
+    reset: runOnUI(reset),
+    resume: runOnUI(resume),
+    restart: runOnUI(restart),
   }));
 
   const getPosition = (index: number) => {

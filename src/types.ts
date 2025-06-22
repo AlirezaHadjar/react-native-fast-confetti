@@ -1,4 +1,5 @@
 import type { SkImage, SkSVG } from '@shopify/react-native-skia';
+import type { WithTimingConfig } from 'react-native-reanimated';
 
 type StrictOmit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
 
@@ -19,14 +20,19 @@ export type Position = {
   y: number;
 };
 
-export type RotationRange = {
+export type Range = {
   min?: number;
   max?: number;
 };
 
 export type Rotation = {
-  x?: RotationRange;
-  z?: RotationRange;
+  x?: Range;
+  z?: Range;
+};
+
+export type RandomOffset = {
+  x?: Range;
+  y?: Range;
 };
 
 type BaseConfettiProps = {
@@ -113,6 +119,23 @@ type BaseConfettiProps = {
    * @default { x: { min: 2 * Math.PI, max: 20 * Math.PI }, y: { min: 2 * Math.PI, max: 20 * Math.PI } }
    */
   rotation?: Rotation;
+
+  /**
+   * @description The random speed multiplier for confetti flakes.
+   * @default { min: 0.9, max: 1.3 }
+   */
+  randomSpeed?: Range;
+
+  /**
+   * @description The random offset for confetti flakes.
+   * @default { x: { min: -50, max: 50 }, y: { min: 0, max: 150 } }
+   */
+  randomOffset?: RandomOffset;
+  /**
+   * @description The random speed multiplier for confetti flakes.
+   * @default { min: 0.9, max: 1.3 }
+   */
+  easing?: WithTimingConfig['easing'];
 };
 
 type TextureProps =
@@ -151,6 +174,9 @@ type TextureProps =
     };
 
 export type ConfettiProps = BaseConfettiProps & TextureProps;
+export type InternalConfettiProps = ConfettiProps & {
+  isContinuous?: 1 | 2;
+};
 
 type PIBaseProps = StrictOmit<
   BaseConfettiProps,
@@ -181,6 +207,14 @@ export type PIConfettiProps = PIBaseProps &
      */
     rotation?: Rotation;
   };
+
+type BaseContinuousConfettiProps = StrictOmit<
+  BaseConfettiProps,
+  'isInfinite' | 'easing'
+>;
+
+export type ContinuousConfettiProps = BaseContinuousConfettiProps &
+  TextureProps & {};
 
 export type ConfettiMethods = {
   /**
