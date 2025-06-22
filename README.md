@@ -52,21 +52,27 @@ https://github.com/user-attachments/assets/30008c3b-0f1a-4dff-afdb-2ded80809291
 
 
 ```tsx
-import { PIConfetti } from 'react-native-fast-confetti';
+import { PIConfetti, ConfettiMethods } from 'react-native-fast-confetti';
 
-// ...
+const confettiRef = useRef<ConfettiMethods>(null);
+
+// Call confettiRef.restart() to render the confetti
 
 return (
     <View>
     {...Your other components}
-    <PIConfetti />
+    <PIConfetti ref={confettiRef} />
     {...Your other components}
     </View>
 )
 ```
 
+
 ### `<ContinuousConfetti />`
 This confetti type creates a continuous confetti effect where flakes continuously fall from the top without stopping.
+
+https://github.com/user-attachments/assets/d2b029c6-ffb8-46cb-9050-e71f95c4b4d7
+
 
 ```tsx
 import { ContinuousConfetti } from 'react-native-fast-confetti';
@@ -78,6 +84,36 @@ return (
     {...Your other components}
     <ContinuousConfetti />
     {...Your other components}
+    </View>
+)
+```
+
+### Custom texture
+You can pass a custom svg or image to use as the confetti flake
+
+
+https://github.com/user-attachments/assets/a4e94186-b906-44bb-a2f6-8232ca2a1436
+
+https://github.com/user-attachments/assets/caa2985b-1717-41f8-bbb6-7d4da1ac0c32
+
+
+```tsx
+import { Confetti } from 'react-native-fast-confetti';
+import { useImage, useSVG } from '@shopify/react-native-skia';
+
+const snowFlakeSVG = useSVG(require('../assets/snow-flake.svg'));
+const moneyStackImage = useImage(require('../assets/money-stack.png'));
+
+return (
+    <View>
+    <Confetti
+      type="image"
+      flakeImage={moneyStackImage}
+    />
+    <Confetti
+      type="svg"
+      flakeSvg={snowFlakeSVG}
+    />
     </View>
 )
 ```
