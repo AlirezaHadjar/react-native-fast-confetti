@@ -183,7 +183,7 @@ return (
 | `cannonsPositions`         | No       | N/A                  | An array of positions from which confetti flakes should blast.                                  |
 | `colors`           | No       | N/A                      | The array of confetti flakes colors.                                                              |
 | `autoStartDelay`   | No       | 0                        | Delay before the confetti animation starts automatically (in ms).                                 |
-| `verticalSpacing`  | No       | 30                       | The approximate space between confetti flakes vertically. Lower value results in denser confetti. |
+| `verticalSpacing`  | No       | 200                       | The approximate space between confetti flakes vertically. It's recommended to set some large value e.g. 200 |
 | `fadeOutOnEnd`     | No       | N/A                      | Should the confetti flakes fade out as they reach the bottom.                                     |
 | `onAnimationStart` | No       | N/A                      | Callback function triggered when the falling animation starts.                                    |
 | `onAnimationEnd`   | No       | N/A                      | Callback function triggered when the falling animation ends.                                      |

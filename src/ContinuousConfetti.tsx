@@ -40,6 +40,7 @@ export const ContinuousConfetti: FC<Props> = ({ ref, ...props }) => {
       <InternalConfetti
         randomSpeed={CONTINUOUS_CONFETTI_RANDOM_SPEED}
         randomOffset={CONTINUOUS_CONFETTI_RANDOM_OFFSET}
+        verticalSpacing={CONTINUOUS_CONFETTI_RANDOM_OFFSET.y?.max}
         {...props}
         ref={confettiRef1}
         isInfinite
@@ -49,6 +50,7 @@ export const ContinuousConfetti: FC<Props> = ({ ref, ...props }) => {
       <InternalConfetti
         randomSpeed={CONTINUOUS_CONFETTI_RANDOM_SPEED}
         randomOffset={CONTINUOUS_CONFETTI_RANDOM_OFFSET}
+        verticalSpacing={CONTINUOUS_CONFETTI_RANDOM_OFFSET.y?.max}
         {...props}
         ref={confettiRef2}
         isInfinite

@@ -210,11 +210,17 @@ export type PIConfettiProps = PIBaseProps &
 
 type BaseContinuousConfettiProps = StrictOmit<
   BaseConfettiProps,
-  'isInfinite' | 'easing'
+  'isInfinite' | 'easing' | 'verticalSpacing'
 >;
 
 export type ContinuousConfettiProps = BaseContinuousConfettiProps &
-  TextureProps & {};
+  TextureProps & {
+    /**
+     * @description The approximate space between confetti flakes vertically. It's recommended to set some large value e.g. 200
+     * @default 200
+     */
+    verticalSpacing?: number;
+  };
 
 export type ConfettiMethods = {
   /**
