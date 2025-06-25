@@ -57,9 +57,9 @@ export const generateBoxesArray = ({
   count,
   duration,
   sizeVariations,
-  rotation = DEFAULT_CONFETTI_ROTATION,
-  randomSpeed = DEFAULT_CONFETTI_RANDOM_SPEED,
-  randomOffset = DEFAULT_CONFETTI_RANDOM_OFFSET,
+  rotation,
+  randomSpeed,
+  randomOffset,
 }: {
   count: number;
   colorsVariations: number;
@@ -70,6 +70,10 @@ export const generateBoxesArray = ({
   randomOffset?: RandomOffset;
 }) => {
   'worklet';
+
+  rotation = rotation ?? DEFAULT_CONFETTI_ROTATION;
+  randomSpeed = randomSpeed ?? DEFAULT_CONFETTI_RANDOM_SPEED;
+  randomOffset = randomOffset ?? DEFAULT_CONFETTI_RANDOM_OFFSET;
 
   const xRotationRange = resolveRange(rotation.x, DEFAULT_CONFETTI_ROTATION.x);
   const zRotationRange = resolveRange(rotation.z, DEFAULT_CONFETTI_ROTATION.z);
@@ -124,9 +128,9 @@ export const generatePIBoxesArray = ({
   count,
   colorsVariations,
   sizeVariations,
-  rotation = DEFAULT_PICONFETTI_ROTATION,
-  randomSpeed = DEFAULT_PICONFETTI_RANDOM_SPEED,
-  randomOffset = DEFAULT_PICONFETTI_RANDOM_OFFSET,
+  rotation,
+  randomSpeed,
+  randomOffset,
 }: {
   count: number;
   colorsVariations: number;
@@ -136,6 +140,10 @@ export const generatePIBoxesArray = ({
   randomOffset?: RandomOffset;
 }) => {
   'worklet';
+
+  rotation = rotation ?? DEFAULT_PICONFETTI_ROTATION;
+  randomSpeed = randomSpeed ?? DEFAULT_PICONFETTI_RANDOM_SPEED;
+  randomOffset = randomOffset ?? DEFAULT_PICONFETTI_RANDOM_OFFSET;
 
   const xRotationRange = resolveRange(
     rotation.x,

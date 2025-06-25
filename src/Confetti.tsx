@@ -304,8 +304,7 @@ const InternalConfetti: FC<InternalProps> = ({
         );
       };
 
-      const startDelay =
-        delay > 0 && isContinuous === 2 && !skipDelay ? delay : 0;
+      const startDelay = !skipDelay ? delay : 0;
 
       startAnimation(startDelay);
     },
