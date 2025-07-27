@@ -5,14 +5,12 @@ import {
   CONTINUOUS_CONFETTI_RANDOM_SPEED,
 } from './constants';
 import type { ConfettiMethods, ContinuousConfettiProps } from './types';
-import type { FC, RefObject } from 'react';
-import { useRef, useImperativeHandle } from 'react';
+import { useRef, useImperativeHandle, forwardRef } from 'react';
 
-type Props = ContinuousConfettiProps & {
-  ref?: RefObject<ConfettiMethods | null>;
-};
-
-export const ContinuousConfetti: FC<Props> = ({ ref, ...props }) => {
+export const ContinuousConfetti = forwardRef<
+  ConfettiMethods,
+  ContinuousConfettiProps
+>((props, ref) => {
   const confettiRef1 = useRef<ConfettiMethods>(null);
   const confettiRef2 = useRef<ConfettiMethods>(null);
 
@@ -59,4 +57,6 @@ export const ContinuousConfetti: FC<Props> = ({ ref, ...props }) => {
       />
     </>
   );
-};
+});
+
+ContinuousConfetti.displayName = 'ContinuousConfetti';
