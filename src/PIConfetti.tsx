@@ -145,9 +145,8 @@ const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
     const restart = () => {
       'worklet';
       refreshBoxes();
-      running.set(true);
-
       reset();
+      running.set(true);
       runOnJS(JSOnStart)();
       runBlastAnimation({ blastDuration, fallDuration });
     };
