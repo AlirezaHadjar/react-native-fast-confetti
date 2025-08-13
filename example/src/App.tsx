@@ -17,6 +17,7 @@ import type {
   ConfettiMethods,
   ConfettiProps,
 } from 'react-native-fast-confetti';
+import type { PIConfettiMethods } from '../../src/types';
 
 type DropdownOption<T = any> = {
   label: string;
@@ -51,6 +52,7 @@ const modeOptions: DropdownOption<'continuous' | 'single' | 'pi' | 'canon'>[] =
 
 export default function App() {
   const confettiRef = useRef<ConfettiMethods>(null);
+  const piConfettiRef = useRef<PIConfettiMethods>(null);
   const { height, width } = useWindowDimensions();
   const [verticalSpacing, setVerticalSpacing] = useState(20);
   const [radiusRange, setRadiusRange] = useState<'square' | 'circle'>('square');
@@ -231,7 +233,7 @@ export default function App() {
       {mode === 'pi' ? (
         <PIConfetti
           key={confettiKey}
-          ref={confettiRef}
+          ref={piConfettiRef}
           fallDuration={2000}
           blastDuration={250}
           sizeVariation={0.3}
@@ -266,13 +268,46 @@ export default function App() {
       )}
 
       <View style={styles.buttonContainer}>
-        <Button title="Resume" onPress={() => confettiRef.current?.resume()} />
-        <Button title="Pause" onPress={() => confettiRef.current?.pause()} />
+        <Button
+          title="Resume"
+          onPress={() => {
+            if (mode === 'pi') {
+              piConfettiRef.current?.resume();
+            } else {
+              confettiRef.current?.resume();
+            }
+          }}
+        />
+        <Button
+          title="Pause"
+          onPress={() => {
+            if (mode === 'pi') {
+              piConfettiRef.current?.pause();
+            } else {
+              confettiRef.current?.pause();
+            }
+          }}
+        />
         <Button
           title="Restart"
-          onPress={() => confettiRef.current?.restart()}
+          onPress={() => {
+            if (mode === 'pi') {
+              piConfettiRef.current?.restart();
+            } else {
+              confettiRef.current?.restart();
+            }
+          }}
         />
-        <Button title="Reset" onPress={() => confettiRef.current?.reset()} />
+        <Button
+          title="Reset"
+          onPress={() => {
+            if (mode === 'pi') {
+              piConfettiRef.current?.reset();
+            } else {
+              confettiRef.current?.reset();
+            }
+          }}
+        />
       </View>
     </View>
   );
