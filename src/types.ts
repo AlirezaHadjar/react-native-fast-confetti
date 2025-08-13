@@ -1,4 +1,5 @@
 import type { SkImage, SkSVG } from '@shopify/react-native-skia';
+import type { StyleProp, ViewStyle } from 'react-native';
 import type { WithTimingConfig } from 'react-native-reanimated';
 
 type StrictOmit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
@@ -136,6 +137,12 @@ type BaseConfettiProps = {
    * @default { min: 0.9, max: 1.3 }
    */
   easing?: WithTimingConfig['easing'];
+
+  /**
+   * @description The style of the confetti container.
+   * if you use a padding on the container, you need to set the height/width of the container to the same as the parent container.
+   */
+  containerStyle?: StyleProp<ViewStyle>;
 };
 
 type TextureProps =

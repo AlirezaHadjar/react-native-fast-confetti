@@ -144,6 +144,7 @@ return (
 | `flakeImage`       | No       | N/A                      | The image to use as confetti flake (required when `type` is 'image').                          |
 | `flakeSvg`         | No       | N/A                      | The SVG to use as confetti flake (required when `type` is 'svg').                              |
 | `radiusRange`      | No       | [0, 0]                  | The range of the radius of the confetti flakes. A tuple of [min, max] values from which a random radius will be selected for each flake (only for 'default' type). |
+| `containerStyle`   | No       | N/A                      | The style of the confetti container. If you use a padding on the container, you need to set the height/width of the container to the same as the parent container. |
 
 ## `<PIConfetti />` Props
 
@@ -169,6 +170,7 @@ return (
 | `flakeImage`       | No       | N/A                      | The image to use as confetti flake (required when `type` is 'image').                          |
 | `flakeSvg`         | No       | N/A                      | The SVG to use as confetti flake (required when `type` is 'svg').                              |
 | `radiusRange`      | No       | [0, 0]                  | The range of the radius of the confetti flakes. A tuple of [min, max] values from which a random radius will be selected for each flake (only for 'default' type). |
+| `containerStyle`   | No       | N/A                      | The style of the confetti container. If you use a padding on the container, you need to set the height/width of the container to the same as the parent container. |
 
 ## `<ContinuousConfetti />` Props
 
@@ -195,6 +197,7 @@ return (
 | `flakeImage`       | No       | N/A                      | The image to use as confetti flake (required when `type` is 'image').                          |
 | `flakeSvg`         | No       | N/A                      | The SVG to use as confetti flake (required when `type` is 'svg').                              |
 | `radiusRange`      | No       | [0, 0]                  | The range of the radius of the confetti flakes. A tuple of [min, max] values from which a random radius will be selected for each flake (only for 'default' type). |
+| `containerStyle`   | No       | N/A                      | The style of the confetti container. If you use a padding on the container, you need to set the height/width of the container to the same as the parent container. |
 
 
 ## Methods

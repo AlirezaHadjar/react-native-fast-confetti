@@ -64,6 +64,7 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
       fadeOutOnEnd = false,
       cannonsPositions = [],
       easing = DEFAULT_CONFETTI_EASING,
+      containerStyle,
       ...flakeProps
     },
     ref
@@ -524,7 +525,7 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
     });
 
     return (
-      <View pointerEvents="none" style={styles.container}>
+      <View pointerEvents="none" style={[styles.container, containerStyle]}>
         <Canvas style={styles.canvasContainer}>
           <Atlas
             image={texture}

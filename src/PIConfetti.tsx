@@ -41,6 +41,7 @@ const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
       height: _height,
       blastRadius = DEFAULT_BLAST_RADIUS,
       fadeOutOnEnd = false,
+      containerStyle,
       ...flakeProps
     },
     ref
@@ -292,7 +293,7 @@ const PIConfetti = forwardRef<ConfettiMethods, PIConfettiProps>(
     });
 
     return (
-      <View pointerEvents="none" style={styles.container}>
+      <View pointerEvents="none" style={[styles.container, containerStyle]}>
         <Canvas style={styles.canvasContainer}>
           <Atlas
             image={texture}
