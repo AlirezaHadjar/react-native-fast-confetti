@@ -33,14 +33,15 @@ https://github.com/user-attachments/assets/f59b930d-7c22-4901-9c3e-995cc66b6ae9
 
 
 ```tsx
-import { Confetti } from 'react-native-fast-confetti';
+import { Confetti, ConfettiMethods } from 'react-native-fast-confetti';
 
+const confettiRef = useRef<ConfettiMethods>(null);
 // ...
 
 return (
     <View>
     {...Your other components}
-    <Confetti />
+    <Confetti ref={confettiRef} />
     {...Your other components}
     </View>
 )
@@ -52,9 +53,9 @@ https://github.com/user-attachments/assets/30008c3b-0f1a-4dff-afdb-2ded80809291
 
 
 ```tsx
-import { PIConfetti, ConfettiMethods } from 'react-native-fast-confetti';
+import { PIConfetti, PIConfettiMethods } from 'react-native-fast-confetti';
 
-const confettiRef = useRef<ConfettiMethods>(null);
+const confettiRef = useRef<PIConfettiMethods>(null);
 
 // Call confettiRef.restart() to render the confetti
 
@@ -200,14 +201,39 @@ return (
 | `containerStyle`   | No       | N/A                      | The style of the confetti container. If you use a padding on the container, you need to set the height/width of the container to the same as the parent container. |
 
 
-## Methods
+## ConfettiMethods
+
+| Name      | Description                                      | Arguments |
+| --------- | ------------------------------------------------ | --------- |
+| `restart` | Start the animation from the beginning.          | `options?: ConfettiRestartOptions` |
+| `pause`   | Pause the animation.                             | `-` |
+| `reset`   | Reset the animation and prevent it from playing. | `-` |
+| `resume`  | Resume the animation from where it paused.       | `-` |
+
+
+## PIConfettiMethods
+
+| Name      | Description                                      | Arguments |
+| --------- | ------------------------------------------------ | --------- |
+| `restart` | Start the animation from the beginning.          | `options?: PIConfettiRestartOptions` |
+| `pause`   | Pause the animation.                             | `-` |
+| `reset`   | Reset the animation and prevent it from playing. | `-` |
+| `resume`  | Resume the animation from where it paused.       | `-` |
+
+
+## ConfettiRestartOptions
 
 | Name      | Description                                      |
 | --------- | ------------------------------------------------ |
-| `restart` | Start the animation from the beginning.          |
-| `pause`   | Pause the animation.                             |
-| `reset`   | Reset the animation and prevent it from playing. |
-| `resume`  | Resume the animation from where it paused.       |
+| `cannonsPositions` | If you want to override the default `cannonsPositions` prop, you can pass an array of positions here. This allows you to dynamically change the cannon positions. |
+
+
+## PIConfettiRestartOptions
+
+| Name      | Description                                      |
+| --------- | ------------------------------------------------ |
+| `blastPosition` | If you want to override the default `blastPosition` prop, you can pass a position here. This allows you to dynamically change the blast position. |
+
 
 ## Contributing
 

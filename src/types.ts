@@ -229,11 +229,21 @@ export type ContinuousConfettiProps = BaseContinuousConfettiProps &
     verticalSpacing?: number;
   };
 
-export type ConfettiMethods = {
+export type ConfettiRestartOptions = {
   /**
-   * @description start the animation from the beginning
+   * @description Optional array of cannon positions to override the prop
    */
-  restart: () => void;
+  cannonsPositions?: Position[];
+};
+
+export type PIConfettiRestartOptions = {
+  /**
+   * @description Optional array of cannon positions to override the prop
+   */
+  blastPosition?: Position;
+};
+
+type BaseConfettiMethods = {
   /**
    * @description pause the animation
    */
@@ -246,4 +256,18 @@ export type ConfettiMethods = {
    * @description resume the animation from where it paused
    */
   resume: () => void;
+};
+
+export type ConfettiMethods = BaseConfettiMethods & {
+  /**
+   * @description start the animation from the beginning
+   */
+  restart: (options?: ConfettiRestartOptions) => void;
+};
+
+export type PIConfettiMethods = BaseConfettiMethods & {
+  /**
+   * @description start the animation from the beginning
+   */
+  restart: (options?: PIConfettiRestartOptions) => void;
 };

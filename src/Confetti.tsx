@@ -1,11 +1,5 @@
 import { useRSXformBuffer, Canvas, Atlas } from '@shopify/react-native-skia';
-import {
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  forwardRef,
-} from 'react';
+import { useCallback, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import {
   cancelAnimation,
@@ -36,9 +30,24 @@ import type {
   ConfettiMethods,
   ConfettiProps,
   InternalConfettiProps,
+  ConfettiRestartOptions,
+  Position,
 } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useVariations } from './hooks/sizeVariations';
+
+const calculateHasCannons = (
+  cannonsPositions?: Position[] | null,
+  aHasCannon?: boolean
+) => {
+  'worklet';
+  return (aHasCannon ?? false) || (cannonsPositions?.length ?? 0) > 0;
+};
+
+const calculateInitialProgress = (hasCannons: boolean) => {
+  'worklet';
+  return hasCannons ? 0 : 1;
+};
 
 const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
   (
@@ -71,16 +80,20 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
   ) => {
     const _radiusRange =
       'radiusRange' in flakeProps ? flakeProps.radiusRange : undefined;
-    const hasCannons = cannonsPositions.length > 0;
-    const initialProgress = hasCannons ? 0 : 1;
+    // Store dynamic cannon positions - can be overridden via restart method
+    const dynamicCannonsPositions = useSharedValue<Position[] | null>(null);
+    const hasCannons = calculateHasCannons(cannonsPositions);
     const endProgress = 2;
-    const aHasCannon = useDerivedValue(() => hasCannons, [hasCannons]);
+    const aHasCannon = useDerivedValue(
+      () => calculateHasCannons(dynamicCannonsPositions.get(), hasCannons),
+      [cannonsPositions, hasCannons]
+    );
     const aInitialProgress = useDerivedValue(
-      () => initialProgress,
-      [initialProgress]
+      () => calculateInitialProgress(aHasCannon.get()),
+      [aHasCannon]
     );
     const aEndProgress = useDerivedValue(() => endProgress, [endProgress]);
-    const progress = useSharedValue(initialProgress);
+    const progress = useSharedValue(aInitialProgress.get());
     const opacity = useDerivedValue(() => {
       if (!fadeOutOnEnd) return 1;
       return interpolate(
@@ -105,11 +118,15 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
     const columnsNum = Math.floor(containerWidth / columnWidth);
     const rowsNum = Math.ceil(count / columnsNum);
     const baseVerticalOffset = flakeSize.height * 0.5;
-    const verticalOffset =
-      -rowsNum * rowHeight * (hasCannons ? 0.2 : 1) +
-      verticalSpacing -
-      RANDOM_INITIAL_Y_JIGGLE -
-      baseVerticalOffset;
+    // Calculate vertical offset based on whether we have cannons (either from prop or dynamic)
+    const aVerticalOffset = useDerivedValue(() => {
+      return (
+        -rowsNum * rowHeight * (aHasCannon.get() ? 0.2 : 1) +
+        verticalSpacing -
+        RANDOM_INITIAL_Y_JIGGLE -
+        baseVerticalOffset
+      );
+    }, [rowsNum, rowHeight, verticalSpacing, baseVerticalOffset, aHasCannon]);
     const sizeVariations = useVariations({
       sizeVariation,
       flakeSize,
@@ -127,26 +144,38 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
       })
     );
     const delayStartTime = useSharedValue(0);
-    const initialVertical = useMemo(() => {
+    const initialVertical = useDerivedValue(() => {
       const randomYOffset =
         randomOffset?.y?.max || DEFAULT_CONFETTI_RANDOM_OFFSET.y?.max || 0;
 
-      if (hasCannons) return 0;
+      if (aHasCannon.get()) return 0;
       return randomYOffset;
-    }, [randomOffset?.y?.max, hasCannons]);
+    }, [randomOffset?.y?.max, aHasCannon]);
 
-    const fallingMaxYMovement =
-      Math.abs(verticalOffset) +
-      containerHeight +
-      verticalSpacing +
-      Math.abs(initialVertical) +
-      Math.min(1 - (randomSpeed?.min || 0), 1) * containerHeight;
+    const aFallingMaxYMovement = useDerivedValue(() => {
+      return (
+        Math.abs(aVerticalOffset.get()) +
+        containerHeight +
+        verticalSpacing +
+        Math.abs(initialVertical.get()) +
+        Math.min(1 - (randomSpeed?.min || 0), 1) * containerHeight
+      );
+    }, [
+      aVerticalOffset,
+      containerHeight,
+      verticalSpacing,
+      initialVertical,
+      randomSpeed,
+    ]);
 
     //Calculate the time it takes for a single confetti flake to traverse the visible screen area.
-    const singleFlakeFallDuration =
-      (containerHeight * fallDuration) / fallingMaxYMovement;
+    const aSingleFlakeFallDuration = useDerivedValue(() => {
+      return (containerHeight * fallDuration) / aFallingMaxYMovement.get();
+    }, [containerHeight, fallDuration, aFallingMaxYMovement]);
     const continuousDelay =
-      isContinuous === 2 ? (fallDuration - singleFlakeFallDuration) * 0.9 : 0;
+      isContinuous === 2
+        ? (fallDuration - aSingleFlakeFallDuration.get()) * 0.9
+        : 0;
     const delay = autoStartDelay + continuousDelay;
 
     const { texture, sprites } = useConfettiLogic({
@@ -172,7 +201,7 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
       'worklet';
 
       pause();
-      progress.set(initialProgress);
+      progress.set(aInitialProgress.get());
     };
 
     const refreshBoxes = useCallback(() => {
@@ -230,9 +259,14 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
       ) => {
         'worklet';
 
+        const hasCannons = calculateHasCannons(
+          dynamicCannonsPositions.get(),
+          aHasCannon.get()
+        );
+
         const animations: number[] = [];
 
-        if (_blastDuration && aHasCannon.get())
+        if (_blastDuration && hasCannons)
           animations.push(
             withTiming(1, { duration: _blastDuration, easing }, (finished) => {
               if (!_fallDuration) onEnd?.(finished);
@@ -256,12 +290,22 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
 
         return finalAnimation;
       },
-      [aHasCannon, delayStartTime, easing]
+      [aHasCannon, delayStartTime, easing, dynamicCannonsPositions]
     );
 
     const restart = useCallback(
-      ({ skipDelay }: { skipDelay?: boolean } = {}) => {
+      (options: ConfettiRestartOptions = {}) => {
         'worklet';
+
+        const hasCannons = calculateHasCannons(
+          options.cannonsPositions,
+          aHasCannon.get()
+        );
+        const initialProgress = calculateInitialProgress(hasCannons);
+
+        // Update dynamic cannon positions if provided
+        dynamicCannonsPositions.set(options.cannonsPositions || null);
+
         refreshBoxes();
         progress.set(initialProgress);
         running.set(true);
@@ -273,13 +317,13 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
           refreshBoxes();
           if (isInfinite) {
             cancelAnimation(progress);
-            progress.set(aInitialProgress.get());
+            progress.set(initialProgress);
             progress.set(
               runAnimation(
                 {
                   blastDuration,
                   fallDuration,
-                  delay: fallDuration - 2.5 * singleFlakeFallDuration,
+                  delay: fallDuration - 2.5 * aSingleFlakeFallDuration.get(),
                 },
                 (finished) => {
                   'worklet';
@@ -302,25 +346,23 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
           );
         };
 
-        const startDelay = !skipDelay ? delay : 0;
-
-        startAnimation(startDelay);
+        startAnimation(delay);
       },
       [
-        UIOnEnd,
-        UIOnStart,
-        aInitialProgress,
-        blastDuration,
-        delay,
-        fallDuration,
-        initialProgress,
-        isContinuous,
-        isInfinite,
-        progress,
+        aHasCannon,
+        dynamicCannonsPositions,
         refreshBoxes,
-        runAnimation,
+        progress,
         running,
-        singleFlakeFallDuration,
+        isContinuous,
+        UIOnStart,
+        delay,
+        UIOnEnd,
+        isInfinite,
+        runAnimation,
+        blastDuration,
+        fallDuration,
+        aSingleFlakeFallDuration,
       ]
     );
 
@@ -346,7 +388,7 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
               {
                 blastDuration,
                 fallDuration,
-                delay: fallDuration - 2.5 * singleFlakeFallDuration,
+                delay: fallDuration - 2.5 * aSingleFlakeFallDuration.get(),
               },
               (finished) => {
                 'worklet';
@@ -416,15 +458,13 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
 
       let y = rowIndex * rowHeight;
 
-      y -= Math.abs(initialVertical);
+      y -= Math.abs(initialVertical.get());
       return { x, y };
     };
 
     useEffect(() => {
       runOnUI(() => {
-        if (autoplay && !running.get()) {
-          restart();
-        }
+        if (autoplay && !running.get()) restart();
       })();
     }, [autoplay, restart, running]);
 
@@ -436,18 +476,24 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
       let tx = 0,
         ty = 0;
       const { x, y } = getPosition(i); // Already includes random offsets
+      const hasCannons = calculateHasCannons(
+        dynamicCannonsPositions.get(),
+        aHasCannon.get()
+      );
 
-      if (progress.get() < 1 && aHasCannon.get()) {
+      if (progress.get() < 1 && hasCannons) {
         // Distribute confetti evenly across cannons by using modulo
-        const blastIndex = i % cannonsPositions.length;
-        const blastPosX = cannonsPositions[blastIndex]?.x || 0;
-        const blastPosY = cannonsPositions[blastIndex]?.y || 0;
+        const currentCannonsPositions =
+          dynamicCannonsPositions.get() || cannonsPositions;
+        const blastIndex = i % currentCannonsPositions.length;
+        const blastPosX = currentCannonsPositions[blastIndex]?.x || 0;
+        const blastPosY = currentCannonsPositions[blastIndex]?.y || 0;
 
         const initialRandomX = piece.randomXs[0] || 0;
         const initialRandomY = piece.initialRandomY;
         const initialX = x + piece.randomOffsetX + initialRandomX;
         const initialY =
-          y + piece.randomOffsetY + initialRandomY + verticalOffset;
+          y + piece.randomOffsetY + initialRandomY + aVerticalOffset.get();
 
         tx = interpolate(
           progress.get(),
@@ -464,13 +510,13 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
       } else {
         const initialRandomY = piece.initialRandomY;
         tx = x + piece.randomOffsetX;
-        ty = y + piece.randomOffsetY + initialRandomY + verticalOffset;
+        ty = y + piece.randomOffsetY + initialRandomY + aVerticalOffset.get();
 
         // Apply random speed to the fall height
         const yChange = interpolate(
           progress.get(),
           [1, 2],
-          [0, fallingMaxYMovement * piece.randomSpeed], // Use random speed here
+          [0, aFallingMaxYMovement.get() * piece.randomSpeed], // Use random speed here
           Extrapolation.CLAMP
         );
         // Interpolate between randomX values for smooth left-right movement
