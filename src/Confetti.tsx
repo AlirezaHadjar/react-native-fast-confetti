@@ -93,7 +93,7 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
       [aHasCannon]
     );
     const aEndProgress = useDerivedValue(() => endProgress, [endProgress]);
-    const progress = useSharedValue(aInitialProgress.get());
+    const progress = useSharedValue(calculateInitialProgress(hasCannons));
     const opacity = useDerivedValue(() => {
       if (!fadeOutOnEnd) return 1;
       return interpolate(
