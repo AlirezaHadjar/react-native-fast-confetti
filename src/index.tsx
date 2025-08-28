@@ -1,4 +1,10 @@
-export type { ConfettiMethods, ConfettiProps } from './types';
+export type {
+  ConfettiProps,
+  PIConfettiProps,
+  ContinuousConfettiProps,
+  ConfettiMethods,
+  PIConfettiMethods,
+} from './types';
 
 export { Confetti } from './Confetti';
 export { PIConfetti } from './PIConfetti';
