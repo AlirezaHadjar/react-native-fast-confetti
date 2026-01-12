@@ -254,6 +254,17 @@ export default function App() {
             count={200}
           />
         </>
+      ) : mode === 'canon' ? (
+        <Confetti
+          key={confettiKey}
+          ref={confettiRef}
+          flakeSize={flakeSize}
+          {...textureProps}
+          rotation={rotation}
+          cannonsPositions={cannonPositions}
+          autoplay
+          isInfinite
+        />
       ) : (
         <Confetti
           key={confettiKey}
@@ -261,7 +272,6 @@ export default function App() {
           flakeSize={flakeSize}
           {...textureProps}
           rotation={rotation}
-          cannonsPositions={mode === 'canon' ? cannonPositions : undefined}
           autoplay
           isInfinite
         />
