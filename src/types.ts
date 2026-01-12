@@ -103,10 +103,6 @@ type BaseConfettiProps = {
    */
   onAnimationEnd?: () => void;
   /**
-   * @description An array of positions from which confetti flakes should blast.
-   */
-  cannonsPositions?: Position[];
-  /**
    * @description Controls the random size variation of confetti flakes. Value between 0 and 1.
    * A value of 0.1 means flakes can vary up to 10% smaller than the base size, with more flakes
    * clustering towards the original size and fewer towards the minimum size.
@@ -132,17 +128,51 @@ type BaseConfettiProps = {
    * @default { x: { min: -50, max: 50 }, y: { min: 0, max: 150 } }
    */
   randomOffset?: RandomOffset;
-  /**
-   * @description The random speed multiplier for confetti flakes.
-   * @default { min: 0.9, max: 1.3 }
-   */
-  easing?: WithTimingConfig['easing'];
 
   /**
    * @description The style of the confetti container.
    * if you use a padding on the container, you need to set the height/width of the container to the same as the parent container.
    */
   containerStyle?: StyleProp<ViewStyle>;
+};
+
+type EasingPropsWithCannons = {
+  /**
+   * @description An array of positions from which confetti flakes should blast.
+   */
+  cannonsPositions: Position[];
+  /**
+   * @description The easing function for the falling animation.
+   * @default Easing.inOut(Easing.quad)
+   */
+  fallEasing?: WithTimingConfig['easing'];
+  /**
+   * @description The easing function for the blast animation. Only available when cannonsPositions is defined.
+   * @default Easing.inOut(Easing.quad)
+   */
+  blastEasing?: WithTimingConfig['easing'];
+};
+
+type EasingPropsWithoutCannons = {
+  /**
+   * @description An array of positions from which confetti flakes should blast.
+   */
+  cannonsPositions?: undefined;
+  /**
+   * @description The easing function for the falling animation.
+   * @default Easing.inOut(Easing.quad)
+   */
+  fallEasing?: WithTimingConfig['easing'];
+  blastEasing?: never;
+};
+
+type EasingProps = (EasingPropsWithCannons | EasingPropsWithoutCannons) & {
+  /**
+   * @description The easing function for both falling and blast animations.
+   * @default Easing.inOut(Easing.quad)
+   * @deprecated Use `fallEasing` and `blastEasing` instead. This prop will be used as fallback if the specific easing props are not provided.
+   */
+  easing?: WithTimingConfig['easing'];
 };
 
 type TextureProps =
@@ -180,7 +210,7 @@ type TextureProps =
       radiusRange?: [number, number];
     };
 
-export type ConfettiProps = BaseConfettiProps & TextureProps;
+export type ConfettiProps = BaseConfettiProps & TextureProps & EasingProps;
 export type InternalConfettiProps = ConfettiProps & {
   isContinuous?: 1 | 2;
 };
@@ -190,7 +220,6 @@ type PIBaseProps = StrictOmit<
   | 'autoplay'
   | 'verticalSpacing'
   | 'autoStartDelay'
-  | 'cannonsPositions'
   | 'isInfinite'
   | 'rotation'
 >;
@@ -217,7 +246,7 @@ export type PIConfettiProps = PIBaseProps &
 
 type BaseContinuousConfettiProps = StrictOmit<
   BaseConfettiProps,
-  'isInfinite' | 'easing' | 'verticalSpacing'
+  'isInfinite' | 'verticalSpacing'
 >;
 
 export type ContinuousConfettiProps = BaseContinuousConfettiProps &
@@ -236,11 +265,28 @@ export type ConfettiRestartOptions = {
   cannonsPositions?: Position[];
 };
 
+export type BlastConfiguration = {
+  /**
+   * @description The position where this blast should originate
+   */
+  position: Position;
+  /**
+   * @description The delay in milliseconds before this blast starts (relative to restart call)
+   */
+  delay: number;
+};
+
 export type PIConfettiRestartOptions = {
   /**
-   * @description Optional array of cannon positions to override the prop
+   * @description Optional single blast position to override the prop (for backward compatibility)
    */
   blastPosition?: Position;
+  /**
+   * @description Optional array of blast configurations with positions and delays.
+   * When provided, the total confetti count will be distributed evenly across all blasts.
+   * Each blast can have its own position and delay.
+   */
+  blastConfigurations?: BlastConfiguration[];
 };
 
 type BaseConfettiMethods = {

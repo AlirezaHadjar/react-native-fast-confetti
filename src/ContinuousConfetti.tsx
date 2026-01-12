@@ -43,7 +43,7 @@ export const ContinuousConfetti = forwardRef<
         ref={confettiRef1}
         isInfinite
         isContinuous={1}
-        easing={Easing.linear}
+        fallEasing={Easing.linear}
       />
       <InternalConfetti
         randomSpeed={CONTINUOUS_CONFETTI_RANDOM_SPEED}
@@ -53,7 +53,7 @@ export const ContinuousConfetti = forwardRef<
         ref={confettiRef2}
         isInfinite
         isContinuous={2}
-        easing={Easing.linear}
+        fallEasing={Easing.linear}
       />
     </>
   );
