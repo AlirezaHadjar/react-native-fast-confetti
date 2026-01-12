@@ -19,7 +19,7 @@ import {
   DEFAULT_BLAST_DURATION,
   DEFAULT_BOXES_COUNT,
   DEFAULT_COLORS,
-  DEFAULT_CONFETTI_FALLING_EASING,
+  DEFAULT_CONFETTI_FALL_EASING,
   DEFAULT_CONFETTI_BLAST_EASING,
   DEFAULT_CONFETTI_RANDOM_OFFSET,
   DEFAULT_FALL_DURATION,
@@ -73,7 +73,7 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
       isInfinite = autoplay,
       fadeOutOnEnd = false,
       cannonsPositions = [],
-      fallingEasing: _fallingEasing,
+      fallEasing: _fallEasing,
       blastEasing: _blastEasing,
       easing,
       containerStyle,
@@ -83,8 +83,8 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
   ) => {
     const _radiusRange =
       'radiusRange' in flakeProps ? flakeProps.radiusRange : undefined;
-    const fallingEasing =
-      _fallingEasing ?? easing ?? DEFAULT_CONFETTI_FALLING_EASING;
+    const fallEasing =
+      _fallEasing ?? easing ?? DEFAULT_CONFETTI_FALL_EASING;
     const blastEasing =
       _blastEasing ?? easing ?? DEFAULT_CONFETTI_BLAST_EASING;
     // Store dynamic cannon positions - can be overridden via restart method
@@ -287,7 +287,7 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
           animations.push(
             withTiming(
               2,
-              { duration: _fallDuration, easing: fallingEasing },
+              { duration: _fallDuration, easing: fallEasing },
               (finished) => {
                 onEnd?.(finished);
               }
@@ -305,7 +305,7 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
 
         return finalAnimation;
       },
-      [aHasCannon, delayStartTime, fallingEasing, blastEasing, dynamicCannonsPositions]
+      [aHasCannon, delayStartTime, fallEasing, blastEasing, dynamicCannonsPositions]
     );
 
     const restart = useCallback(

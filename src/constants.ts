@@ -90,6 +90,6 @@ export const CONTINUOUS_CONFETTI_RANDOM_OFFSET: DeepRequired<RandomOffset> = {
   y: { min: -200, max: 200 },
 };
 
-export const DEFAULT_CONFETTI_FALLING_EASING = Easing.inOut(Easing.quad);
+export const DEFAULT_CONFETTI_FALL_EASING = Easing.inOut(Easing.quad);
 
 export const DEFAULT_CONFETTI_BLAST_EASING = Easing.inOut(Easing.quad);

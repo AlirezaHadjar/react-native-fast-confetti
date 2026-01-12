@@ -145,7 +145,7 @@ type EasingPropsWithCannons = {
    * @description The easing function for the falling animation.
    * @default Easing.inOut(Easing.quad)
    */
-  fallingEasing?: WithTimingConfig['easing'];
+  fallEasing?: WithTimingConfig['easing'];
   /**
    * @description The easing function for the blast animation. Only available when cannonsPositions is defined.
    * @default Easing.inOut(Easing.quad)
@@ -162,7 +162,7 @@ type EasingPropsWithoutCannons = {
    * @description The easing function for the falling animation.
    * @default Easing.inOut(Easing.quad)
    */
-  fallingEasing?: WithTimingConfig['easing'];
+  fallEasing?: WithTimingConfig['easing'];
   blastEasing?: never;
 };
 
@@ -170,7 +170,7 @@ type EasingProps = (EasingPropsWithCannons | EasingPropsWithoutCannons) & {
   /**
    * @description The easing function for both falling and blast animations.
    * @default Easing.inOut(Easing.quad)
-   * @deprecated Use `fallingEasing` and `blastEasing` instead. This prop will be used as fallback if the specific easing props are not provided.
+   * @deprecated Use `fallEasing` and `blastEasing` instead. This prop will be used as fallback if the specific easing props are not provided.
    */
   easing?: WithTimingConfig['easing'];
 };
