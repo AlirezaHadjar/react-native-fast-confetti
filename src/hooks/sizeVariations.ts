@@ -29,6 +29,13 @@ export const useVariations = ({
             : getRandomValue(radiusRange[0], radiusRange[1]),
       });
     }
+    // Ensure minimum texture width for rendering quality
+    const MIN_SIZE_VARIATIONS = 10;
+    while (sizeVariations.length < MIN_SIZE_VARIATIONS) {
+      sizeVariations.push({
+        ...sizeVariations[sizeVariations.length % flakeSize.length]!,
+      });
+    }
     return sizeVariations;
   }, [flakeSize, radiusRange]);
 

@@ -44,14 +44,13 @@ const textureOptions: DropdownOption<string>[] = [
   { label: 'Snowflake', value: 'snowflake' },
 ];
 
-const modeOptions: DropdownOption<
-  'continuous' | 'single' | 'pi' | 'canon'
->[] = [
-  { label: 'Continuous', value: 'continuous' },
-  { label: 'Single', value: 'single' },
-  { label: 'PI', value: 'pi' },
-  { label: 'Canon', value: 'canon' },
-];
+const modeOptions: DropdownOption<'continuous' | 'single' | 'pi' | 'canon'>[] =
+  [
+    { label: 'Continuous', value: 'continuous' },
+    { label: 'Single', value: 'single' },
+    { label: 'PI', value: 'pi' },
+    { label: 'Canon', value: 'canon' },
+  ];
 
 export default function App() {
   const confettiRef = useRef<ConfettiMethods>(null);
@@ -60,9 +59,9 @@ export default function App() {
   const { height, width } = useWindowDimensions();
   const [verticalSpacing, setVerticalSpacing] = useState(20);
   const [radiusRange, setRadiusRange] = useState<'square' | 'circle'>('square');
-  const [mode, setMode] = useState<
-    'continuous' | 'single' | 'pi' | 'canon'
-  >('single');
+  const [mode, setMode] = useState<'continuous' | 'single' | 'pi' | 'canon'>(
+    'single'
+  );
   const [textureType, setTextureType] = useState('default');
 
   const snowFlakeSVG = useSVG(require('../assets/snow-flake.svg'));
@@ -214,36 +213,32 @@ export default function App() {
             placeholder="Select Mode"
             value={mode}
             onChange={(
-              item: DropdownOption<
-                'continuous' | 'single' | 'pi' | 'canon'
-              >
+              item: DropdownOption<'continuous' | 'single' | 'pi' | 'canon'>
             ) => {
               setMode(item.value);
             }}
           />
         </View>
-        {mode !== 'pi' &&
-          mode !== 'canon' &&
-          mode !== 'continuous' && (
-            <View style={styles.dropdownContainer}>
-              <Text style={styles.dropdownLabel}>Vertical Spacing:</Text>
-              <Dropdown
-                style={styles.dropdown}
-                placeholderStyle={styles.placeholderStyle}
-                selectedTextStyle={styles.selectedTextStyle}
-                data={verticalSpacingOptions}
-                labelField="label"
-                valueField="value"
-                placeholder="Select spacing"
-                value={verticalSpacing}
-                onChange={(item: DropdownOption<number>) => {
-                  setVerticalSpacing(item.value);
-                }}
-              />
-            </View>
-          )}
+        {mode !== 'pi' && mode !== 'canon' && mode !== 'continuous' && (
+          <View style={styles.dropdownContainer}>
+            <Text style={styles.dropdownLabel}>Vertical Spacing:</Text>
+            <Dropdown
+              style={styles.dropdown}
+              placeholderStyle={styles.placeholderStyle}
+              selectedTextStyle={styles.selectedTextStyle}
+              data={verticalSpacingOptions}
+              labelField="label"
+              valueField="value"
+              placeholder="Select spacing"
+              value={verticalSpacing}
+              onChange={(item: DropdownOption<number>) => {
+                setVerticalSpacing(item.value);
+              }}
+            />
+          </View>
+        )}
 
-        {textureType === 'default' && (
+        {textureType === 'default' && mode !== 'canon' && (
           <View style={styles.dropdownContainer}>
             <Text style={styles.dropdownLabel}>Corner Radius:</Text>
             <Dropdown
@@ -307,13 +302,20 @@ export default function App() {
         <CannonConfetti
           key={confettiKey}
           ref={cannonConfettiRef}
-          flakeSize={[
-            { width: 8, height: 8, radius: 4 },
-            { width: 13, height: 13, radius: 6.5 },
-            { width: 8, height: 14 },
-            { width: 8, height: 2, radius: 2 },
-          ]}
-          radiusRange={[3, 10]}
+          {...(textureType === 'default'
+            ? {
+                flakeSize: [
+                  { width: 8, height: 8, radius: 4 },
+                  { width: 13, height: 13, radius: 6.5 },
+                  { width: 8, height: 14 },
+                  { width: 8, height: 2, radius: 2 },
+                ],
+                radiusRange: [3, 10],
+              }
+            : {
+                flakeSize,
+                ...textureProps,
+              })}
           count={300}
           rotation={rotation}
           cannonsPositions={cannonPositions}

@@ -1,5 +1,5 @@
 import { useRSXformBuffer, Canvas, Atlas } from '@shopify/react-native-skia';
-import { useCallback, useEffect, useImperativeHandle, forwardRef, useMemo } from 'react';
+import { useCallback, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import {
   cancelAnimation,
@@ -115,9 +115,8 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
       })
     );
     const delayStartTime = useSharedValue(0);
-    const initialVertical = useMemo(() => {
-      return randomOffset?.y?.max || DEFAULT_CONFETTI_RANDOM_OFFSET.y?.max || 0;
-    }, [randomOffset?.y?.max]);
+    const initialVertical =
+      randomOffset?.y?.max || DEFAULT_CONFETTI_RANDOM_OFFSET.y?.max || 0;
 
     const fallingMaxYMovement =
       Math.abs(verticalOffset) +
