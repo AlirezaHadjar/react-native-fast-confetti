@@ -2,6 +2,7 @@
   "expo": {
     "name": "example",
     "slug": "example",
+    "scheme": "fastconfetti",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -27,6 +28,11 @@
       "edgeToEdgeEnabled": true,
       "package": "fastconfetti.example"
     },
-    "web": { "favicon": "./assets/favicon.png" }
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router"
+    ]
   }
 }

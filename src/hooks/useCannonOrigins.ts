@@ -145,13 +145,26 @@ export const useCannonOrigins = ({
         const originColors = props.colors ?? rootColors ?? DEFAULT_COLORS;
         const originCount = props.count ?? DEFAULT_CANNON_ORIGIN_COUNT;
 
-        // Atlas collapse: when texture is set, colors are not used
+        // Atlas collapse: when texture is set, colors are not used.
+        // All origins share a single color placeholder and a deduplicated
+        // size pool to avoid duplicate atlas cells (which cause rendering
+        // issues with Skia's useTexture).
         if (hasTexture) {
           if (colorsAccum.length === 0) {
             colorsAccum.push('#000');
           }
-          const sizeStart = sizesAccum.length;
-          sizesAccum.push(...originSizes);
+          // Deduplicate sizes: only add sizes not already present
+          for (const size of originSizes) {
+            const exists = sizesAccum.some(
+              (s) =>
+                s.width === size.width &&
+                s.height === size.height &&
+                s.radius === size.radius
+            );
+            if (!exists) {
+              sizesAccum.push(size);
+            }
+          }
 
           configs.push({
             spread: props.spread ?? DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE,
@@ -169,8 +182,8 @@ export const useCannonOrigins = ({
             },
             colorStart: 0,
             colorCount: 1,
-            sizeStart,
-            sizeCount: originSizes.length,
+            sizeStart: 0,
+            sizeCount: sizesAccum.length,
             rotation: props.rotation ?? rootRotation,
             depth: props.depth ?? rootDepth ?? DEFAULT_CANNON_CONFETTI_DEPTH,
             target: resolvedTarget,
