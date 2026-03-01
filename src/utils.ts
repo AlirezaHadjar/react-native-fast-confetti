@@ -9,12 +9,10 @@ import {
   DEFAULT_PICONFETTI_RANDOM_SPEED,
   DEFAULT_CANNON_CONFETTI_ROTATION,
   DEFAULT_CANNON_CONFETTI_SPEED_VARIATION,
-  DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX,
-  DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE,
   DEFAULT_CANNON_CONFETTI_DEPTH,
 } from './constants';
 import { Extrapolation, interpolate } from 'react-native-reanimated';
-import type { RandomOffset, Range, Rotation } from './types';
+import type { NamedPosition, Position, RandomOffset, Range, Rotation } from './types';
 
 export const getRandomBoolean = () => {
   'worklet';
@@ -207,61 +205,128 @@ export const createTextureProps = <T extends 'svg' | 'image'>(
     ? { type: 'svg'; content: SkSVG }
     : { type: 'image'; content: SkImage };
 
-export const generateCannonBoxesArray = ({
-  count,
-  colorsVariations,
-  sizeVariations,
-  cannonsCount,
-  rotation,
-  speedVariation,
-  spreadAngle,
-  depth,
-}: {
+const EDGE_OFFSET = 30;
+
+export const resolveNamedPosition = (
+  position: NamedPosition | Position,
+  containerWidth: number,
+  containerHeight: number
+): Position => {
+  if (typeof position === 'object') return position;
+
+  switch (position) {
+    case 'bottom-left':
+      return { x: -EDGE_OFFSET, y: containerHeight + EDGE_OFFSET };
+    case 'bottom-right':
+      return { x: containerWidth + EDGE_OFFSET, y: containerHeight + EDGE_OFFSET };
+    case 'bottom-center':
+      return { x: containerWidth / 2, y: containerHeight + EDGE_OFFSET };
+    case 'top-left':
+      return { x: -EDGE_OFFSET, y: -EDGE_OFFSET };
+    case 'top-right':
+      return { x: containerWidth + EDGE_OFFSET, y: -EDGE_OFFSET };
+    case 'top-center':
+      return { x: containerWidth / 2, y: -EDGE_OFFSET };
+    case 'center-left':
+      return { x: -EDGE_OFFSET, y: containerHeight / 2 };
+    case 'center-right':
+      return { x: containerWidth + EDGE_OFFSET, y: containerHeight / 2 };
+    case 'center':
+      return { x: containerWidth / 2, y: containerHeight / 2 };
+  }
+};
+
+export type CannonConfig = {
+  spread: number;
+  speed: number;
   count: number;
-  colorsVariations: number;
-  sizeVariations: number;
-  cannonsCount: number;
+  speedVariation: Required<Range>;
+  colorStart: number;
+  colorCount: number;
+  sizeStart: number;
+  sizeCount: number;
   rotation?: Rotation;
-  speedVariation?: Range;
-  spreadAngle?: number;
   depth?: Range;
+  target: Position;
+};
+
+export const generateCannonBoxesArray = ({
+  cannonConfigs,
+  launchDelayMax,
+}: {
+  cannonConfigs: CannonConfig[];
+  launchDelayMax: number;
 }) => {
   'worklet';
 
-  rotation = rotation ?? DEFAULT_CANNON_CONFETTI_ROTATION;
-  speedVariation = speedVariation ?? DEFAULT_CANNON_CONFETTI_SPEED_VARIATION;
-  spreadAngle = spreadAngle ?? DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE;
-  depth = depth ?? DEFAULT_CANNON_CONFETTI_DEPTH;
+  const result: {
+    cannonIndex: number;
+    angleOffset: number;
+    speedMultiplier: number;
+    cannonSpeed: number;
+    launchDelay: number;
+    depthScale: number;
+    clockwise: boolean;
+    maxRotation: { x: number; z: number };
+    colorIndex: number;
+    sizeIndex: number;
+    initialRotation: number;
+    targetX: number;
+    targetY: number;
+  }[] = [];
 
-  const xRotationRange = resolveRange(
-    rotation.x,
-    DEFAULT_CANNON_CONFETTI_ROTATION.x
-  );
-  const zRotationRange = resolveRange(
-    rotation.z,
-    DEFAULT_CANNON_CONFETTI_ROTATION.z
-  );
-  const speedRange = resolveRange(
-    speedVariation,
-    DEFAULT_CANNON_CONFETTI_SPEED_VARIATION
-  );
-  const depthRange = resolveRange(depth, DEFAULT_CANNON_CONFETTI_DEPTH);
+  for (let cannonIndex = 0; cannonIndex < cannonConfigs.length; cannonIndex++) {
+    const config = cannonConfigs[cannonIndex]!;
+    const halfSpread = config.spread / 2;
 
-  const halfSpread = spreadAngle / 2;
+    const rotation = config.rotation ?? DEFAULT_CANNON_CONFETTI_ROTATION;
+    const depth = config.depth ?? DEFAULT_CANNON_CONFETTI_DEPTH;
 
-  return new Array(count).fill(0).map((_, i) => ({
-    cannonIndex: i % cannonsCount,
-    angleOffset: getRandomValue(-halfSpread, halfSpread),
-    speedMultiplier: getRandomValue(speedRange.min, speedRange.max),
-    launchDelay: getRandomValue(0, DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX),
-    depthScale: getRandomValue(depthRange.min, depthRange.max),
-    clockwise: getRandomBoolean(),
-    maxRotation: {
-      x: getRandomValue(xRotationRange.min, xRotationRange.max),
-      z: getRandomValue(zRotationRange.min, zRotationRange.max),
-    },
-    colorIndex: Math.round(getRandomValue(0, colorsVariations - 1)),
-    sizeIndex: Math.round(getRandomValue(0, sizeVariations - 1)),
-    initialRotation: getRandomValue(0.1 * Math.PI, Math.PI),
-  }));
+    const xRotationRange = resolveRange(
+      rotation.x,
+      DEFAULT_CANNON_CONFETTI_ROTATION.x
+    );
+    const zRotationRange = resolveRange(
+      rotation.z,
+      DEFAULT_CANNON_CONFETTI_ROTATION.z
+    );
+    const speedRange = resolveRange(
+      config.speedVariation,
+      DEFAULT_CANNON_CONFETTI_SPEED_VARIATION
+    );
+    const depthRange = resolveRange(depth, DEFAULT_CANNON_CONFETTI_DEPTH);
+
+    for (let j = 0; j < config.count; j++) {
+      result.push({
+        cannonIndex,
+        angleOffset: getRandomValue(-halfSpread, halfSpread),
+        speedMultiplier: getRandomValue(speedRange.min, speedRange.max),
+        cannonSpeed: config.speed,
+        launchDelay: getRandomValue(0, launchDelayMax),
+        depthScale: getRandomValue(depthRange.min, depthRange.max),
+        clockwise: getRandomBoolean(),
+        maxRotation: {
+          x: getRandomValue(xRotationRange.min, xRotationRange.max),
+          z: getRandomValue(zRotationRange.min, zRotationRange.max),
+        },
+        colorIndex: Math.round(
+          getRandomValue(
+            config.colorStart,
+            config.colorStart + config.colorCount - 1
+          )
+        ),
+        sizeIndex: Math.round(
+          getRandomValue(
+            config.sizeStart,
+            config.sizeStart + config.sizeCount - 1
+          )
+        ),
+        initialRotation: getRandomValue(0.1 * Math.PI, Math.PI),
+        targetX: config.target.x,
+        targetY: config.target.y,
+      });
+    }
+  }
+
+  return result;
 };

@@ -1,5 +1,11 @@
 import { useRSXformBuffer, Canvas, Atlas } from '@shopify/react-native-skia';
-import { useCallback, useEffect, useImperativeHandle, forwardRef } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  forwardRef,
+  useMemo,
+} from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import {
   cancelAnimation,
@@ -12,106 +18,135 @@ import {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { generateCannonBoxesArray } from './utils';
 import {
-  DEFAULT_BOXES_COUNT,
-  DEFAULT_COLORS,
-  DEFAULT_FLAKE_SIZE,
+  generateCannonBoxesArray,
+  resolveNamedPosition,
+  type CannonConfig,
+} from './utils';
+import {
   DEFAULT_CANNON_CONFETTI_DURATION,
   DEFAULT_CANNON_CONFETTI_GRAVITY,
   DEFAULT_CANNON_CONFETTI_DRAG,
   DEFAULT_CANNON_CONFETTI_INITIAL_SPEED,
   DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE,
   DEFAULT_CANNON_CONFETTI_SPEED_VARIATION,
-  DEFAULT_CANNON_CONFETTI_DEPTH,
+  DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX,
 } from './constants';
 import type {
   CannonConfettiMethods,
   CannonConfettiProps,
   CannonConfettiRestartOptions,
+  NamedPosition,
   Position,
 } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
-import { useVariations } from './hooks/sizeVariations';
+import { useCannonOrigins } from './hooks/useCannonOrigins';
+import { Origin, Flake } from './CannonConfettiComponents';
 
-const CannonConfetti = forwardRef<CannonConfettiMethods, CannonConfettiProps>(
+const CannonConfettiInner = forwardRef<
+  CannonConfettiMethods,
+  CannonConfettiProps
+>(
   (
     {
-      cannonsPositions,
-      count = DEFAULT_BOXES_COUNT,
-      flakeSize = DEFAULT_FLAKE_SIZE,
+      children,
       duration = DEFAULT_CANNON_CONFETTI_DURATION,
       gravity = DEFAULT_CANNON_CONFETTI_GRAVITY,
       drag = DEFAULT_CANNON_CONFETTI_DRAG,
-      initialSpeed = DEFAULT_CANNON_CONFETTI_INITIAL_SPEED,
-      spreadAngle = DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE,
-      speedVariation = DEFAULT_CANNON_CONFETTI_SPEED_VARIATION,
-      depth = DEFAULT_CANNON_CONFETTI_DEPTH,
-      colors = DEFAULT_COLORS,
-      rotation,
       autoplay = true,
-      isInfinite = false,
+      infinite = false,
       fadeOutOnEnd = false,
       onAnimationEnd,
       onAnimationStart,
       width: _width,
       height: _height,
       containerStyle,
-      ...flakeProps
+      colors: rootColors,
+      rotation: rootRotation,
+      depth: rootDepth,
+      speedVariation: rootSpeedVariation,
+      target: rootTarget,
+      sprayDuration,
+      ...textureRootProps
     },
     ref
   ) => {
-    const _radiusRange =
-      'radiusRange' in flakeProps ? flakeProps.radiusRange : undefined;
-
-    const dynamicCannonsPositions = useSharedValue<Position[] | null>(null);
-
-    const progress = useSharedValue(0);
-    const running = useSharedValue(false);
-
     const { width: DEFAULT_SCREEN_WIDTH, height: DEFAULT_SCREEN_HEIGHT } =
       useWindowDimensions();
     const containerWidth = _width || DEFAULT_SCREEN_WIDTH;
     const containerHeight = _height || DEFAULT_SCREEN_HEIGHT;
 
+    // --- Resolve texture from root props ---
+    const rootImage =
+      'image' in textureRootProps ? textureRootProps.image : undefined;
+    const rootSvg =
+      'svg' in textureRootProps ? textureRootProps.svg : undefined;
+    const textureProps = useMemo(() => {
+      if (rootImage) {
+        return { type: 'image' as const, content: rootImage };
+      }
+      if (rootSvg) {
+        return { type: 'svg' as const, content: rootSvg };
+      }
+      return undefined;
+    }, [rootImage, rootSvg]);
+
+    const hasTexture = textureProps !== undefined;
+
+    // --- Compute launch delay max from sprayDuration ---
+    const launchDelayMax =
+      sprayDuration !== undefined
+        ? Math.min(sprayDuration / duration, 1)
+        : DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX;
+
+    if (__DEV__ && sprayDuration !== undefined && sprayDuration > duration) {
+      console.warn(
+        `CannonConfetti: sprayDuration (${sprayDuration}ms) exceeds duration (${duration}ms). It will be clamped to duration.`
+      );
+    }
+
+    // --- Parse children + build atlas via hook ---
+    const {
+      cannonsPositions,
+      cannonConfigs,
+      allColors,
+      sizeVariations,
+      totalCount,
+    } = useCannonOrigins({
+      children,
+      rootColors,
+      rootRotation,
+      rootDepth,
+      rootSpeedVariation,
+      rootTarget,
+      containerWidth,
+      containerHeight,
+      hasTexture,
+    });
+
+    const dynamicCannonsPositions = useSharedValue<Position[] | null>(null);
+    const dynamicCannonConfigs = useSharedValue<CannonConfig[] | null>(null);
+
+    const progress = useSharedValue(0);
+    const running = useSharedValue(false);
+
     const opacity = useDerivedValue(() => {
       if (!fadeOutOnEnd) return 1;
-      return interpolate(
-        progress.get(),
-        [0.8, 1],
-        [1, 0],
-        Extrapolation.CLAMP
-      );
+      return interpolate(progress.get(), [0.8, 1], [1, 0], Extrapolation.CLAMP);
     }, [fadeOutOnEnd]);
-
-    const sizeVariations = useVariations({
-      flakeSize,
-      _radiusRange,
-    });
 
     const boxes = useSharedValue(
       generateCannonBoxesArray({
-        count,
-        colorsVariations: colors.length,
-        sizeVariations: sizeVariations.length,
-        cannonsCount: cannonsPositions.length,
-        rotation,
-        speedVariation,
-        spreadAngle,
-        depth,
+        cannonConfigs,
+        launchDelayMax,
       })
     );
 
     const { texture, sprites } = useConfettiLogic({
       sizeVariations,
-      colors,
+      colors: allColors,
       boxes,
-      textureProps:
-        flakeProps.type === 'image' && flakeProps.flakeImage
-          ? { type: 'image', content: flakeProps.flakeImage }
-          : flakeProps.type === 'svg' && flakeProps.flakeSvg
-            ? { type: 'svg', content: flakeProps.flakeSvg }
-            : undefined,
+      textureProps,
     });
 
     const pause = () => {
@@ -128,31 +163,13 @@ const CannonConfetti = forwardRef<CannonConfettiMethods, CannonConfettiProps>(
 
     const refreshBoxes = useCallback(() => {
       'worklet';
-      const currentCannons =
-        dynamicCannonsPositions.get() || cannonsPositions;
+      const currentConfigs = dynamicCannonConfigs.get() || cannonConfigs;
       const newBoxes = generateCannonBoxesArray({
-        count,
-        colorsVariations: colors.length,
-        sizeVariations: sizeVariations.length,
-        cannonsCount: currentCannons.length,
-        rotation,
-        speedVariation,
-        spreadAngle,
-        depth,
+        cannonConfigs: currentConfigs,
+        launchDelayMax,
       });
       boxes.set(newBoxes);
-    }, [
-      count,
-      colors.length,
-      sizeVariations.length,
-      cannonsPositions,
-      boxes,
-      rotation,
-      speedVariation,
-      spreadAngle,
-      depth,
-      dynamicCannonsPositions,
-    ]);
+    }, [cannonConfigs, boxes, dynamicCannonConfigs, launchDelayMax]);
 
     const JSOnStart = useCallback(
       () => onAnimationStart?.(),
@@ -170,11 +187,15 @@ const CannonConfetti = forwardRef<CannonConfettiMethods, CannonConfettiProps>(
       runOnJS(JSOnEnd)();
     }, [JSOnEnd]);
 
-    const restart = useCallback(
-      (options: CannonConfettiRestartOptions = {}) => {
+    const workletRestart = useCallback(
+      (
+        resolvedPositions: Position[] | null,
+        resolvedConfigs: CannonConfig[] | null
+      ) => {
         'worklet';
 
-        dynamicCannonsPositions.set(options.cannonsPositions || null);
+        dynamicCannonsPositions.set(resolvedPositions);
+        dynamicCannonConfigs.set(resolvedConfigs);
         refreshBoxes();
         progress.set(0);
         running.set(true);
@@ -184,13 +205,13 @@ const CannonConfetti = forwardRef<CannonConfettiMethods, CannonConfettiProps>(
           'worklet';
           UIOnEnd();
           refreshBoxes();
-          if (isInfinite) {
+          if (infinite) {
             cancelAnimation(progress);
             progress.set(0);
             progress.set(
               withTiming(1, { duration, easing: Easing.linear }, (finished) => {
                 'worklet';
-                if (!finished || !isInfinite) return;
+                if (!finished || !infinite) return;
                 repeatAnimation();
               })
             );
@@ -200,7 +221,7 @@ const CannonConfetti = forwardRef<CannonConfettiMethods, CannonConfettiProps>(
         progress.set(
           withTiming(1, { duration, easing: Easing.linear }, (finished) => {
             'worklet';
-            if (!finished || !isInfinite) {
+            if (!finished || !infinite) {
               if (finished) UIOnEnd();
               return;
             }
@@ -210,13 +231,71 @@ const CannonConfetti = forwardRef<CannonConfettiMethods, CannonConfettiProps>(
       },
       [
         dynamicCannonsPositions,
+        dynamicCannonConfigs,
         refreshBoxes,
         progress,
         running,
         UIOnStart,
         UIOnEnd,
-        isInfinite,
+        infinite,
         duration,
+      ]
+    );
+
+    const jsRestart = useCallback(
+      (options: CannonConfettiRestartOptions = {}) => {
+        let resolvedPositions: Position[] | null = null;
+        let resolvedConfigs: CannonConfig[] | null = null;
+        if (options.origins) {
+          resolvedPositions = options.origins.map((o) =>
+            resolveNamedPosition(o, containerWidth, containerHeight)
+          );
+          // For dynamically-provided origins, distribute totalCount evenly
+          // and reuse the original allColors/allSizes from the last children parse
+          const perOriginCount = Math.max(
+            1,
+            Math.floor(totalCount / resolvedPositions.length)
+          );
+
+          // Resolve the default target for origins that don't have an explicit one
+          const defaultTarget: Position =
+            rootTarget != null
+              ? resolveNamedPosition(rootTarget, containerWidth, containerHeight)
+              : { x: containerWidth / 2, y: 0 };
+
+          resolvedConfigs = resolvedPositions.map((_, index) => {
+            const target =
+              options.targets?.[index] != null
+                ? resolveNamedPosition(
+                    options.targets[index] as NamedPosition | Position,
+                    containerWidth,
+                    containerHeight
+                  )
+                : defaultTarget;
+
+            return {
+              spread: DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE,
+              speed: DEFAULT_CANNON_CONFETTI_INITIAL_SPEED,
+              count: perOriginCount,
+              speedVariation: { ...DEFAULT_CANNON_CONFETTI_SPEED_VARIATION },
+              colorStart: 0,
+              colorCount: allColors.length,
+              sizeStart: 0,
+              sizeCount: sizeVariations.length,
+              target,
+            };
+          });
+        }
+        runOnUI(workletRestart)(resolvedPositions, resolvedConfigs);
+      },
+      [
+        workletRestart,
+        containerWidth,
+        containerHeight,
+        totalCount,
+        allColors.length,
+        sizeVariations.length,
+        rootTarget,
       ]
     );
 
@@ -231,13 +310,13 @@ const CannonConfetti = forwardRef<CannonConfettiMethods, CannonConfettiProps>(
         'worklet';
         UIOnEnd();
         refreshBoxes();
-        if (isInfinite) {
+        if (infinite) {
           cancelAnimation(progress);
           progress.set(0);
           progress.set(
             withTiming(1, { duration, easing: Easing.linear }, (finished) => {
               'worklet';
-              if (!finished || !isInfinite) return;
+              if (!finished || !infinite) return;
               repeatAnimation();
             })
           );
@@ -245,14 +324,18 @@ const CannonConfetti = forwardRef<CannonConfettiMethods, CannonConfettiProps>(
       }
 
       progress.set(
-        withTiming(1, { duration: remaining, easing: Easing.linear }, (finished) => {
-          'worklet';
-          if (!finished || !isInfinite) {
-            if (finished) UIOnEnd();
-            return;
+        withTiming(
+          1,
+          { duration: remaining, easing: Easing.linear },
+          (finished) => {
+            'worklet';
+            if (!finished || !infinite) {
+              if (finished) UIOnEnd();
+              return;
+            }
+            repeatAnimation();
           }
-          repeatAnimation();
-        })
+        )
       );
     };
 
@@ -260,39 +343,39 @@ const CannonConfetti = forwardRef<CannonConfettiMethods, CannonConfettiProps>(
       pause: runOnUI(pause),
       reset: runOnUI(reset),
       resume: runOnUI(resume),
-      restart: runOnUI(restart),
+      restart: jsRestart,
     }));
 
     useEffect(() => {
       runOnUI(() => {
-        if (autoplay && !running.get()) restart();
+        if (autoplay && !running.get()) workletRestart(null, null);
       })();
-    }, [autoplay, restart, running]);
+    }, [autoplay, workletRestart, running]);
 
     // Physics constants scaled to container height
     const scaledGravity = gravity * containerHeight;
-    const scaledInitialSpeed = initialSpeed * containerHeight;
     // Duration in seconds for physics equations
     const totalTime = duration / 1000;
 
-    const transforms = useRSXformBuffer(count, (val, i) => {
+    const transforms = useRSXformBuffer(totalCount, (val, i) => {
       'worklet';
       const piece = boxes.get()[i];
       if (!piece) return;
 
-      const currentCannons =
-        dynamicCannonsPositions.get() || cannonsPositions;
+      const currentCannons = dynamicCannonsPositions.get() || cannonsPositions;
       const cannon = currentCannons[piece.cannonIndex % currentCannons.length]!;
       const cannonX = cannon.x;
       const cannonY = cannon.y;
 
-      // Auto-aim: base angle points from cannon toward center-top of screen
-      const targetX = containerWidth / 2;
-      const targetY = 0;
-      const baseAngle = Math.atan2(targetY - cannonY, targetX - cannonX);
+      // Base angle points from cannon toward the piece's baked target
+      const baseAngle = Math.atan2(piece.targetY - cannonY, piece.targetX - cannonX);
 
       const angle = baseAngle + piece.angleOffset;
-      const speed = scaledInitialSpeed * piece.speedMultiplier * piece.depthScale;
+      const speed =
+        piece.cannonSpeed *
+        containerHeight *
+        piece.speedMultiplier *
+        piece.depthScale;
       const vx = speed * Math.cos(angle);
       const vy = speed * Math.sin(angle);
 
@@ -305,9 +388,13 @@ const CannonConfetti = forwardRef<CannonConfettiMethods, CannonConfettiProps>(
       );
       const t = effectiveProgress * totalTime;
 
-      // Physics: vertical with gravity
-      const tx = cannonX + (vx / drag) * (1 - Math.exp(-drag * t));
-      const ty = cannonY + vy * t + 0.5 * scaledGravity * t * t;
+      // Physics: drag applied to both axes, gravity on vertical
+      const expDecay = 1 - Math.exp(-drag * t);
+      const tx = cannonX + (vx / drag) * expDecay;
+      const ty =
+        cannonY +
+        (scaledGravity / drag) * t +
+        ((vy - scaledGravity / drag) / drag) * expDecay;
 
       // Rotation
       const rotationDirection = piece.clockwise ? 1 : -1;
@@ -363,7 +450,16 @@ const CannonConfetti = forwardRef<CannonConfettiMethods, CannonConfettiProps>(
   }
 );
 
-CannonConfetti.displayName = 'CannonConfetti';
+CannonConfettiInner.displayName = 'CannonConfetti';
+
+const CannonConfetti = CannonConfettiInner as typeof CannonConfettiInner & {
+  Origin: typeof Origin;
+  Flake: typeof Flake;
+};
+
+CannonConfetti.Origin = Origin;
+CannonConfetti.Flake = Flake;
+
 export { CannonConfetti };
 
 const styles = StyleSheet.create({

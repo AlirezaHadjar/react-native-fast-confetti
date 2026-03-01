@@ -3,9 +3,12 @@ export type {
   PIConfettiProps,
   ContinuousConfettiProps,
   CannonConfettiProps,
+  CannonOriginProps,
+  CannonFlakeProps,
   ConfettiMethods,
   PIConfettiMethods,
   CannonConfettiMethods,
+  NamedPosition,
 } from './types';
 
 export { Confetti } from './Confetti';

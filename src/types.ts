@@ -1,3 +1,4 @@
+import type React from 'react';
 import type { SkImage, SkSVG } from '@shopify/react-native-skia';
 import type { StyleProp, ViewStyle } from 'react-native';
 import type { WithTimingConfig } from 'react-native-reanimated';
@@ -277,18 +278,117 @@ export type PIConfettiMethods = BaseConfettiMethods & {
   restart: (options?: PIConfettiRestartOptions) => void;
 };
 
-export type CannonConfettiRestartOptions = {
+export type NamedPosition =
+  | 'bottom-left'
+  | 'bottom-right'
+  | 'bottom-center'
+  | 'top-left'
+  | 'top-right'
+  | 'top-center'
+  | 'center-left'
+  | 'center-right'
+  | 'center';
+
+export type CannonOriginProps = {
   /**
-   * @description Optional array of cannon positions to override the prop
+   * @description The position of this cannon origin.
+   * Can be a named position string or an explicit {x, y} coordinate.
    */
-  cannonsPositions?: Position[];
+  position: NamedPosition | Position;
+  /**
+   * @description Number of confetti pieces for this origin.
+   * @default 100
+   */
+  count?: number;
+  /**
+   * @description Launch cone width in radians.
+   * @default Math.PI / 5
+   */
+  spread?: number;
+  /**
+   * @description Base launch speed (normalized to container height).
+   * @default 2.0
+   */
+  speed?: number;
+  /**
+   * @description Per-piece speed multiplier range.
+   * @default { min: 0.8, max: 1.2 }
+   */
+  speedVariation?: Range;
+  /**
+   * @description The array of confetti flake colors.
+   */
+  colors?: string[];
+  /**
+   * @description The rotation configuration for confetti flakes.
+   */
+  rotation?: Rotation;
+  /**
+   * @description Per-piece depth scale range to simulate 3D perspective.
+   * @default { min: 1, max: 1.1 }
+   */
+  depth?: Range;
+  /**
+   * @description The target position that this cannon aims at.
+   * Overrides the root-level target for this specific origin.
+   * @default center-top of the container
+   */
+  target?: NamedPosition | Position;
+  /**
+   * @description Flake size variants defined as children.
+   */
+  children?: React.ReactNode;
 };
 
-type BaseCannonConfettiProps = {
+type CannonFlakeWithSize = {
   /**
-   * @description An array of positions from which confetti flakes should blast.
+   * @description Shorthand for width and height (sets both to this value).
    */
-  cannonsPositions: Position[];
+  size: number;
+  width?: never;
+  height?: never;
+  /**
+   * @description Corner radius of the flake.
+   */
+  radius?: number;
+};
+
+type CannonFlakeWithDimensions = {
+  size?: never;
+  /**
+   * @description Width of the flake.
+   */
+  width: number;
+  /**
+   * @description Height of the flake.
+   */
+  height: number;
+  /**
+   * @description Corner radius of the flake.
+   */
+  radius?: number;
+};
+
+export type CannonFlakeProps = CannonFlakeWithSize | CannonFlakeWithDimensions;
+
+export type CannonConfettiRestartOptions = {
+  /**
+   * @description Optional array of cannon origins to override the children origins.
+   * Accepts named positions or explicit {x, y} coordinates.
+   */
+  origins?: (NamedPosition | Position)[];
+  /**
+   * @description Optional array of targets corresponding to each origin.
+   * Each target can be a named position or an explicit {x, y} coordinate.
+   */
+  targets?: (NamedPosition | Position)[];
+};
+
+type CannonConfettiBaseProps = {
+  /**
+   * @description Must contain at least one CannonConfetti.Origin child.
+   */
+  children: React.ReactNode;
   /**
    * @description Total animation duration in milliseconds.
    * @default 3000
@@ -305,48 +405,6 @@ type BaseCannonConfettiProps = {
    */
   drag?: number;
   /**
-   * @description Base launch speed (normalized to container height).
-   * @default 2.0
-   */
-  initialSpeed?: number;
-  /**
-   * @description Launch cone width in radians.
-   * @default Math.PI / 2
-   */
-  spreadAngle?: number;
-  /**
-   * @description Per-piece speed multiplier range.
-   * @default { min: 0.5, max: 1.5 }
-   */
-  speedVariation?: Range;
-  /**
-   * @description Per-piece depth scale range to simulate 3D perspective.
-   * Values > 1 make pieces appear closer (larger and faster), values < 1 make them appear farther (smaller and slower).
-   * @default { min: 1, max: 1 }
-   */
-  depth?: Range;
-  /**
-   * @description Number of confetti pieces to render.
-   * @default 200
-   */
-  count?: number;
-  /**
-   * @description The size of confetti flakes.
-   */
-  flakeSize?: FlakeSize[];
-  /**
-   * @description The array of confetti flakes color.
-   */
-  colors?: string[];
-  /**
-   * @description The rotation configuration for confetti flakes.
-   */
-  rotation?: Rotation;
-  /**
-   * @description Should the confetti flakes fade out as they reach the end.
-   */
-  fadeOutOnEnd?: boolean;
-  /**
    * @description Whether the animation should play on mount.
    * @default true
    */
@@ -355,11 +413,19 @@ type BaseCannonConfettiProps = {
    * @description Whether the animation should play again after it ends.
    * @default false
    */
-  isInfinite?: boolean;
+  infinite?: boolean;
   /**
-   * @description The style of the confetti container.
+   * @description Should the confetti flakes fade out as they reach the end.
    */
-  containerStyle?: StyleProp<ViewStyle>;
+  fadeOutOnEnd?: boolean;
+  /**
+   * @description A callback that is called when the animation starts.
+   */
+  onAnimationStart?: () => void;
+  /**
+   * @description A callback that is called when the animation ends.
+   */
+  onAnimationEnd?: () => void;
   /**
    * @description The width of the confetti's container.
    * @default SCREEN_WIDTH
@@ -371,16 +437,61 @@ type BaseCannonConfettiProps = {
    */
   height?: number;
   /**
-   * @description A callback that is called when the animation starts.
+   * @description The style of the confetti container.
    */
-  onAnimationStart?: () => void;
+  containerStyle?: StyleProp<ViewStyle>;
   /**
-   * @description A callback that is called when the animation ends.
+   * @description Default colors for all origins. Can be overridden per-origin.
    */
-  onAnimationEnd?: () => void;
+  colors?: string[];
+  /**
+   * @description Default rotation for all origins. Can be overridden per-origin.
+   */
+  rotation?: Rotation;
+  /**
+   * @description Default depth range for all origins. Can be overridden per-origin.
+   * @default { min: 1, max: 1.1 }
+   */
+  depth?: Range;
+  /**
+   * @description Default speed variation range for all origins. Can be overridden per-origin.
+   * @default { min: 0.8, max: 1.2 }
+   */
+  speedVariation?: Range;
+  /**
+   * @description Default target position that all cannons aim at. Can be overridden per-origin.
+   * @default center-top of the container
+   */
+  target?: NamedPosition | Position;
+  /**
+   * @description Duration in milliseconds over which confetti pieces are staggered at launch.
+   * 0 means all pieces launch simultaneously (instant burst).
+   * @default duration * 0.2
+   */
+  sprayDuration?: number;
 };
 
-export type CannonConfettiProps = BaseCannonConfettiProps & TextureProps;
+export type CannonConfettiProps = CannonConfettiBaseProps &
+  (
+    | {
+        /**
+         * @description A Skia image to use as confetti flake texture.
+         */
+        image: SkImage;
+        svg?: never;
+      }
+    | {
+        image?: never;
+        /**
+         * @description A Skia SVG to use as confetti flake texture.
+         */
+        svg: SkSVG;
+      }
+    | {
+        image?: never;
+        svg?: never;
+      }
+  );
 
 export type CannonConfettiMethods = BaseConfettiMethods & {
   /**

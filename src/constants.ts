@@ -102,6 +102,7 @@ export const DEFAULT_CONFETTI_FALL_EASING = Easing.inOut(Easing.quad);
 
 export const DEFAULT_CONFETTI_BLAST_EASING = Easing.inOut(Easing.quad);
 
+export const DEFAULT_CANNON_ORIGIN_COUNT = 100;
 export const DEFAULT_CANNON_CONFETTI_DURATION = 3000;
 export const DEFAULT_CANNON_CONFETTI_GRAVITY = 3.0;
 export const DEFAULT_CANNON_CONFETTI_DRAG = 2.0;

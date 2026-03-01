@@ -1,12 +1,6 @@
 import { useImage, useSVG } from '@shopify/react-native-skia';
 import { useRef, useState } from 'react';
-import {
-  StyleSheet,
-  View,
-  Button,
-  useWindowDimensions,
-  Text,
-} from 'react-native';
+import { StyleSheet, View, Button, Text } from 'react-native';
 import { Dropdown } from 'react-native-element-dropdown';
 import {
   Confetti,
@@ -56,7 +50,6 @@ export default function App() {
   const confettiRef = useRef<ConfettiMethods>(null);
   const piConfettiRef = useRef<PIConfettiMethods>(null);
   const cannonConfettiRef = useRef<CannonConfettiMethods>(null);
-  const { height, width } = useWindowDimensions();
   const [verticalSpacing, setVerticalSpacing] = useState(20);
   const [radiusRange, setRadiusRange] = useState<'square' | 'circle'>('square');
   const [mode, setMode] = useState<'continuous' | 'single' | 'pi' | 'canon'>(
@@ -66,11 +59,6 @@ export default function App() {
 
   const snowFlakeSVG = useSVG(require('../assets/snow-flake.svg'));
   const moneyStackImage = useImage(require('../assets/money-stack-2.png'));
-
-  const cannonPositions = [
-    { x: -30, y: height },
-    { x: width + 30, y: height },
-  ];
 
   if (!snowFlakeSVG || !moneyStackImage) return null;
 
@@ -302,26 +290,49 @@ export default function App() {
         <CannonConfetti
           key={confettiKey}
           ref={cannonConfettiRef}
-          {...(textureType === 'default'
-            ? {
-                flakeSize: [
-                  { width: 8, height: 8, radius: 4 },
-                  { width: 13, height: 13, radius: 6.5 },
-                  { width: 8, height: 14 },
-                  { width: 8, height: 2, radius: 2 },
-                ],
-                radiusRange: [3, 10],
-              }
-            : {
-                flakeSize,
-                ...textureProps,
-              })}
-          count={300}
-          rotation={rotation}
-          cannonsPositions={cannonPositions}
           autoplay
-          isInfinite
-        />
+          infinite
+          rotation={rotation}
+          gravity={2}
+          {...(textureType === 'money'
+            ? { image: moneyStackImage }
+            : textureType === 'snowflake'
+              ? { svg: snowFlakeSVG }
+              : {})}
+        >
+          <CannonConfetti.Origin position="bottom-left" count={150} speed={2.5}>
+            {textureType === 'default' ? (
+              <>
+                <CannonConfetti.Flake size={8} radius={4} />
+                <CannonConfetti.Flake size={13} radius={6.5} />
+                <CannonConfetti.Flake width={8} height={14} />
+                <CannonConfetti.Flake width={8} height={2} radius={2} />
+              </>
+            ) : textureType === 'money' ? (
+              <CannonConfetti.Flake size={50} />
+            ) : (
+              <CannonConfetti.Flake size={10} />
+            )}
+          </CannonConfetti.Origin>
+          <CannonConfetti.Origin
+            position="bottom-right"
+            count={150}
+            speed={2.5}
+          >
+            {textureType === 'default' ? (
+              <>
+                <CannonConfetti.Flake size={8} radius={4} />
+                <CannonConfetti.Flake size={13} radius={6.5} />
+                <CannonConfetti.Flake width={8} height={14} />
+                <CannonConfetti.Flake width={8} height={2} radius={2} />
+              </>
+            ) : textureType === 'money' ? (
+              <CannonConfetti.Flake size={50} />
+            ) : (
+              <CannonConfetti.Flake size={10} />
+            )}
+          </CannonConfetti.Origin>
+        </CannonConfetti>
       ) : (
         <Confetti
           key={confettiKey}
