@@ -34,7 +34,6 @@ const PIConfetti = forwardRef<PIConfettiMethods, PIConfettiProps>(
     {
       count = DEFAULT_BOXES_COUNT,
       flakeSize = DEFAULT_FLAKE_SIZE,
-      sizeVariation = 0,
       fallDuration = DEFAULT_FALL_DURATION,
       blastDuration = DEFAULT_BLAST_DURATION,
       rotation,
@@ -82,7 +81,6 @@ const PIConfetti = forwardRef<PIConfettiMethods, PIConfettiProps>(
     // Store dynamic blast position - can be overridden via restart method
     const dynamicBlastPosition = useSharedValue<Position | null>(null);
     const sizeVariations = useVariations({
-      sizeVariation,
       flakeSize,
       _radiusRange,
     });

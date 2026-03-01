@@ -1,9 +1,17 @@
 import { Easing } from 'react-native-reanimated';
-import type { Rotation, DeepRequired, Range, RandomOffset } from './types';
+import type {
+  Rotation,
+  DeepRequired,
+  Range,
+  RandomOffset,
+  FlakeSize,
+} from './types';
 
 export const DEFAULT_BOXES_COUNT = 200;
 
-export const DEFAULT_FLAKE_SIZE = { width: 8, height: 16 };
+export const DEFAULT_FLAKE_SIZE: FlakeSize[] = [
+  { width: 8, height: 16, radius: undefined },
+];
 
 export const DEFAULT_FALL_DURATION = 8000;
 
@@ -93,3 +101,30 @@ export const CONTINUOUS_CONFETTI_RANDOM_OFFSET: DeepRequired<RandomOffset> = {
 export const DEFAULT_CONFETTI_FALL_EASING = Easing.inOut(Easing.quad);
 
 export const DEFAULT_CONFETTI_BLAST_EASING = Easing.inOut(Easing.quad);
+
+export const DEFAULT_CANNON_CONFETTI_DURATION = 3000;
+export const DEFAULT_CANNON_CONFETTI_GRAVITY = 3.0;
+export const DEFAULT_CANNON_CONFETTI_DRAG = 2.0;
+export const DEFAULT_CANNON_CONFETTI_INITIAL_SPEED = 2.0;
+export const DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE = Math.PI / 5;
+export const DEFAULT_CANNON_CONFETTI_SPEED_VARIATION: Required<Range> = {
+  min: 0.8,
+  max: 1.2,
+};
+export const DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX = 0.2;
+
+export const DEFAULT_CANNON_CONFETTI_DEPTH: Required<Range> = {
+  min: 1,
+  max: 1.1,
+};
+
+export const DEFAULT_CANNON_CONFETTI_ROTATION: DeepRequired<Rotation> = {
+  x: {
+    min: 2 * Math.PI,
+    max: 10 * Math.PI,
+  },
+  z: {
+    min: 2 * Math.PI,
+    max: 10 * Math.PI,
+  },
+};

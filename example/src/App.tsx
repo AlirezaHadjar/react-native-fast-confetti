@@ -12,10 +12,12 @@ import {
   Confetti,
   ContinuousConfetti,
   PIConfetti,
+  CannonConfetti,
 } from 'react-native-fast-confetti';
 import type {
   ConfettiMethods,
   ConfettiProps,
+  CannonConfettiMethods,
 } from 'react-native-fast-confetti';
 import type { PIConfettiMethods } from '../../src/types';
 
@@ -38,33 +40,35 @@ const radiusOptions: DropdownOption<'square' | 'circle'>[] = [
 
 const textureOptions: DropdownOption<string>[] = [
   { label: 'Default Confetti', value: 'default' },
-  { label: 'Money Stack 💰', value: 'money' },
-  { label: 'Snowflake ❄️', value: 'snowflake' },
+  { label: 'Money Stack', value: 'money' },
+  { label: 'Snowflake', value: 'snowflake' },
 ];
 
-const modeOptions: DropdownOption<'continuous' | 'single' | 'pi' | 'canon'>[] =
-  [
-    { label: 'Continuous', value: 'continuous' },
-    { label: 'Single', value: 'single' },
-    { label: 'PI', value: 'pi' },
-    { label: 'Canon', value: 'canon' },
-  ];
+const modeOptions: DropdownOption<
+  'continuous' | 'single' | 'pi' | 'canon'
+>[] = [
+  { label: 'Continuous', value: 'continuous' },
+  { label: 'Single', value: 'single' },
+  { label: 'PI', value: 'pi' },
+  { label: 'Canon', value: 'canon' },
+];
 
 export default function App() {
   const confettiRef = useRef<ConfettiMethods>(null);
   const piConfettiRef = useRef<PIConfettiMethods>(null);
+  const cannonConfettiRef = useRef<CannonConfettiMethods>(null);
   const { height, width } = useWindowDimensions();
   const [verticalSpacing, setVerticalSpacing] = useState(20);
   const [radiusRange, setRadiusRange] = useState<'square' | 'circle'>('square');
-  const [mode, setMode] = useState<'continuous' | 'single' | 'pi' | 'canon'>(
-    'single'
-  );
+  const [mode, setMode] = useState<
+    'continuous' | 'single' | 'pi' | 'canon'
+  >('single');
   const [textureType, setTextureType] = useState('default');
 
   const snowFlakeSVG = useSVG(require('../assets/snow-flake.svg'));
   const moneyStackImage = useImage(require('../assets/money-stack-2.png'));
 
-  const cannonPositions: ConfettiProps['cannonsPositions'] = [
+  const cannonPositions = [
     { x: -30, y: height },
     { x: width + 30, y: height },
   ];
@@ -72,7 +76,7 @@ export default function App() {
   if (!snowFlakeSVG || !moneyStackImage) return null;
 
   const effectiveVerticalSpacing =
-    mode === 'canon' ? 5 : mode === 'continuous' ? 200 : verticalSpacing;
+    mode === 'continuous' ? 200 : verticalSpacing;
 
   const confettiKey = `${mode}-${effectiveVerticalSpacing}-${radiusRange}-${textureType}`;
 
@@ -102,11 +106,11 @@ export default function App() {
   const getFlakeSize = () => {
     switch (textureType) {
       case 'money':
-        return { width: 50, height: 50 };
+        return [{ width: 50, height: 50 }];
       case 'snowflake':
-        return { width: 10, height: 10 };
+        return [{ width: 10, height: 10 }];
       default:
-        return { width: 15, height: 8 };
+        return [{ width: 15, height: 8 }];
     }
   };
 
@@ -153,6 +157,48 @@ export default function App() {
   const flakeSize = getFlakeSize();
   const textureProps = getTextureProps();
 
+  const isCannonMode = mode === 'canon';
+
+  const handleResume = () => {
+    if (mode === 'pi') {
+      piConfettiRef.current?.resume();
+    } else if (isCannonMode) {
+      cannonConfettiRef.current?.resume();
+    } else {
+      confettiRef.current?.resume();
+    }
+  };
+
+  const handlePause = () => {
+    if (mode === 'pi') {
+      piConfettiRef.current?.pause();
+    } else if (isCannonMode) {
+      cannonConfettiRef.current?.pause();
+    } else {
+      confettiRef.current?.pause();
+    }
+  };
+
+  const handleRestart = () => {
+    if (mode === 'pi') {
+      piConfettiRef.current?.restart();
+    } else if (isCannonMode) {
+      cannonConfettiRef.current?.restart();
+    } else {
+      confettiRef.current?.restart();
+    }
+  };
+
+  const handleReset = () => {
+    if (mode === 'pi') {
+      piConfettiRef.current?.reset();
+    } else if (isCannonMode) {
+      cannonConfettiRef.current?.reset();
+    } else {
+      confettiRef.current?.reset();
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.controlsContainer}>
@@ -168,30 +214,34 @@ export default function App() {
             placeholder="Select Mode"
             value={mode}
             onChange={(
-              item: DropdownOption<'continuous' | 'single' | 'pi' | 'canon'>
+              item: DropdownOption<
+                'continuous' | 'single' | 'pi' | 'canon'
+              >
             ) => {
               setMode(item.value);
             }}
           />
         </View>
-        {mode !== 'pi' && mode !== 'canon' && mode !== 'continuous' && (
-          <View style={styles.dropdownContainer}>
-            <Text style={styles.dropdownLabel}>Vertical Spacing:</Text>
-            <Dropdown
-              style={styles.dropdown}
-              placeholderStyle={styles.placeholderStyle}
-              selectedTextStyle={styles.selectedTextStyle}
-              data={verticalSpacingOptions}
-              labelField="label"
-              valueField="value"
-              placeholder="Select spacing"
-              value={verticalSpacing}
-              onChange={(item: DropdownOption<number>) => {
-                setVerticalSpacing(item.value);
-              }}
-            />
-          </View>
-        )}
+        {mode !== 'pi' &&
+          mode !== 'canon' &&
+          mode !== 'continuous' && (
+            <View style={styles.dropdownContainer}>
+              <Text style={styles.dropdownLabel}>Vertical Spacing:</Text>
+              <Dropdown
+                style={styles.dropdown}
+                placeholderStyle={styles.placeholderStyle}
+                selectedTextStyle={styles.selectedTextStyle}
+                data={verticalSpacingOptions}
+                labelField="label"
+                valueField="value"
+                placeholder="Select spacing"
+                value={verticalSpacing}
+                onChange={(item: DropdownOption<number>) => {
+                  setVerticalSpacing(item.value);
+                }}
+              />
+            </View>
+          )}
 
         {textureType === 'default' && (
           <View style={styles.dropdownContainer}>
@@ -236,7 +286,6 @@ export default function App() {
           ref={piConfettiRef}
           fallDuration={2000}
           blastDuration={250}
-          sizeVariation={0.3}
           count={500}
           flakeSize={flakeSize}
           {...textureProps}
@@ -255,11 +304,17 @@ export default function App() {
           />
         </>
       ) : mode === 'canon' ? (
-        <Confetti
+        <CannonConfetti
           key={confettiKey}
-          ref={confettiRef}
-          flakeSize={flakeSize}
-          {...textureProps}
+          ref={cannonConfettiRef}
+          flakeSize={[
+            { width: 8, height: 8, radius: 4 },
+            { width: 13, height: 13, radius: 6.5 },
+            { width: 8, height: 14 },
+            { width: 8, height: 2, radius: 2 },
+          ]}
+          radiusRange={[3, 10]}
+          count={300}
           rotation={rotation}
           cannonsPositions={cannonPositions}
           autoplay
@@ -278,46 +333,10 @@ export default function App() {
       )}
 
       <View style={styles.buttonContainer}>
-        <Button
-          title="Resume"
-          onPress={() => {
-            if (mode === 'pi') {
-              piConfettiRef.current?.resume();
-            } else {
-              confettiRef.current?.resume();
-            }
-          }}
-        />
-        <Button
-          title="Pause"
-          onPress={() => {
-            if (mode === 'pi') {
-              piConfettiRef.current?.pause();
-            } else {
-              confettiRef.current?.pause();
-            }
-          }}
-        />
-        <Button
-          title="Restart"
-          onPress={() => {
-            if (mode === 'pi') {
-              piConfettiRef.current?.restart();
-            } else {
-              confettiRef.current?.restart();
-            }
-          }}
-        />
-        <Button
-          title="Reset"
-          onPress={() => {
-            if (mode === 'pi') {
-              piConfettiRef.current?.reset();
-            } else {
-              confettiRef.current?.reset();
-            }
-          }}
-        />
+        <Button title="Resume" onPress={handleResume} />
+        <Button title="Pause" onPress={handlePause} />
+        <Button title="Restart" onPress={handleRestart} />
+        <Button title="Reset" onPress={handleReset} />
       </View>
     </View>
   );

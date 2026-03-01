@@ -7,6 +7,11 @@ import {
   DEFAULT_CONFETTI_RANDOM_OFFSET,
   DEFAULT_PICONFETTI_RANDOM_OFFSET,
   DEFAULT_PICONFETTI_RANDOM_SPEED,
+  DEFAULT_CANNON_CONFETTI_ROTATION,
+  DEFAULT_CANNON_CONFETTI_SPEED_VARIATION,
+  DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX,
+  DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE,
+  DEFAULT_CANNON_CONFETTI_DEPTH,
 } from './constants';
 import { Extrapolation, interpolate } from 'react-native-reanimated';
 import type { RandomOffset, Range, Rotation } from './types';
@@ -110,7 +115,7 @@ export const generateBoxesArray = ({
       -RANDOM_INITIAL_Y_JIGGLE,
       RANDOM_INITIAL_Y_JIGGLE
     ),
-    blastThreshold: getRandomValue(0, 0.3),
+    blastThreshold: getRandomValue(0, 0.9),
     initialRotation: getRandomValue(0.1 * Math.PI, Math.PI),
     randomSpeed: getRandomValue(randomSpeedRange.min, randomSpeedRange.max), // Random speed multiplier
     randomOffsetX: getRandomValue(
@@ -201,3 +206,62 @@ export const createTextureProps = <T extends 'svg' | 'image'>(
   ({ type, content }) as T extends 'svg'
     ? { type: 'svg'; content: SkSVG }
     : { type: 'image'; content: SkImage };
+
+export const generateCannonBoxesArray = ({
+  count,
+  colorsVariations,
+  sizeVariations,
+  cannonsCount,
+  rotation,
+  speedVariation,
+  spreadAngle,
+  depth,
+}: {
+  count: number;
+  colorsVariations: number;
+  sizeVariations: number;
+  cannonsCount: number;
+  rotation?: Rotation;
+  speedVariation?: Range;
+  spreadAngle?: number;
+  depth?: Range;
+}) => {
+  'worklet';
+
+  rotation = rotation ?? DEFAULT_CANNON_CONFETTI_ROTATION;
+  speedVariation = speedVariation ?? DEFAULT_CANNON_CONFETTI_SPEED_VARIATION;
+  spreadAngle = spreadAngle ?? DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE;
+  depth = depth ?? DEFAULT_CANNON_CONFETTI_DEPTH;
+
+  const xRotationRange = resolveRange(
+    rotation.x,
+    DEFAULT_CANNON_CONFETTI_ROTATION.x
+  );
+  const zRotationRange = resolveRange(
+    rotation.z,
+    DEFAULT_CANNON_CONFETTI_ROTATION.z
+  );
+  const speedRange = resolveRange(
+    speedVariation,
+    DEFAULT_CANNON_CONFETTI_SPEED_VARIATION
+  );
+  const depthRange = resolveRange(depth, DEFAULT_CANNON_CONFETTI_DEPTH);
+
+  const halfSpread = spreadAngle / 2;
+
+  return new Array(count).fill(0).map((_, i) => ({
+    cannonIndex: i % cannonsCount,
+    angleOffset: getRandomValue(-halfSpread, halfSpread),
+    speedMultiplier: getRandomValue(speedRange.min, speedRange.max),
+    launchDelay: getRandomValue(0, DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX),
+    depthScale: getRandomValue(depthRange.min, depthRange.max),
+    clockwise: getRandomBoolean(),
+    maxRotation: {
+      x: getRandomValue(xRotationRange.min, xRotationRange.max),
+      z: getRandomValue(zRotationRange.min, zRotationRange.max),
+    },
+    colorIndex: Math.round(getRandomValue(0, colorsVariations - 1)),
+    sizeIndex: Math.round(getRandomValue(0, sizeVariations - 1)),
+    initialRotation: getRandomValue(0.1 * Math.PI, Math.PI),
+  }));
+};

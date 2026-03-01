@@ -14,6 +14,7 @@ export type DeepRequired<T> = {
 export type FlakeSize = {
   width: number;
   height: number;
+  radius?: number;
 };
 
 export type Position = {
@@ -45,7 +46,7 @@ type BaseConfettiProps = {
   /**
    * @description the size confetti's flake.
    */
-  flakeSize?: FlakeSize;
+  flakeSize?: FlakeSize[];
   /**
    * @description The width of the confetti's container.
    * @default SCREEN_WIDTH
@@ -61,11 +62,6 @@ type BaseConfettiProps = {
    * @default 8000
    */
   fallDuration?: number;
-  /**
-   * @description The duration of confetti blast (milliseconds).
-   * @default 300
-   */
-  blastDuration?: number;
   /**
    * @description Wether the animation should play on mount.
    * @default true
@@ -103,14 +99,6 @@ type BaseConfettiProps = {
    */
   onAnimationEnd?: () => void;
   /**
-   * @description Controls the random size variation of confetti flakes. Value between 0 and 1.
-   * A value of 0.1 means flakes can vary up to 10% smaller than the base size, with more flakes
-   * clustering towards the original size and fewer towards the minimum size.
-   * Recommended value is between 0 and 0.5
-   * @default 0
-   */
-  sizeVariation?: number;
-  /**
    * @description The rotation configuration for confetti flakes.
    * Object with optional x and y properties, each containing optional min and max values.
    * @default { x: { min: 2 * Math.PI, max: 20 * Math.PI }, y: { min: 2 * Math.PI, max: 20 * Math.PI } }
@@ -136,41 +124,16 @@ type BaseConfettiProps = {
   containerStyle?: StyleProp<ViewStyle>;
 };
 
-type EasingPropsWithCannons = {
-  /**
-   * @description An array of positions from which confetti flakes should blast.
-   */
-  cannonsPositions: Position[];
+type EasingProps = {
   /**
    * @description The easing function for the falling animation.
    * @default Easing.inOut(Easing.quad)
    */
   fallEasing?: WithTimingConfig['easing'];
-  /**
-   * @description The easing function for the blast animation. Only available when cannonsPositions is defined.
-   * @default Easing.inOut(Easing.quad)
-   */
-  blastEasing?: WithTimingConfig['easing'];
-};
-
-type EasingPropsWithoutCannons = {
-  /**
-   * @description An array of positions from which confetti flakes should blast.
-   */
-  cannonsPositions?: undefined;
-  /**
-   * @description The easing function for the falling animation.
-   * @default Easing.inOut(Easing.quad)
-   */
-  fallEasing?: WithTimingConfig['easing'];
-  blastEasing?: never;
-};
-
-type EasingProps = (EasingPropsWithCannons | EasingPropsWithoutCannons) & {
   /**
    * @description The easing function for both falling and blast animations.
    * @default Easing.inOut(Easing.quad)
-   * @deprecated Use `fallEasing` and `blastEasing` instead. This prop will be used as fallback if the specific easing props are not provided.
+   * @deprecated Use `fallEasing` instead. This prop will be used as fallback if fallEasing is not provided.
    */
   easing?: WithTimingConfig['easing'];
 };
@@ -217,11 +180,7 @@ export type InternalConfettiProps = ConfettiProps & {
 
 type PIBaseProps = StrictOmit<
   BaseConfettiProps,
-  | 'autoplay'
-  | 'verticalSpacing'
-  | 'autoStartDelay'
-  | 'isInfinite'
-  | 'rotation'
+  'autoplay' | 'verticalSpacing' | 'autoStartDelay' | 'isInfinite' | 'rotation'
 >;
 
 export type PIConfettiProps = PIBaseProps &
@@ -236,6 +195,11 @@ export type PIConfettiProps = PIBaseProps &
      * @default 180
      */
     blastRadius?: number;
+    /**
+     * @description The duration of confetti blast (milliseconds).
+     * @default 300
+     */
+    blastDuration?: number;
     /**
      * @description The rotation configuration for confetti flakes.
      * Object with optional x and y properties, each containing optional min and max values.
@@ -258,12 +222,7 @@ export type ContinuousConfettiProps = BaseContinuousConfettiProps &
     verticalSpacing?: number;
   };
 
-export type ConfettiRestartOptions = {
-  /**
-   * @description Optional array of cannon positions to override the prop
-   */
-  cannonsPositions?: Position[];
-};
+export type ConfettiRestartOptions = {};
 
 export type BlastConfiguration = {
   /**
@@ -316,4 +275,116 @@ export type PIConfettiMethods = BaseConfettiMethods & {
    * @description start the animation from the beginning
    */
   restart: (options?: PIConfettiRestartOptions) => void;
+};
+
+export type CannonConfettiRestartOptions = {
+  /**
+   * @description Optional array of cannon positions to override the prop
+   */
+  cannonsPositions?: Position[];
+};
+
+type BaseCannonConfettiProps = {
+  /**
+   * @description An array of positions from which confetti flakes should blast.
+   */
+  cannonsPositions: Position[];
+  /**
+   * @description Total animation duration in milliseconds.
+   * @default 3000
+   */
+  duration?: number;
+  /**
+   * @description Gravity constant (normalized to container height).
+   * @default 3.0
+   */
+  gravity?: number;
+  /**
+   * @description Air resistance coefficient.
+   * @default 2.0
+   */
+  drag?: number;
+  /**
+   * @description Base launch speed (normalized to container height).
+   * @default 2.0
+   */
+  initialSpeed?: number;
+  /**
+   * @description Launch cone width in radians.
+   * @default Math.PI / 2
+   */
+  spreadAngle?: number;
+  /**
+   * @description Per-piece speed multiplier range.
+   * @default { min: 0.5, max: 1.5 }
+   */
+  speedVariation?: Range;
+  /**
+   * @description Per-piece depth scale range to simulate 3D perspective.
+   * Values > 1 make pieces appear closer (larger and faster), values < 1 make them appear farther (smaller and slower).
+   * @default { min: 1, max: 1 }
+   */
+  depth?: Range;
+  /**
+   * @description Number of confetti pieces to render.
+   * @default 200
+   */
+  count?: number;
+  /**
+   * @description The size of confetti flakes.
+   */
+  flakeSize?: FlakeSize[];
+  /**
+   * @description The array of confetti flakes color.
+   */
+  colors?: string[];
+  /**
+   * @description The rotation configuration for confetti flakes.
+   */
+  rotation?: Rotation;
+  /**
+   * @description Should the confetti flakes fade out as they reach the end.
+   */
+  fadeOutOnEnd?: boolean;
+  /**
+   * @description Whether the animation should play on mount.
+   * @default true
+   */
+  autoplay?: boolean;
+  /**
+   * @description Whether the animation should play again after it ends.
+   * @default false
+   */
+  isInfinite?: boolean;
+  /**
+   * @description The style of the confetti container.
+   */
+  containerStyle?: StyleProp<ViewStyle>;
+  /**
+   * @description The width of the confetti's container.
+   * @default SCREEN_WIDTH
+   */
+  width?: number;
+  /**
+   * @description The height of the confetti's container.
+   * @default SCREEN_HEIGHT
+   */
+  height?: number;
+  /**
+   * @description A callback that is called when the animation starts.
+   */
+  onAnimationStart?: () => void;
+  /**
+   * @description A callback that is called when the animation ends.
+   */
+  onAnimationEnd?: () => void;
+};
+
+export type CannonConfettiProps = BaseCannonConfettiProps & TextureProps;
+
+export type CannonConfettiMethods = BaseConfettiMethods & {
+  /**
+   * @description start the animation from the beginning
+   */
+  restart: (options?: CannonConfettiRestartOptions) => void;
 };
