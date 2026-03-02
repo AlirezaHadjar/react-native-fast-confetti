@@ -12,6 +12,8 @@ export type DeepRequired<T> = {
   [K in keyof T]: Required<DeepRequired<T[K]>>;
 };
 
+export type FlakeStyle = 'solid' | 'glossy';
+
 export type FlakeSize = {
   width: number;
   height: number;
@@ -335,6 +337,12 @@ export type CannonOriginProps = {
    */
   target?: NamedPosition | Position;
   /**
+   * @description The visual style of default confetti flakes for this origin.
+   * Overrides the root-level flakeStyle. Can be overridden per-Flake.
+   * @default inherits from root
+   */
+  flakeStyle?: FlakeStyle;
+  /**
    * @description Flake size variants defined as children.
    */
   children?: React.ReactNode;
@@ -351,6 +359,12 @@ type CannonFlakeWithSize = {
    * @description Corner radius of the flake.
    */
   radius?: number;
+  /**
+   * @description The visual style of this flake.
+   * Overrides the origin-level and root-level flakeStyle.
+   * @default inherits from origin or root
+   */
+  flakeStyle?: FlakeStyle;
 };
 
 type CannonFlakeWithDimensions = {
@@ -367,6 +381,12 @@ type CannonFlakeWithDimensions = {
    * @description Corner radius of the flake.
    */
   radius?: number;
+  /**
+   * @description The visual style of this flake.
+   * Overrides the origin-level and root-level flakeStyle.
+   * @default inherits from origin or root
+   */
+  flakeStyle?: FlakeStyle;
 };
 
 export type CannonFlakeProps = CannonFlakeWithSize | CannonFlakeWithDimensions;
@@ -468,6 +488,13 @@ type CannonConfettiBaseProps = {
    * @default 0.3
    */
   initialScale?: number;
+  /**
+   * @description The visual style of the default confetti flakes.
+   * 'solid' renders flat solid-colored flakes. 'glossy' adds a semi-transparent white highlight.
+   * Only affects default flakes (no-op when `image` or `svg` textures are used).
+   * @default 'solid'
+   */
+  flakeStyle?: FlakeStyle;
 };
 
 export type CannonConfettiProps = CannonConfettiBaseProps &

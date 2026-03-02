@@ -1,10 +1,13 @@
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
-import { type ConfettiProps } from '../types';
+import { type ConfettiProps, type FlakeStyle } from '../types';
 import {
+  Skia,
   useTexture,
   Group,
   RoundedRect,
   rect,
+  vec,
+  LinearGradient,
   type SkSVG,
   ImageSVG,
   type SkImage,
@@ -12,6 +15,16 @@ import {
 } from '@shopify/react-native-skia';
 
 type Strict<T> = T extends undefined ? never : T;
+
+function lightenColor(color: string, amount: number): Float32Array {
+  const c = Skia.Color(color);
+  const result = new Float32Array(4);
+  result[0] = c[0]! + (1 - c[0]!) * amount;
+  result[1] = c[1]! + (1 - c[1]!) * amount;
+  result[2] = c[2]! + (1 - c[2]!) * amount;
+  result[3] = c[3]!;
+  return result;
+}
 
 type MinimalBox = {
   colorIndex: number;
@@ -30,6 +43,7 @@ export const useConfettiLogic = <T extends MinimalBox>({
     width: number;
     height: number;
     radius: number;
+    flakeStyle?: FlakeStyle;
   }[];
   textureProps?:
     | {
@@ -72,11 +86,33 @@ export const useConfettiLogic = <T extends MinimalBox>({
               />
             );
           }
+          const flakeX = sizeIndex * maxWidth;
+          const flakeY = colorIndex * maxHeight;
+          if (size.flakeStyle === 'glossy') {
+            const lighter = lightenColor(color, 0.35);
+            return (
+              <RoundedRect
+                key={`${colorIndex}-${sizeIndex}`}
+                x={flakeX}
+                y={flakeY}
+                width={size.width}
+                height={size.height}
+                r={size.radius}
+              >
+                <LinearGradient
+                  start={vec(flakeX, flakeY)}
+                  end={vec(flakeX, flakeY + size.height)}
+                  colors={[lighter, color]}
+                  positions={[0, 0.6]}
+                />
+              </RoundedRect>
+            );
+          }
           return (
             <RoundedRect
               key={`${colorIndex}-${sizeIndex}`}
-              x={sizeIndex * maxWidth}
-              y={colorIndex * maxHeight}
+              x={flakeX}
+              y={flakeY}
               width={size.width}
               height={size.height}
               r={size.radius}

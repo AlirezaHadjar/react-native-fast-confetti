@@ -9,6 +9,7 @@ export type {
   PIConfettiMethods,
   CannonConfettiMethods,
   NamedPosition,
+  FlakeStyle,
 } from './types';
 
 export { Confetti } from './Confetti';

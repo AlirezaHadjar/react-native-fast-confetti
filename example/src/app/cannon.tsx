@@ -57,12 +57,14 @@ export default function CannonScreen() {
       <CannonConfetti
         key={confettiKey}
         ref={cannonConfettiRef}
+        fadeOutOnEnd
         autoplay
         infinite
         rotation={rotation}
         gravity={2}
         sprayDuration={500}
         initialScale={0.7}
+        flakeStyle="glossy"
         drag={3}
         {...cannonTextureProps}
       >

@@ -67,6 +67,7 @@ const CannonConfettiInner = forwardRef<
       target: rootTarget,
       sprayDuration,
       initialScale = 0.3,
+      flakeStyle = 'solid',
       ...textureRootProps
     },
     ref
@@ -107,6 +108,7 @@ const CannonConfettiInner = forwardRef<
       rootDepth,
       rootSpeedVariation,
       rootTarget,
+      rootFlakeStyle: flakeStyle,
       containerWidth,
       containerHeight,
       hasTexture,

@@ -3,6 +3,7 @@ import type {
   CannonOriginProps,
   CannonFlakeProps,
   FlakeSize,
+  FlakeStyle,
   NamedPosition,
   Position,
   Range,
@@ -29,6 +30,7 @@ type UseCannonOriginsParams = {
   rootDepth?: Range;
   rootSpeedVariation?: Range;
   rootTarget?: NamedPosition | Position;
+  rootFlakeStyle?: FlakeStyle;
   containerWidth: number;
   containerHeight: number;
   hasTexture: boolean;
@@ -38,7 +40,12 @@ type UseCannonOriginsResult = {
   cannonsPositions: Position[];
   cannonConfigs: CannonConfig[];
   allColors: string[];
-  sizeVariations: { width: number; height: number; radius: number }[];
+  sizeVariations: {
+    width: number;
+    height: number;
+    radius: number;
+    flakeStyle: FlakeStyle;
+  }[];
   totalCount: number;
 };
 
@@ -49,6 +56,7 @@ export const useCannonOrigins = ({
   rootDepth,
   rootSpeedVariation,
   rootTarget,
+  rootFlakeStyle,
   containerWidth,
   containerHeight,
   hasTexture,
@@ -98,7 +106,7 @@ export const useCannonOrigins = ({
       const positions: Position[] = [];
       const configs: CannonConfig[] = [];
       const colorsAccum: string[] = [];
-      const sizesAccum: FlakeSize[] = [];
+      const sizesAccum: (FlakeSize & { flakeStyle: FlakeStyle })[] = [];
       let count = 0;
 
       for (const origin of origins) {
@@ -120,25 +128,33 @@ export const useCannonOrigins = ({
           pickChildren<CannonFlakeProps>(props.children, Flake);
 
         // Build flake sizes for this origin (NO min-size padding)
-        let originSizes: FlakeSize[];
+        const originFlakeStyle = props.flakeStyle ?? rootFlakeStyle ?? 'solid';
+        let originSizes: (FlakeSize & { flakeStyle: FlakeStyle })[];
         if (flakeChildren && flakeChildren.length > 0) {
           originSizes = flakeChildren.map((f) => {
             const fProps = f.props;
+            const resolvedStyle =
+              fProps.flakeStyle ?? originFlakeStyle;
             if ('size' in fProps && fProps.size != null) {
               return {
                 width: fProps.size,
                 height: fProps.size,
                 radius: fProps.radius,
+                flakeStyle: resolvedStyle,
               };
             }
             return {
               width: (fProps as { width: number }).width,
               height: (fProps as { height: number }).height,
               radius: fProps.radius,
+              flakeStyle: resolvedStyle,
             };
           });
         } else {
-          originSizes = DEFAULT_FLAKE_SIZE;
+          originSizes = DEFAULT_FLAKE_SIZE.map((s) => ({
+            ...s,
+            flakeStyle: originFlakeStyle,
+          }));
         }
 
         // Resolution chain: origin prop → root prop → constant default
@@ -159,7 +175,8 @@ export const useCannonOrigins = ({
               (s) =>
                 s.width === size.width &&
                 s.height === size.height &&
-                s.radius === size.radius
+                s.radius === size.radius &&
+                s.flakeStyle === size.flakeStyle
             );
             if (!exists) {
               sizesAccum.push(size);
@@ -238,6 +255,7 @@ export const useCannonOrigins = ({
       rootDepth,
       rootSpeedVariation,
       rootTarget,
+      rootFlakeStyle,
       hasTexture,
     ]);
 
@@ -247,6 +265,7 @@ export const useCannonOrigins = ({
       width: size.width,
       height: size.height,
       radius: size.radius ?? 0,
+      flakeStyle: size.flakeStyle,
     }));
   }, [allSizes]);
 
