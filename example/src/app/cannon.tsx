@@ -35,10 +35,10 @@ export default function CannonScreen() {
     }
     return (
       <>
-        <CannonConfetti.Flake size={8} radius={4} />
-        <CannonConfetti.Flake size={13} radius={6.5} />
+        <CannonConfetti.Flake size={12} radius={6} />
         <CannonConfetti.Flake width={8} height={14} />
-        <CannonConfetti.Flake width={8} height={2} radius={2} />
+        <CannonConfetti.Flake width={8} height={14} radius={6.5} />
+        <CannonConfetti.Flake width={8} height={14} radius={4} />
       </>
     );
   };
@@ -61,12 +61,28 @@ export default function CannonScreen() {
         infinite
         rotation={rotation}
         gravity={2}
+        sprayDuration={500}
+        initialScale={0.7}
+        drag={3}
         {...cannonTextureProps}
       >
-        <CannonConfetti.Origin position="bottom-left" count={150} speed={2.5}>
+        <CannonConfetti.Origin
+          position="bottom-left"
+          count={150}
+          speed={3}
+          depth={{ min: 1, max: 1.1 }}
+        >
           {renderFlakes()}
         </CannonConfetti.Origin>
-        <CannonConfetti.Origin position="bottom-right" count={150} speed={2.5}>
+        <CannonConfetti.Origin
+          position="bottom-right"
+          count={150}
+          speed={3}
+          depth={{ min: 1, max: 1.1 }}
+        >
+          {renderFlakes()}
+        </CannonConfetti.Origin>
+        <CannonConfetti.Origin position="bottom-center" count={150} speed={4}>
           {renderFlakes()}
         </CannonConfetti.Origin>
       </CannonConfetti>

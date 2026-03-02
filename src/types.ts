@@ -390,11 +390,6 @@ type CannonConfettiBaseProps = {
    */
   children: React.ReactNode;
   /**
-   * @description Total animation duration in milliseconds.
-   * @default 3000
-   */
-  duration?: number;
-  /**
    * @description Gravity constant (normalized to container height).
    * @default 3.0
    */
@@ -466,9 +461,13 @@ type CannonConfettiBaseProps = {
   /**
    * @description Duration in milliseconds over which confetti pieces are staggered at launch.
    * 0 means all pieces launch simultaneously (instant burst).
-   * @default duration * 0.2
    */
   sprayDuration?: number;
+  /**
+   * @description The scale particles start at before animating to full size (1) over the first 5% of flight.
+   * @default 0.3
+   */
+  initialScale?: number;
 };
 
 export type CannonConfettiProps = CannonConfettiBaseProps &

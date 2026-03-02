@@ -21,10 +21,10 @@ import {
 import {
   generateCannonBoxesArray,
   resolveNamedPosition,
+  estimateCannonDuration,
   type CannonConfig,
 } from './utils';
 import {
-  DEFAULT_CANNON_CONFETTI_DURATION,
   DEFAULT_CANNON_CONFETTI_GRAVITY,
   DEFAULT_CANNON_CONFETTI_DRAG,
   DEFAULT_CANNON_CONFETTI_INITIAL_SPEED,
@@ -50,7 +50,6 @@ const CannonConfettiInner = forwardRef<
   (
     {
       children,
-      duration = DEFAULT_CANNON_CONFETTI_DURATION,
       gravity = DEFAULT_CANNON_CONFETTI_GRAVITY,
       drag = DEFAULT_CANNON_CONFETTI_DRAG,
       autoplay = true,
@@ -67,6 +66,7 @@ const CannonConfettiInner = forwardRef<
       speedVariation: rootSpeedVariation,
       target: rootTarget,
       sprayDuration,
+      initialScale = 0.3,
       ...textureRootProps
     },
     ref
@@ -93,18 +93,6 @@ const CannonConfettiInner = forwardRef<
 
     const hasTexture = textureProps !== undefined;
 
-    // --- Compute launch delay max from sprayDuration ---
-    const launchDelayMax =
-      sprayDuration !== undefined
-        ? Math.min(sprayDuration / duration, 1)
-        : DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX;
-
-    if (__DEV__ && sprayDuration !== undefined && sprayDuration > duration) {
-      console.warn(
-        `CannonConfetti: sprayDuration (${sprayDuration}ms) exceeds duration (${duration}ms). It will be clamped to duration.`
-      );
-    }
-
     // --- Parse children + build atlas via hook ---
     const {
       cannonsPositions,
@@ -123,6 +111,20 @@ const CannonConfettiInner = forwardRef<
       containerHeight,
       hasTexture,
     });
+
+    // --- Auto-compute duration from physics ---
+    const duration = estimateCannonDuration({
+      cannonConfigs,
+      gravity,
+      drag,
+      sprayDurationMs: sprayDuration,
+    });
+
+    // --- Compute launch delay max from sprayDuration ---
+    const launchDelayMax =
+      sprayDuration !== undefined
+        ? Math.min(sprayDuration / duration, 1)
+        : DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX;
 
     const dynamicCannonsPositions = useSharedValue<Position[] | null>(null);
     const dynamicCannonConfigs = useSharedValue<CannonConfig[] | null>(null);
@@ -260,7 +262,11 @@ const CannonConfettiInner = forwardRef<
           // Resolve the default target for origins that don't have an explicit one
           const defaultTarget: Position =
             rootTarget != null
-              ? resolveNamedPosition(rootTarget, containerWidth, containerHeight)
+              ? resolveNamedPosition(
+                  rootTarget,
+                  containerWidth,
+                  containerHeight
+                )
               : { x: containerWidth / 2, y: 0 };
 
           resolvedConfigs = resolvedPositions.map((_, index) => {
@@ -368,7 +374,10 @@ const CannonConfettiInner = forwardRef<
       const cannonY = cannon.y;
 
       // Base angle points from cannon toward the piece's baked target
-      const baseAngle = Math.atan2(piece.targetY - cannonY, piece.targetX - cannonX);
+      const baseAngle = Math.atan2(
+        piece.targetY - cannonY,
+        piece.targetX - cannonX
+      );
 
       const angle = baseAngle + piece.angleOffset;
       const speed =
@@ -420,7 +429,7 @@ const CannonConfettiInner = forwardRef<
       const appearScale = interpolate(
         effectiveProgress,
         [0, 0.05],
-        [0, 1],
+        [initialScale, 1],
         Extrapolation.CLAMP
       );
       const scale = appearScale * oscillatingScale * piece.depthScale;

@@ -10,6 +10,7 @@ import {
   DEFAULT_CANNON_CONFETTI_ROTATION,
   DEFAULT_CANNON_CONFETTI_SPEED_VARIATION,
   DEFAULT_CANNON_CONFETTI_DEPTH,
+  DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX,
 } from './constants';
 import { Extrapolation, interpolate } from 'react-native-reanimated';
 import type { NamedPosition, Position, RandomOffset, Range, Rotation } from './types';
@@ -248,6 +249,38 @@ export type CannonConfig = {
   rotation?: Rotation;
   depth?: Range;
   target: Position;
+};
+
+export const estimateCannonDuration = ({
+  cannonConfigs,
+  gravity,
+  drag,
+  sprayDurationMs,
+}: {
+  cannonConfigs: CannonConfig[];
+  gravity: number;
+  drag: number;
+  sprayDurationMs?: number;
+}): number => {
+  // Find the maximum normalized speed across all origins
+  let maxNormalizedSpeed = 0;
+  for (const config of cannonConfigs) {
+    const depthMax = config.depth?.max ?? DEFAULT_CANNON_CONFETTI_DEPTH.max;
+    const maxSpeed = config.speed * config.speedVariation.max * depthMax;
+    maxNormalizedSpeed = Math.max(maxNormalizedSpeed, maxSpeed);
+  }
+
+  // Asymptotic time for the fastest upward particle to return to origin height
+  // With 20% safety margin
+  const physicsTimeSec = (1 / drag + maxNormalizedSpeed / gravity) * 1.2;
+
+  // Add spray stagger time (absolute ms) or default 20% overhead
+  if (sprayDurationMs !== undefined) {
+    return Math.ceil(physicsTimeSec * 1000 + sprayDurationMs);
+  }
+  return Math.ceil(
+    (physicsTimeSec * 1000) / (1 - DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX)
+  );
 };
 
 export const generateCannonBoxesArray = ({
