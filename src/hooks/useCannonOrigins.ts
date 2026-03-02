@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type {
   CannonOriginProps,
-  CannonFlakeProps,
+  FlakeProps,
   FlakeSize,
   FlakeStyle,
   NamedPosition,
@@ -125,7 +125,7 @@ export const useCannonOrigins = ({
 
         // Extract Flake children from this Origin
         const { targetChildren: flakeChildren } =
-          pickChildren<CannonFlakeProps>(props.children, Flake);
+          pickChildren<FlakeProps>(props.children, Flake);
 
         // Build flake sizes for this origin (NO min-size padding)
         const originFlakeStyle = props.flakeStyle ?? rootFlakeStyle ?? 'solid';

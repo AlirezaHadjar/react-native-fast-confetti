@@ -1,14 +1,12 @@
 import { useMemo } from 'react';
-import type { ConfettiProps } from '../types';
+import type { FlakeSize } from '../types';
 import { getRandomValue } from '../utils';
-
-type Strict<T> = T extends undefined ? never : T;
 
 export const useVariations = ({
   flakeSize,
   _radiusRange,
 }: {
-  flakeSize: Strict<ConfettiProps['flakeSize']>;
+  flakeSize: FlakeSize[];
   _radiusRange?: [number, number];
 }) => {
   const DEFAULT_RADIUS_RANGE: [number, number] = [0, 0];

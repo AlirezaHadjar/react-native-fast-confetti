@@ -1,5 +1,11 @@
 import { useRSXformBuffer, Canvas, Atlas } from '@shopify/react-native-skia';
-import { useCallback, useEffect, useImperativeHandle, forwardRef } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  forwardRef,
+  useMemo,
+} from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import {
   cancelAnimation,
@@ -9,20 +15,20 @@ import {
   runOnUI,
   useDerivedValue,
   useSharedValue,
-  withDelay,
-  withSequence,
   withTiming,
+  withDelay,
+  Easing,
 } from 'react-native-reanimated';
-import { generateBoxesArray, generateEvenlyDistributedValues } from './utils';
 import {
-  DEFAULT_AUTOSTART_DELAY,
+  generateFallingBoxesArray,
+  estimateFallingDuration,
+} from './utils';
+import {
   DEFAULT_BOXES_COUNT,
-  DEFAULT_COLORS,
-  DEFAULT_CONFETTI_FALL_EASING,
-  DEFAULT_CONFETTI_RANDOM_OFFSET,
-  DEFAULT_FALL_DURATION,
-  DEFAULT_FLAKE_SIZE,
   DEFAULT_VERTICAL_SPACING,
+  DEFAULT_CONFETTI_GRAVITY,
+  CONFETTI_INTERNAL_DRAG,
+  DEFAULT_CONFETTI_FLUTTER,
   RANDOM_INITIAL_Y_JIGGLE,
 } from './constants';
 import type {
@@ -32,59 +38,68 @@ import type {
   ConfettiRestartOptions,
 } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
-import { useVariations } from './hooks/sizeVariations';
+import { useConfettiFlakes } from './hooks/useConfettiFlakes';
+import { Flake } from './FlakeComponent';
 
-const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
+const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
   (
     {
+      children,
       count = DEFAULT_BOXES_COUNT,
-      flakeSize = DEFAULT_FLAKE_SIZE,
-      fallDuration = DEFAULT_FALL_DURATION,
-      colors = DEFAULT_COLORS,
-      autoStartDelay = DEFAULT_AUTOSTART_DELAY,
-      verticalSpacing = DEFAULT_VERTICAL_SPACING,
-      rotation,
-      randomSpeed,
-      randomOffset,
-      isContinuous,
+      colors: rootColors,
+      gravity = DEFAULT_CONFETTI_GRAVITY,
+      flutter,
+      autoplay = true,
+      infinite = false,
+      fadeOutOnEnd = false,
       onAnimationEnd,
       onAnimationStart,
       width: _width,
       height: _height,
-      autoplay = true,
-      isInfinite = autoplay,
-      fadeOutOnEnd = false,
-      fallEasing: _fallEasing,
-      easing,
       containerStyle,
-      ...flakeProps
+      rotation,
+      depth,
+      verticalSpacing = DEFAULT_VERTICAL_SPACING,
+      flakeStyle = 'solid',
+      initialScale = 0.3,
+      phaseOffset = 0,
+      ...textureRootProps
     },
     ref
   ) => {
-    const _radiusRange =
-      'radiusRange' in flakeProps ? flakeProps.radiusRange : undefined;
-    const fallEasing =
-      _fallEasing ?? easing ?? DEFAULT_CONFETTI_FALL_EASING;
-    const initialProgress = 1;
-    const endProgress = 2;
-    const progress = useSharedValue(initialProgress);
-    const opacity = useDerivedValue(() => {
-      if (!fadeOutOnEnd) return 1;
-      return interpolate(
-        progress.get(),
-        [1, 1.9, 2],
-        [1, 0, 0],
-        Extrapolation.CLAMP
-      );
-    }, [fadeOutOnEnd]);
-    const running = useSharedValue(false);
     const { width: DEFAULT_SCREEN_WIDTH, height: DEFAULT_SCREEN_HEIGHT } =
       useWindowDimensions();
     const containerWidth = _width || DEFAULT_SCREEN_WIDTH;
     const containerHeight = _height || DEFAULT_SCREEN_HEIGHT;
-    // if the count * maxFlakeWidth is less than to fill the first row, we need to add horizontal spacing
-    const maxFlakeWidth = Math.max(...flakeSize.map(f => f.width))
-    const maxFlakeHeight = Math.max(...flakeSize.map(f => f.height))
+
+    // --- Resolve texture from root props ---
+    const rootImage =
+      'image' in textureRootProps ? textureRootProps.image : undefined;
+    const rootSvg =
+      'svg' in textureRootProps ? textureRootProps.svg : undefined;
+    const textureProps = useMemo(() => {
+      if (rootImage) {
+        return { type: 'image' as const, content: rootImage };
+      }
+      if (rootSvg) {
+        return { type: 'svg' as const, content: rootSvg };
+      }
+      return undefined;
+    }, [rootImage, rootSvg]);
+
+    const hasTexture = textureProps !== undefined;
+
+    // --- Parse children + build atlas via hook ---
+    const { allColors, sizeVariations } = useConfettiFlakes({
+      children,
+      rootColors,
+      rootFlakeStyle: flakeStyle,
+      hasTexture,
+    });
+
+    // --- Compute grid layout for spawn positions ---
+    const maxFlakeWidth = Math.max(...sizeVariations.map((f) => f.width));
+    const maxFlakeHeight = Math.max(...sizeVariations.map((f) => f.height));
     const horizontalSpacing = Math.max(
       0,
       containerWidth / count - maxFlakeWidth
@@ -98,90 +113,114 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
       -rowsNum * rowHeight +
       verticalSpacing -
       RANDOM_INITIAL_Y_JIGGLE -
-      baseVerticalOffset;
-    const sizeVariations = useVariations({
-      flakeSize,
-      _radiusRange,
+      baseVerticalOffset -
+      verticalSpacing / 2;
+
+    // --- Auto-compute duration from physics ---
+    const maxFlutter = flutter?.max ?? DEFAULT_CONFETTI_FLUTTER.max;
+    const duration = estimateFallingDuration({
+      gravity,
+      containerHeight,
+      verticalOffset,
+      maxFlutter,
     });
+
+    const progress = useSharedValue(0);
+    const running = useSharedValue(false);
+
+    const opacity = useDerivedValue(() => {
+      if (!fadeOutOnEnd) return 1;
+      return interpolate(
+        progress.get(),
+        [0.8, 1],
+        [1, 0],
+        Extrapolation.CLAMP
+      );
+    }, [fadeOutOnEnd]);
+
+    // Physics constants scaled to container height
+    const scaledGravity = gravity * containerHeight;
+    const totalTime = duration / 1000;
+
     const boxes = useSharedValue(
-      generateBoxesArray({
+      generateFallingBoxesArray({
         count,
-        colorsVariations: colors.length,
+        colorsVariations: allColors.length,
         sizeVariations: sizeVariations.length,
-        duration: fallDuration,
+        containerWidth,
+        containerHeight,
+        verticalSpacing,
+        maxFlakeWidth,
+        maxFlakeHeight,
+        verticalOffset,
+        columnsNum,
+        rowsNum,
         rotation,
-        randomSpeed,
-        randomOffset,
+        depth,
+        flutter,
+        totalTime,
+        gravity,
       })
     );
-    const delayStartTime = useSharedValue(0);
-    const initialVertical =
-      randomOffset?.y?.max || DEFAULT_CONFETTI_RANDOM_OFFSET.y?.max || 0;
-
-    const fallingMaxYMovement =
-      Math.abs(verticalOffset) +
-      containerHeight +
-      verticalSpacing +
-      Math.abs(initialVertical) +
-      Math.min(1 - (randomSpeed?.min || 0), 1) * containerHeight;
-
-    //Calculate the time it takes for a single confetti flake to traverse the visible screen area.
-    const singleFlakeFallDuration =
-      (containerHeight * fallDuration) / fallingMaxYMovement;
-    const continuousDelay =
-      isContinuous === 2
-        ? (fallDuration - singleFlakeFallDuration) * 0.9
-        : 0;
-    const delay = autoStartDelay + continuousDelay;
 
     const { texture, sprites } = useConfettiLogic({
       sizeVariations,
-      colors,
+      colors: allColors,
       boxes,
-      textureProps:
-        flakeProps.type === 'image' && flakeProps.flakeImage
-          ? { type: 'image', content: flakeProps.flakeImage }
-          : flakeProps.type === 'svg' && flakeProps.flakeSvg
-            ? { type: 'svg', content: flakeProps.flakeSvg }
-            : undefined,
+      textureProps,
     });
 
     const pause = () => {
       'worklet';
-
       running.set(false);
       cancelAnimation(progress);
     };
 
     const reset = () => {
       'worklet';
-
       pause();
-      progress.set(initialProgress);
+      progress.set(0);
     };
 
     const refreshBoxes = useCallback(() => {
       'worklet';
-
-      const newBoxes = generateBoxesArray({
+      const newBoxes = generateFallingBoxesArray({
         count,
-        colorsVariations: colors.length,
+        colorsVariations: allColors.length,
         sizeVariations: sizeVariations.length,
-        duration: fallDuration,
+        containerWidth,
+        containerHeight,
+        verticalSpacing,
+        maxFlakeWidth,
+        maxFlakeHeight,
+        verticalOffset,
+        columnsNum,
+        rowsNum,
         rotation,
-        randomSpeed,
-        randomOffset,
+        depth,
+        flutter,
+        totalTime,
+        gravity,
       });
       boxes.set(newBoxes);
     }, [
       count,
-      colors.length,
+      allColors.length,
       sizeVariations.length,
       boxes,
-      fallDuration,
+      containerWidth,
+      containerHeight,
+      verticalSpacing,
+      maxFlakeWidth,
+      maxFlakeHeight,
+      verticalOffset,
+      columnsNum,
+      rowsNum,
       rotation,
-      randomSpeed,
-      randomOffset,
+      depth,
+      flutter,
+      totalTime,
+      gravity,
     ]);
 
     const JSOnStart = useCallback(
@@ -200,71 +239,29 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
       runOnJS(JSOnEnd)();
     }, [JSOnEnd]);
 
-    const runAnimation = useCallback(
-      (
-        {
-          fallDuration: _fallDuration,
-          delay = 0,
-        }: {
-          fallDuration?: number;
-          delay?: number;
-        },
-        onEnd?: (finished: boolean | undefined) => void
-      ) => {
-        'worklet';
-
-        const animations: number[] = [];
-
-        if (_fallDuration)
-          animations.push(
-            withTiming(
-              2,
-              { duration: _fallDuration, easing: fallEasing },
-              (finished) => {
-                onEnd?.(finished);
-              }
-            )
-          );
-
-        const finalAnimation =
-          delay > 0
-            ? withDelay(delay, withSequence(...animations))
-            : withSequence(...animations);
-
-        if (delay > 0) {
-          delayStartTime.set(Date.now());
-        }
-
-        return finalAnimation;
-      },
-      [delayStartTime, fallEasing]
-    );
-
     const restart = useCallback(
       (_options: ConfettiRestartOptions = {}) => {
         'worklet';
 
         refreshBoxes();
-        progress.set(initialProgress);
+        progress.set(0);
         running.set(true);
-        if (isContinuous !== 2) UIOnStart();
+        UIOnStart();
 
         function repeatAnimation() {
           'worklet';
-          if (!isContinuous) UIOnEnd();
+          UIOnEnd();
           refreshBoxes();
-          if (isInfinite) {
+          if (infinite) {
             cancelAnimation(progress);
-            progress.set(initialProgress);
+            progress.set(0);
             progress.set(
-              runAnimation(
-                {
-                  fallDuration,
-                  delay: fallDuration - 2.5 * singleFlakeFallDuration,
-                },
+              withTiming(
+                1,
+                { duration, easing: Easing.linear },
                 (finished) => {
                   'worklet';
-                  if (!finished || !isInfinite) return;
+                  if (!finished || !infinite) return;
                   repeatAnimation();
                 }
               )
@@ -272,58 +269,58 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
           }
         }
 
-        const startAnimation = (delay: number) => {
-          'worklet';
-          progress.set(
-            runAnimation({ fallDuration, delay }, (finished) => {
-              'worklet';
-              if (!finished || !isInfinite) return;
-              repeatAnimation();
-            })
-          );
-        };
-
-        startAnimation(delay);
+        const initialAnimation = withTiming(
+          1,
+          { duration, easing: Easing.linear },
+          (finished) => {
+            'worklet';
+            if (!finished || !infinite) {
+              if (finished) UIOnEnd();
+              return;
+            }
+            repeatAnimation();
+          }
+        );
+        const startDelay = Math.round(phaseOffset * duration);
+        progress.set(
+          startDelay > 0
+            ? withDelay(startDelay, initialAnimation)
+            : initialAnimation
+        );
       },
       [
         refreshBoxes,
         progress,
         running,
-        isContinuous,
         UIOnStart,
-        delay,
         UIOnEnd,
-        isInfinite,
-        runAnimation,
-        fallDuration,
-        singleFlakeFallDuration,
+        infinite,
+        duration,
+        phaseOffset,
       ]
     );
 
     const resume = () => {
       'worklet';
-
       if (running.get()) return;
       running.set(true);
 
-      const fallingRemaining = fallDuration * (2 - progress.get());
+      const remaining = duration * (1 - progress.get());
 
       function repeatAnimation() {
         'worklet';
-        if (!isContinuous) UIOnEnd();
+        UIOnEnd();
         refreshBoxes();
-        if (isInfinite) {
+        if (infinite) {
           cancelAnimation(progress);
-          progress.set(initialProgress);
+          progress.set(0);
           progress.set(
-            runAnimation(
-              {
-                fallDuration,
-                delay: fallDuration - 2.5 * singleFlakeFallDuration,
-              },
+            withTiming(
+              1,
+              { duration, easing: Easing.linear },
               (finished) => {
                 'worklet';
-                if (!finished || !isInfinite) return;
+                if (!finished || !infinite) return;
                 repeatAnimation();
               }
             )
@@ -331,25 +328,16 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
         }
       }
 
-      let _delay = 0;
-
-      //  we're resuming when the animation is not running and is in the delay phase
-      if (isContinuous === 2 && progress.get() === initialProgress) {
-        const elapsed = Date.now() - delayStartTime.get();
-        const remaining = delay - elapsed;
-        _delay = remaining;
-      }
-
       progress.set(
-        runAnimation(
-          {
-            fallDuration: fallingRemaining,
-            delay: _delay,
-          },
+        withTiming(
+          1,
+          { duration: remaining, easing: Easing.linear },
           (finished) => {
             'worklet';
-            if (!finished || !isInfinite) return;
-
+            if (!finished || !infinite) {
+              if (finished) UIOnEnd();
+              return;
+            }
             repeatAnimation();
           }
         )
@@ -363,35 +351,6 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
       restart: runOnUI(restart),
     }));
 
-    const getPosition = (index: number) => {
-      'worklet';
-      const rowIndex = Math.floor(index / columnsNum);
-      const isLastRow = rowIndex === rowsNum - 1;
-
-      let x: number;
-      // if the last row is not full, we need to calculate the spacing to spread items evenly
-      if (isLastRow) {
-        // Calculate remaining items in last row
-        const itemsInLastRow = count - (rowsNum - 1) * columnsNum;
-        // Calculate spacing to spread items evenly
-        const lastRowSpacing =
-          (containerWidth - itemsInLastRow * maxFlakeWidth) /
-          (itemsInLastRow + 1);
-        // Get position within last row (0 to itemsInLastRow-1)
-        const positionInLastRow = index - (rowsNum - 1) * columnsNum;
-        x =
-          lastRowSpacing +
-          positionInLastRow * (maxFlakeWidth + lastRowSpacing);
-      } else {
-        x = (index % columnsNum) * columnWidth;
-      }
-
-      let y = rowIndex * rowHeight;
-
-      y -= Math.abs(initialVertical);
-      return { x, y };
-    };
-
     useEffect(() => {
       runOnUI(() => {
         if (autoplay && !running.get()) restart();
@@ -403,52 +362,42 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
       const piece = boxes.get()[i];
       if (!piece) return;
 
-      const { x, y } = getPosition(i);
+      const t = progress.get() * totalTime;
+      const theta = piece.tumbleRate * t + piece.tumblePhase;
 
-      const initialRandomY = piece.initialRandomY;
-      let tx = x + piece.randomOffsetX;
-      let ty = y + piece.randomOffsetY + initialRandomY + verticalOffset;
+      // Base fall: gravity + internal drag (depth-coupled for parallax)
+      const effectiveGravity = scaledGravity * piece.depthScale;
+      const expDecay = 1 - Math.exp(-CONFETTI_INTERNAL_DRAG * t);
+      const baseY =
+        (effectiveGravity / CONFETTI_INTERNAL_DRAG) * t +
+        ((piece.initialVy - effectiveGravity / CONFETTI_INTERNAL_DRAG) /
+          CONFETTI_INTERNAL_DRAG) *
+          expDecay;
 
-      // Apply random speed to the fall height
-      const yChange = interpolate(
-        progress.get(),
-        [1, 2],
-        [0, fallingMaxYMovement * piece.randomSpeed],
-        Extrapolation.CLAMP
-      );
-      // Interpolate between randomX values for smooth left-right movement
-      const randomX = interpolate(
-        progress.get(),
-        generateEvenlyDistributedValues(1, 2, piece.randomXs.length),
-        piece.randomXs,
-        Extrapolation.CLAMP
-      );
+      // Coupled motion from tumble
+      const ty =
+        piece.spawnY + baseY - piece.flutterAmplitude * Math.sin(2 * theta);
+      const tx =
+        piece.spawnX + piece.lateralDrift * t - piece.driftAmplitude * Math.cos(2 * theta);
 
-      tx += randomX;
-      ty += yChange;
-
-      const rotationDirection = piece.clockwise ? 1 : -1;
+      // Rotation: banking into drift direction + slow background spin
+      const clockwiseDir = piece.clockwise ? 1 : -1;
       const rz =
-        piece.initialRotation +
-        interpolate(
-          progress.get(),
-          [initialProgress, endProgress],
-          [0, rotationDirection * piece.maxRotation.z],
-          Extrapolation.CLAMP
-        );
-      const rx =
-        piece.initialRotation +
-        interpolate(
-          progress.get(),
-          [initialProgress, endProgress],
-          [0, rotationDirection * piece.maxRotation.x],
-          Extrapolation.CLAMP
-        );
+        piece.spinPhase +
+        clockwiseDir * piece.spinRate * t +
+        piece.bankAmplitude * Math.sin(2 * theta);
 
-      const oscillatingScale = Math.abs(Math.cos(rx));
-      const scale = oscillatingScale;
+      // Scale from tumble (narrowing when edge-on)
+      const oscillatingScale = Math.cos(theta);
+      const appearScale = interpolate(
+        progress.get(),
+        [0, 0.05],
+        [initialScale, 1],
+        Extrapolation.CLAMP
+      );
+      const scale = appearScale * oscillatingScale * piece.depthScale;
+
       const size = sizeVariations[piece.sizeIndex]!;
-
       const px = size.width / 2;
       const py = size.height / 2;
 
@@ -473,11 +422,23 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
   }
 );
 
-const Confetti = forwardRef<ConfettiMethods, ConfettiProps>((props, ref) => {
-  return <InternalConfetti {...props} ref={ref} />;
-});
+ConfettiInner.displayName = 'Confetti';
 
-Confetti.displayName = 'Confetti';
+const Confetti = ConfettiInner as React.ForwardRefExoticComponent<
+  ConfettiProps & React.RefAttributes<ConfettiMethods>
+> & {
+  Flake: typeof Flake;
+};
+
+Confetti.Flake = Flake;
+
+/**
+ * Legacy export for ContinuousConfetti.
+ * ContinuousConfetti will need to be migrated to the new API separately.
+ */
+const InternalConfetti = ConfettiInner as React.ForwardRefExoticComponent<
+  InternalConfettiProps & React.RefAttributes<ConfettiMethods>
+>;
 InternalConfetti.displayName = 'InternalConfetti';
 
 export { Confetti, InternalConfetti };

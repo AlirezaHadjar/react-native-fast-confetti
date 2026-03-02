@@ -176,9 +176,122 @@ type TextureProps =
       radiusRange?: [number, number];
     };
 
-export type ConfettiProps = BaseConfettiProps & TextureProps & EasingProps;
+/** @deprecated Old flat-props API. Used internally by ContinuousConfetti (to be migrated). */
+export type LegacyConfettiProps = BaseConfettiProps & TextureProps & EasingProps;
+
+type ConfettiBaseProps = {
+  /**
+   * @description Flake size variants defined as children (<Confetti.Flake>).
+   */
+  children?: React.ReactNode;
+  /**
+   * @description Number of confetti pieces to render.
+   * @default 200
+   */
+  count?: number;
+  /**
+   * @description The array of confetti flake colors.
+   */
+  colors?: string[];
+  /**
+   * @description Gravity constant (normalized to container height).
+   * @default 1.0
+   */
+  gravity?: number;
+  /**
+   * @description Controls how much the confetti tumble affects its trajectory.
+   * Higher values create more dramatic horizontal drift and vertical bobbing.
+   * At high values, pieces may momentarily stall or drift sideways.
+   * @default { min: 0.03, max: 0.08 }
+   */
+  flutter?: Range;
+  /**
+   * @description Whether the animation should play on mount.
+   * @default true
+   */
+  autoplay?: boolean;
+  /**
+   * @description Whether the animation should play again after it ends.
+   * @default false
+   */
+  infinite?: boolean;
+  /**
+   * @description Should the confetti flakes fade out as they reach the end.
+   */
+  fadeOutOnEnd?: boolean;
+  /**
+   * @description A callback that is called when the animation starts.
+   */
+  onAnimationStart?: () => void;
+  /**
+   * @description A callback that is called when the animation ends.
+   */
+  onAnimationEnd?: () => void;
+  /**
+   * @description The width of the confetti's container.
+   * @default SCREEN_WIDTH
+   */
+  width?: number;
+  /**
+   * @description The height of the confetti's container.
+   * @default SCREEN_HEIGHT
+   */
+  height?: number;
+  /**
+   * @description The style of the confetti container.
+   */
+  containerStyle?: StyleProp<ViewStyle>;
+  /**
+   * @description The rotation configuration for confetti flakes.
+   */
+  rotation?: Rotation;
+  /**
+   * @description Per-piece depth scale range to simulate 3D perspective.
+   * @default { min: 0.8, max: 1.0 }
+   */
+  depth?: Range;
+  /**
+   * @description The approximate space between confetti flakes vertically.
+   * Lower value results in denser confetti.
+   * @default 30
+   */
+  verticalSpacing?: number;
+  /**
+   * @description The visual style of the default confetti flakes.
+   * @default 'solid'
+   */
+  flakeStyle?: FlakeStyle;
+  /**
+   * @description The scale particles start at before animating to full size.
+   * @default 0.3
+   */
+  initialScale?: number;
+};
+
+export type ConfettiProps = ConfettiBaseProps &
+  (
+    | {
+        /**
+         * @description A Skia image to use as confetti flake texture.
+         */
+        image: SkImage;
+        svg?: never;
+      }
+    | {
+        image?: never;
+        /**
+         * @description A Skia SVG to use as confetti flake texture.
+         */
+        svg: SkSVG;
+      }
+    | {
+        image?: never;
+        svg?: never;
+      }
+  );
+
 export type InternalConfettiProps = ConfettiProps & {
-  isContinuous?: 1 | 2;
+  phaseOffset?: number;
 };
 
 type PIBaseProps = StrictOmit<
@@ -348,7 +461,7 @@ export type CannonOriginProps = {
   children?: React.ReactNode;
 };
 
-type CannonFlakeWithSize = {
+type FlakeWithSize = {
   /**
    * @description Shorthand for width and height (sets both to this value).
    */
@@ -367,7 +480,7 @@ type CannonFlakeWithSize = {
   flakeStyle?: FlakeStyle;
 };
 
-type CannonFlakeWithDimensions = {
+type FlakeWithDimensions = {
   size?: never;
   /**
    * @description Width of the flake.
@@ -389,7 +502,10 @@ type CannonFlakeWithDimensions = {
   flakeStyle?: FlakeStyle;
 };
 
-export type CannonFlakeProps = CannonFlakeWithSize | CannonFlakeWithDimensions;
+export type FlakeProps = FlakeWithSize | FlakeWithDimensions;
+
+/** @deprecated Use `FlakeProps` instead. */
+export type CannonFlakeProps = FlakeProps;
 
 export type CannonConfettiRestartOptions = {
   /**

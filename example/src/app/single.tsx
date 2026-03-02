@@ -4,14 +4,10 @@ import { Confetti } from 'react-native-fast-confetti';
 import type { ConfettiMethods } from 'react-native-fast-confetti';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
 import { useScreenConfig } from '../hooks/useScreenConfig';
-import { getTextureProps, getFlakeSize, getRotation } from '../utils/confettiConfig';
+import { getRotation } from '../utils/confettiConfig';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
-import {
-  textureOptions,
-  radiusOptions,
-  verticalSpacingOptions,
-} from '../constants/config';
+import { textureOptions, verticalSpacingOptions } from '../constants/config';
 
 export default function SingleScreen() {
   const confettiRef = useRef<ConfettiMethods>(null);
@@ -20,15 +16,32 @@ export default function SingleScreen() {
 
   if (isLoading) return null;
 
-  const textureProps = getTextureProps(
-    config.textureType,
-    moneyStackImage!,
-    snowFlakeSVG!,
-    config.radiusRange
-  );
-  const flakeSize = getFlakeSize(config.textureType);
   const rotation = getRotation(config.textureType, 'single');
-  const confettiKey = `single-${config.textureType}-${config.radiusRange}-${config.verticalSpacing}`;
+  const confettiKey = `single-${config.textureType}-${config.verticalSpacing}`;
+
+  const textureProps =
+    config.textureType === 'money'
+      ? { image: moneyStackImage! }
+      : config.textureType === 'snowflake'
+        ? { svg: snowFlakeSVG! }
+        : {};
+
+  const renderFlakes = () => {
+    if (config.textureType === 'money') {
+      return <Confetti.Flake size={50} />;
+    }
+    if (config.textureType === 'snowflake') {
+      return <Confetti.Flake size={10} />;
+    }
+    return (
+      <>
+        <Confetti.Flake size={12} radius={6} />
+        <Confetti.Flake width={8} height={14} />
+        <Confetti.Flake width={8} height={14} radius={6.5} />
+        <Confetti.Flake width={8} height={14} radius={4} />
+      </>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -39,14 +52,6 @@ export default function SingleScreen() {
           value={config.textureType}
           onChange={(v) => updateConfig({ textureType: v })}
         />
-        {config.textureType === 'default' && (
-          <ConfigDropdown
-            label="Corner Radius:"
-            data={radiusOptions}
-            value={config.radiusRange}
-            onChange={(v) => updateConfig({ radiusRange: v })}
-          />
-        )}
         <ConfigDropdown
           label="Vertical Spacing:"
           data={verticalSpacingOptions}
@@ -58,13 +63,16 @@ export default function SingleScreen() {
       <Confetti
         key={confettiKey}
         ref={confettiRef}
-        flakeSize={flakeSize}
-        {...textureProps}
         rotation={rotation}
         verticalSpacing={config.verticalSpacing}
         autoplay
-        isInfinite
-      />
+        count={400}
+        infinite
+        flakeStyle="glossy"
+        {...textureProps}
+      >
+        {renderFlakes()}
+      </Confetti>
 
       <ConfettiControls
         actions={{

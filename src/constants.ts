@@ -102,6 +102,19 @@ export const DEFAULT_CONFETTI_FALL_EASING = Easing.inOut(Easing.quad);
 
 export const DEFAULT_CONFETTI_BLAST_EASING = Easing.inOut(Easing.quad);
 
+export const DEFAULT_CONFETTI_GRAVITY = 1.0;
+export const CONFETTI_INTERNAL_DRAG = 2.0;
+export const DEFAULT_CONFETTI_DEPTH: Required<Range> = { min: 0.8, max: 1.0 };
+export const DEFAULT_CONFETTI_FLUTTER: Required<Range> = {
+  min: 0.03,
+  max: 0.08,
+};
+export const CONFETTI_HORIZONTAL_COUPLING = 1.5;
+export const DEFAULT_CONFETTI_INITIAL_VY: Required<Range> = {
+  min: 0.0,
+  max: 0.3,
+};
+
 export const DEFAULT_CANNON_ORIGIN_COUNT = 100;
 export const DEFAULT_CANNON_CONFETTI_GRAVITY = 3.0;
 export const DEFAULT_CANNON_CONFETTI_DRAG = 2.0;

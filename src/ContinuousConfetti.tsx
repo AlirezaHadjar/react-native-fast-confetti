@@ -1,12 +1,12 @@
-import { Easing } from 'react-native-reanimated';
 import { InternalConfetti } from './Confetti';
-import {
-  CONTINUOUS_CONFETTI_RANDOM_OFFSET,
-  CONTINUOUS_CONFETTI_RANDOM_SPEED,
-} from './constants';
 import type { ConfettiMethods, ContinuousConfettiProps } from './types';
 import { useRef, useImperativeHandle, forwardRef } from 'react';
 
+/**
+ * ContinuousConfetti: Uses two staggered Confetti instances to create
+ * an uninterrupted stream of confetti. Will be migrated to the new
+ * physics-based API in a future update.
+ */
 export const ContinuousConfetti = forwardRef<
   ConfettiMethods,
   ContinuousConfettiProps
@@ -33,27 +33,22 @@ export const ContinuousConfetti = forwardRef<
     },
   }));
 
+  // Note: ContinuousConfetti currently does not produce a seamless
+  // stream with the physics-based engine. It runs two infinite instances
+  // side-by-side as a temporary measure. A proper continuous mode will
+  // be implemented in a follow-up.
   return (
     <>
       <InternalConfetti
-        randomSpeed={CONTINUOUS_CONFETTI_RANDOM_SPEED}
-        randomOffset={CONTINUOUS_CONFETTI_RANDOM_OFFSET}
-        verticalSpacing={CONTINUOUS_CONFETTI_RANDOM_OFFSET.y?.max}
-        {...props}
+        {...(props as any)}
         ref={confettiRef1}
-        isInfinite
-        isContinuous={1}
-        fallEasing={Easing.linear}
+        infinite
       />
       <InternalConfetti
-        randomSpeed={CONTINUOUS_CONFETTI_RANDOM_SPEED}
-        randomOffset={CONTINUOUS_CONFETTI_RANDOM_OFFSET}
-        verticalSpacing={CONTINUOUS_CONFETTI_RANDOM_OFFSET.y?.max}
-        {...props}
+        {...(props as any)}
         ref={confettiRef2}
-        isInfinite
-        isContinuous={2}
-        fallEasing={Easing.linear}
+        infinite
+        phaseOffset={0.5}
       />
     </>
   );

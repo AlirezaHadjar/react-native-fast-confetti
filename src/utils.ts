@@ -11,6 +11,11 @@ import {
   DEFAULT_CANNON_CONFETTI_SPEED_VARIATION,
   DEFAULT_CANNON_CONFETTI_DEPTH,
   DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX,
+  DEFAULT_CONFETTI_DEPTH,
+  DEFAULT_CONFETTI_FLUTTER,
+  CONFETTI_INTERNAL_DRAG,
+  CONFETTI_HORIZONTAL_COUPLING,
+  DEFAULT_CONFETTI_INITIAL_VY,
 } from './constants';
 import { Extrapolation, interpolate } from 'react-native-reanimated';
 import type { NamedPosition, Position, RandomOffset, Range, Rotation } from './types';
@@ -46,7 +51,7 @@ export const generateEvenlyDistributedValues = (
   return Array.from({ length: chunks }, (_, i) => lowerBound + step * i);
 };
 
-const resolveRange = (
+export const resolveRange = (
   range?: { min?: number; max?: number },
   defaultRange?: { min: number; max: number }
 ) => {
@@ -115,7 +120,6 @@ export const generateBoxesArray = ({
       RANDOM_INITIAL_Y_JIGGLE
     ),
     blastThreshold: getRandomValue(0, 0.9),
-    initialRotation: getRandomValue(0.1 * Math.PI, Math.PI),
     randomSpeed: getRandomValue(randomSpeedRange.min, randomSpeedRange.max), // Random speed multiplier
     randomOffsetX: getRandomValue(
       randomXOffsetRange.min,
@@ -362,4 +366,126 @@ export const generateCannonBoxesArray = ({
   }
 
   return result;
+};
+
+export const estimateFallingDuration = ({
+  gravity,
+  containerHeight,
+  verticalOffset,
+  maxFlutter,
+}: {
+  gravity: number;
+  containerHeight: number;
+  verticalOffset: number;
+  maxFlutter?: number;
+}): number => {
+  const scaledGravity = gravity * containerHeight;
+  const terminalVelocity = scaledGravity / CONFETTI_INTERNAL_DRAG;
+  const totalFallDistance = containerHeight + Math.abs(verticalOffset);
+  const timeSec = totalFallDistance / terminalVelocity;
+  const flutterMargin = 1.1 + (maxFlutter ?? 1.5) * 0.2;
+  return Math.ceil(timeSec * 1000 * flutterMargin);
+};
+
+export const generateFallingBoxesArray = ({
+  count,
+  colorsVariations,
+  sizeVariations,
+  containerWidth,
+  containerHeight,
+  verticalSpacing,
+  maxFlakeWidth,
+  maxFlakeHeight,
+  verticalOffset,
+  columnsNum,
+  rowsNum,
+  rotation,
+  depth,
+  flutter,
+  totalTime,
+  gravity,
+}: {
+  count: number;
+  colorsVariations: number;
+  sizeVariations: number;
+  containerWidth: number;
+  containerHeight: number;
+  verticalSpacing: number;
+  maxFlakeWidth: number;
+  maxFlakeHeight: number;
+  verticalOffset: number;
+  columnsNum: number;
+  rowsNum: number;
+  rotation?: Rotation;
+  depth?: Range;
+  flutter?: Range;
+  totalTime: number;
+  gravity: number;
+}) => {
+  'worklet';
+
+  const xRotationRange = resolveRange(rotation?.x, DEFAULT_CONFETTI_ROTATION.x);
+  const zRotationRange = resolveRange(rotation?.z, DEFAULT_CONFETTI_ROTATION.z);
+  const depthRange = resolveRange(depth, DEFAULT_CONFETTI_DEPTH);
+  const flutterRange = resolveRange(flutter, DEFAULT_CONFETTI_FLUTTER);
+  const vyRange = resolveRange(undefined, DEFAULT_CONFETTI_INITIAL_VY);
+
+  const V_term = (gravity * containerHeight) / CONFETTI_INTERNAL_DRAG;
+
+  const columnWidth =
+    Math.min(maxFlakeWidth, 20) +
+    Math.max(0, containerWidth / count - maxFlakeWidth);
+
+  return new Array(count).fill(0).map((_, i) => {
+    // Grid position (same layout logic as before)
+    const rowIndex = Math.floor(i / columnsNum);
+    const isLastRow = rowIndex === rowsNum - 1;
+
+    let spawnX: number;
+    if (isLastRow) {
+      const itemsInLastRow = count - (rowsNum - 1) * columnsNum;
+      const lastRowSpacing =
+        (containerWidth - itemsInLastRow * maxFlakeWidth) /
+        (itemsInLastRow + 1);
+      const positionInLastRow = i - (rowsNum - 1) * columnsNum;
+      spawnX =
+        lastRowSpacing +
+        positionInLastRow * (maxFlakeWidth + lastRowSpacing);
+    } else {
+      spawnX = (i % columnsNum) * columnWidth;
+    }
+
+    const rowHeight = Math.min(maxFlakeHeight, 20) + verticalSpacing;
+    const yJitter = getRandomValue(-verticalSpacing / 2, verticalSpacing / 2);
+    const spawnY = rowIndex * rowHeight + verticalOffset + yJitter;
+
+    const maxRotationX = getRandomValue(xRotationRange.min, xRotationRange.max);
+    const maxRotationZ = getRandomValue(zRotationRange.min, zRotationRange.max);
+    const tumbleRate = Math.max(maxRotationX / totalTime, 0.1);
+    // Slow background spin (rotation.z drives it, but damped 10×)
+    const spinRate = maxRotationZ / totalTime;
+    const flutterStr = getRandomValue(flutterRange.min, flutterRange.max);
+    const flutterAmplitude = V_term * flutterStr / (2 * tumbleRate);
+    const driftAmplitude = flutterAmplitude * CONFETTI_HORIZONTAL_COUPLING;
+    // Banking angle: piece tilts in the direction of lateral drift
+    const bankAmplitude = getRandomValue(Math.PI / 6, Math.PI / 3);
+
+    return {
+      spawnX,
+      spawnY,
+      initialVy: getRandomValue(vyRange.min, vyRange.max) * containerHeight,
+      tumbleRate,
+      tumblePhase: getRandomValue(0, 2 * Math.PI),
+      spinRate,
+      spinPhase: getRandomValue(0, 2 * Math.PI),
+      driftAmplitude,
+      flutterAmplitude,
+      bankAmplitude,
+      lateralDrift: getRandomValue(-10, 10),
+      depthScale: getRandomValue(depthRange.min, depthRange.max),
+      clockwise: getRandomBoolean(),
+      colorIndex: Math.round(getRandomValue(0, colorsVariations - 1)),
+      sizeIndex: Math.round(getRandomValue(0, sizeVariations - 1)),
+    };
+  });
 };
