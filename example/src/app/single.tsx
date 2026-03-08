@@ -69,6 +69,7 @@ export default function SingleScreen() {
         count={400}
         infinite
         flakeStyle="glossy"
+        gravity={1}
         {...textureProps}
       >
         {renderFlakes()}

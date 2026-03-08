@@ -19,23 +19,22 @@ import {
   withDelay,
   Easing,
 } from 'react-native-reanimated';
-import {
-  generateFallingBoxesArray,
-  estimateFallingDuration,
-} from './utils';
+import { generateFallingBoxesArray, estimateFallingDuration } from './utils';
 import {
   DEFAULT_BOXES_COUNT,
   DEFAULT_VERTICAL_SPACING,
   DEFAULT_CONFETTI_GRAVITY,
-  CONFETTI_INTERNAL_DRAG,
   DEFAULT_CONFETTI_FLUTTER,
+  DEFAULT_CONFETTI_DRIFT,
   RANDOM_INITIAL_Y_JIGGLE,
+  TRAJECTORY_SAMPLE_COUNT,
 } from './constants';
 import type {
   ConfettiMethods,
   ConfettiProps,
   InternalConfettiProps,
   ConfettiRestartOptions,
+  FallingBox,
 } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useConfettiFlakes } from './hooks/useConfettiFlakes';
@@ -49,6 +48,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       colors: rootColors,
       gravity = DEFAULT_CONFETTI_GRAVITY,
       flutter,
+      drift = DEFAULT_CONFETTI_DRIFT,
       autoplay = true,
       infinite = false,
       fadeOutOnEnd = false,
@@ -130,38 +130,13 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
 
     const opacity = useDerivedValue(() => {
       if (!fadeOutOnEnd) return 1;
-      return interpolate(
-        progress.get(),
-        [0.8, 1],
-        [1, 0],
-        Extrapolation.CLAMP
-      );
+      return interpolate(progress.get(), [0.8, 1], [1, 0], Extrapolation.CLAMP);
     }, [fadeOutOnEnd]);
 
-    // Physics constants scaled to container height
-    const scaledGravity = gravity * containerHeight;
     const totalTime = duration / 1000;
 
-    const boxes = useSharedValue(
-      generateFallingBoxesArray({
-        count,
-        colorsVariations: allColors.length,
-        sizeVariations: sizeVariations.length,
-        containerWidth,
-        containerHeight,
-        verticalSpacing,
-        maxFlakeWidth,
-        maxFlakeHeight,
-        verticalOffset,
-        columnsNum,
-        rowsNum,
-        rotation,
-        depth,
-        flutter,
-        totalTime,
-        gravity,
-      })
-    );
+    const boxes = useSharedValue<FallingBox[]>([]);
+    const trajectories = useSharedValue<number[]>([]);
 
     const { texture, sprites } = useConfettiLogic({
       sizeVariations,
@@ -184,7 +159,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
 
     const refreshBoxes = useCallback(() => {
       'worklet';
-      const newBoxes = generateFallingBoxesArray({
+      const result = generateFallingBoxesArray({
         count,
         colorsVariations: allColors.length,
         sizeVariations: sizeVariations.length,
@@ -201,13 +176,16 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
         flutter,
         totalTime,
         gravity,
+        infinite,
       });
-      boxes.set(newBoxes);
+      boxes.set(result.boxes);
+      trajectories.set(result.trajectories);
     }, [
       count,
       allColors.length,
       sizeVariations.length,
       boxes,
+      trajectories,
       containerWidth,
       containerHeight,
       verticalSpacing,
@@ -221,6 +199,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       flutter,
       totalTime,
       gravity,
+      infinite,
     ]);
 
     const JSOnStart = useCallback(
@@ -251,20 +230,15 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
         function repeatAnimation() {
           'worklet';
           UIOnEnd();
-          refreshBoxes();
           if (infinite) {
             cancelAnimation(progress);
             progress.set(0);
             progress.set(
-              withTiming(
-                1,
-                { duration, easing: Easing.linear },
-                (finished) => {
-                  'worklet';
-                  if (!finished || !infinite) return;
-                  repeatAnimation();
-                }
-              )
+              withTiming(1, { duration, easing: Easing.linear }, (finished) => {
+                'worklet';
+                if (!finished || !infinite) return;
+                repeatAnimation();
+              })
             );
           }
         }
@@ -310,20 +284,15 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       function repeatAnimation() {
         'worklet';
         UIOnEnd();
-        refreshBoxes();
         if (infinite) {
           cancelAnimation(progress);
           progress.set(0);
           progress.set(
-            withTiming(
-              1,
-              { duration, easing: Easing.linear },
-              (finished) => {
-                'worklet';
-                if (!finished || !infinite) return;
-                repeatAnimation();
-              }
-            )
+            withTiming(1, { duration, easing: Easing.linear }, (finished) => {
+              'worklet';
+              if (!finished || !infinite) return;
+              repeatAnimation();
+            })
           );
         }
       }
@@ -357,53 +326,55 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       })();
     }, [autoplay, restart, running]);
 
+    const maxIdx = TRAJECTORY_SAMPLE_COUNT;
     const transforms = useRSXformBuffer(count, (val, i) => {
       'worklet';
       const piece = boxes.get()[i];
       if (!piece) return;
 
-      const t = progress.get() * totalTime;
-      const theta = piece.tumbleRate * t + piece.tumblePhase;
+      const p = progress.get();
+      const t = p * totalTime;
 
-      // Base fall: gravity + internal drag (depth-coupled for parallax)
-      const effectiveGravity = scaledGravity * piece.depthScale;
-      const expDecay = 1 - Math.exp(-CONFETTI_INTERNAL_DRAG * t);
-      const baseY =
-        (effectiveGravity / CONFETTI_INTERNAL_DRAG) * t +
-        ((piece.initialVy - effectiveGravity / CONFETTI_INTERNAL_DRAG) /
-          CONFETTI_INTERNAL_DRAG) *
-          expDecay;
+      // --- Trajectory lookup ---
+      const rawIdx = p * maxIdx;
+      const s0 = Math.min(Math.floor(rawIdx), maxIdx - 1);
+      const u = rawIdx - s0;
 
-      // Coupled motion from tumble
-      const ty =
-        piece.spawnY + baseY - piece.flutterAmplitude * Math.sin(2 * theta);
-      const tx =
-        piece.spawnX + piece.lateralDrift * t - piece.driftAmplitude * Math.cos(2 * theta);
+      const base = (i * (maxIdx + 1) + s0) * 3;
+      const traj = trajectories.get();
+      const rawTx = traj[base]! + (traj[base + 3]! - traj[base]!) * u;
+      const ty = traj[base + 1]! + (traj[base + 4]! - traj[base + 1]!) * u;
+      // Blend ODE horizontal position toward spawn column by drift factor
+      const tx = piece.spawnX + (rawTx - piece.spawnX) * drift;
+      const tumbleTheta =
+        traj[base + 2]! + (traj[base + 5]! - traj[base + 2]!) * u;
 
-      // Rotation: banking into drift direction + slow background spin
+      // --- Visual rotation (continuous spin, separate axis) ---
       const clockwiseDir = piece.clockwise ? 1 : -1;
-      const rz =
-        piece.spinPhase +
-        clockwiseDir * piece.spinRate * t +
-        piece.bankAmplitude * Math.sin(2 * theta);
+      const rz = piece.spinPhase + clockwiseDir * piece.spinRate * t;
 
-      // Scale from tumble (narrowing when edge-on)
-      const oscillatingScale = Math.cos(theta);
+      // --- Scale from tumble ---
+      // Clamp so edge-on pieces stay visible (uniform scale shrinks both axes)
+      const rawCos = Math.cos(tumbleTheta);
+      const absClamped = Math.max(Math.abs(rawCos), 0.9);
+      // For textured pieces (image/SVG), skip the sign flip to avoid mirroring.
+      const oscillatingScale = hasTexture
+        ? absClamped
+        : (rawCos >= 0 ? 1 : -1) * absClamped;
       const appearScale = interpolate(
-        progress.get(),
+        p,
         [0, 0.05],
         [initialScale, 1],
         Extrapolation.CLAMP
       );
       const scale = appearScale * oscillatingScale * piece.depthScale;
 
+      // --- RSXform ---
       const size = sizeVariations[piece.sizeIndex]!;
       const px = size.width / 2;
       const py = size.height / 2;
-
       const s = Math.sin(rz) * scale;
       const c = Math.cos(rz) * scale;
-
       val.set(c, s, tx - c * px + s * py, ty - s * px - c * py);
     });
 

@@ -40,6 +40,17 @@ export type RandomOffset = {
   y?: Range;
 };
 
+export type FallingBox = {
+  spawnX: number;
+  spawnY: number;
+  depthScale: number;
+  clockwise: boolean;
+  colorIndex: number;
+  sizeIndex: number;
+  spinPhase: number;
+  spinRate: number;
+};
+
 type BaseConfettiProps = {
   /**
    * @description number of confetti pieces to render.
@@ -205,6 +216,13 @@ type ConfettiBaseProps = {
    * @default { min: 0.03, max: 0.08 }
    */
   flutter?: Range;
+  /**
+   * @description Controls how much confetti pieces drift horizontally as they fall.
+   * 0 means pieces fall straight down from their spawn column.
+   * 1 means full physics-driven lateral displacement.
+   * @default 0.5
+   */
+  drift?: number;
   /**
    * @description Whether the animation should play on mount.
    * @default true

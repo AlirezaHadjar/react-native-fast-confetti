@@ -13,12 +13,13 @@ import {
   DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX,
   DEFAULT_CONFETTI_DEPTH,
   DEFAULT_CONFETTI_FLUTTER,
-  CONFETTI_INTERNAL_DRAG,
-  CONFETTI_HORIZONTAL_COUPLING,
-  DEFAULT_CONFETTI_INITIAL_VY,
+  TRAJECTORY_SAMPLE_COUNT,
+  DEFAULT_TANGENTIAL_DRAG_RATIO,
+  DEFAULT_ROTATIONAL_DAMPING,
 } from './constants';
+import { integrateTrajectory } from './physics';
 import { Extrapolation, interpolate } from 'react-native-reanimated';
-import type { NamedPosition, Position, RandomOffset, Range, Rotation } from './types';
+import type { FallingBox, NamedPosition, Position, RandomOffset, Range, Rotation } from './types';
 
 export const getRandomBoolean = () => {
   'worklet';
@@ -379,8 +380,14 @@ export const estimateFallingDuration = ({
   verticalOffset: number;
   maxFlutter?: number;
 }): number => {
+  // Angle-averaged terminal velocity: as the piece tumbles, drag varies between
+  // Cn (broadside) and Ct (edge-on). The time-averaged effective drag coefficient
+  // is (Cn + Ct) * 4/(3π), giving a faster average fall than broadside-only.
   const scaledGravity = gravity * containerHeight;
-  const terminalVelocity = scaledGravity / CONFETTI_INTERNAL_DRAG;
+  const Cn = 4.0 / scaledGravity;
+  const Ct = Cn * DEFAULT_TANGENTIAL_DRAG_RATIO;
+  const angleAvgDrag = (Cn + Ct) * (4 / (3 * Math.PI));
+  const terminalVelocity = Math.sqrt(scaledGravity / angleAvgDrag);
   const totalFallDistance = containerHeight + Math.abs(verticalOffset);
   const timeSec = totalFallDistance / terminalVelocity;
   const flutterMargin = 1.1 + (maxFlutter ?? 1.5) * 0.2;
@@ -404,6 +411,7 @@ export const generateFallingBoxesArray = ({
   flutter,
   totalTime,
   gravity,
+  infinite,
 }: {
   count: number;
   colorsVariations: number;
@@ -421,6 +429,7 @@ export const generateFallingBoxesArray = ({
   flutter?: Range;
   totalTime: number;
   gravity: number;
+  infinite?: boolean;
 }) => {
   'worklet';
 
@@ -428,15 +437,27 @@ export const generateFallingBoxesArray = ({
   const zRotationRange = resolveRange(rotation?.z, DEFAULT_CONFETTI_ROTATION.z);
   const depthRange = resolveRange(depth, DEFAULT_CONFETTI_DEPTH);
   const flutterRange = resolveRange(flutter, DEFAULT_CONFETTI_FLUTTER);
-  const vyRange = resolveRange(undefined, DEFAULT_CONFETTI_INITIAL_VY);
 
-  const V_term = (gravity * containerHeight) / CONFETTI_INTERNAL_DRAG;
+  const scaledGravity = gravity * containerHeight;
+  const Cn = 4.0 / scaledGravity;
+  const Ct = Cn * DEFAULT_TANGENTIAL_DRAG_RATIO;
+
+  // Approximate terminal velocity for angle-averaged tumbling plate
+  const CAvg = (Cn + Ct) * 4 / (3 * Math.PI);
+  const vTermApprox = Math.sqrt(scaledGravity / CAvg);
 
   const columnWidth =
     Math.min(maxFlakeWidth, 20) +
     Math.max(0, containerWidth / count - maxFlakeWidth);
 
-  return new Array(count).fill(0).map((_, i) => {
+  const rowHeight = Math.min(maxFlakeHeight, 20) + verticalSpacing;
+
+  const samplesPerPiece = TRAJECTORY_SAMPLE_COUNT;
+  const stridePerPiece = (samplesPerPiece + 1) * 3;
+  const trajectories: number[] = new Array(count * stridePerPiece);
+  const boxes: FallingBox[] = new Array(count);
+
+  for (let i = 0; i < count; i++) {
     // Grid position (same layout logic as before)
     const rowIndex = Math.floor(i / columnsNum);
     const isLastRow = rowIndex === rowsNum - 1;
@@ -455,37 +476,64 @@ export const generateFallingBoxesArray = ({
       spawnX = (i % columnsNum) * columnWidth;
     }
 
-    const rowHeight = Math.min(maxFlakeHeight, 20) + verticalSpacing;
     const yJitter = getRandomValue(-verticalSpacing / 2, verticalSpacing / 2);
     const spawnY = rowIndex * rowHeight + verticalOffset + yJitter;
 
-    const maxRotationX = getRandomValue(xRotationRange.min, xRotationRange.max);
-    const maxRotationZ = getRandomValue(zRotationRange.min, zRotationRange.max);
-    const tumbleRate = Math.max(maxRotationX / totalTime, 0.1);
-    // Slow background spin (rotation.z drives it, but damped 10×)
-    const spinRate = maxRotationZ / totalTime;
-    const flutterStr = getRandomValue(flutterRange.min, flutterRange.max);
-    const flutterAmplitude = V_term * flutterStr / (2 * tumbleRate);
-    const driftAmplitude = flutterAmplitude * CONFETTI_HORIZONTAL_COUPLING;
-    // Banking angle: piece tilts in the direction of lateral drift
-    const bankAmplitude = getRandomValue(Math.PI / 6, Math.PI / 3);
+    const depthScale = getRandomValue(depthRange.min, depthRange.max);
+    const clockwise = getRandomBoolean();
+    const spinRate = getRandomValue(zRotationRange.min, zRotationRange.max) / totalTime;
 
-    return {
+    // ODE parameters per piece (depth only affects visual size, not physics)
+    const effectiveGravity = scaledGravity;
+    // Scale flutter into coupling strength — modulates tumble speed
+    const Ccouple = (getRandomValue(flutterRange.min, flutterRange.max) * 5) / scaledGravity;
+    const Crot = DEFAULT_ROTATIONAL_DAMPING;
+    // Minimum tumbleRate so tumbleBias always dominates coupling torque.
+    // Stall condition: tumbleBias < Ccouple * vn * vt (peak at ~v_term²)
+    // tumbleBias = Crot * tumbleRate² → tumbleRate > sqrt(Ccouple * vTerm² / (2 * Crot))
+    // 1.2x safety margin ensures robust tumbling even at peak coupling.
+    const minTumbleRate = Math.sqrt(
+      (Ccouple * vTermApprox * vTermApprox) / (2 * Crot)
+    ) * 1.2;
+    const tumbleRate = Math.max(
+      getRandomValue(xRotationRange.min, xRotationRange.max) / totalTime,
+      minTumbleRate
+    );
+    // Randomize tumble direction so lateral drift is balanced (half left, half right)
+    const tumbleDir = clockwise ? 1 : -1;
+    // Constant torque bias: ensures continuous tumbling (prevents settling at edge-on).
+    // At equilibrium: tumbleBias = Crot * omega², so omega_eq = tumbleRate.
+    const tumbleBias = tumbleDir * tumbleRate * tumbleRate * Crot;
+
+    // In infinite/continuous mode, start at terminal velocity so successive
+    // cycles match the outgoing batch's speed with no visible seam.
+    const initialVy = infinite
+      ? vTermApprox * getRandomValue(0.95, 1.05)
+      : getRandomValue(0, 0.15) * scaledGravity;
+
+    // Integrate ODE trajectory — writes directly into the shared flat array
+    integrateTrajectory(
+      spawnX, spawnY, 0, initialVy,
+      getRandomValue(0, 2 * Math.PI),
+      tumbleDir * tumbleRate,
+      { Cn, Ct, Ccouple, Crot, tumbleBias, g: effectiveGravity },
+      totalTime,
+      samplesPerPiece,
+      trajectories,
+      i * stridePerPiece
+    );
+
+    boxes[i] = {
       spawnX,
       spawnY,
-      initialVy: getRandomValue(vyRange.min, vyRange.max) * containerHeight,
-      tumbleRate,
-      tumblePhase: getRandomValue(0, 2 * Math.PI),
-      spinRate,
-      spinPhase: getRandomValue(0, 2 * Math.PI),
-      driftAmplitude,
-      flutterAmplitude,
-      bankAmplitude,
-      lateralDrift: getRandomValue(-10, 10),
-      depthScale: getRandomValue(depthRange.min, depthRange.max),
-      clockwise: getRandomBoolean(),
+      depthScale,
+      clockwise,
       colorIndex: Math.round(getRandomValue(0, colorsVariations - 1)),
       sizeIndex: Math.round(getRandomValue(0, sizeVariations - 1)),
+      spinPhase: getRandomValue(0, 2 * Math.PI),
+      spinRate,
     };
-  });
+  }
+
+  return { boxes, trajectories };
 };
