@@ -49,6 +49,7 @@ export type FallingBox = {
   sizeIndex: number;
   spinPhase: number;
   spinRate: number;
+  phaseOffset: number;
 };
 
 type BaseConfettiProps = {
@@ -309,7 +310,8 @@ export type ConfettiProps = ConfettiBaseProps &
   );
 
 export type InternalConfettiProps = ConfettiProps & {
-  phaseOffset?: number;
+  /** When true, uses per-piece phase offsets for a seamless continuous stream. */
+  continuous?: boolean;
 };
 
 type PIBaseProps = StrictOmit<
@@ -342,19 +344,7 @@ export type PIConfettiProps = PIBaseProps &
     rotation?: Rotation;
   };
 
-type BaseContinuousConfettiProps = StrictOmit<
-  BaseConfettiProps,
-  'isInfinite' | 'verticalSpacing'
->;
-
-export type ContinuousConfettiProps = BaseContinuousConfettiProps &
-  TextureProps & {
-    /**
-     * @description The approximate space between confetti flakes vertically. It's recommended to set some large value e.g. 200
-     * @default 200
-     */
-    verticalSpacing?: number;
-  };
+export type ContinuousConfettiProps = StrictOmit<ConfettiProps, 'infinite'>;
 
 export type ConfettiRestartOptions = {};
 

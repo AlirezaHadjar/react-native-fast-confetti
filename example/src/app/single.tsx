@@ -4,7 +4,7 @@ import { Confetti } from 'react-native-fast-confetti';
 import type { ConfettiMethods } from 'react-native-fast-confetti';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
 import { useScreenConfig } from '../hooks/useScreenConfig';
-import { getRotation } from '../utils/confettiConfig';
+import { getNewTextureProps, getRotation } from '../utils/confettiConfig';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { textureOptions, verticalSpacingOptions } from '../constants/config';
@@ -19,12 +19,11 @@ export default function SingleScreen() {
   const rotation = getRotation(config.textureType, 'single');
   const confettiKey = `single-${config.textureType}-${config.verticalSpacing}`;
 
-  const textureProps =
-    config.textureType === 'money'
-      ? { image: moneyStackImage! }
-      : config.textureType === 'snowflake'
-        ? { svg: snowFlakeSVG! }
-        : {};
+  const textureProps = getNewTextureProps(
+    config.textureType,
+    moneyStackImage!,
+    snowFlakeSVG!
+  );
 
   const renderFlakes = () => {
     if (config.textureType === 'money') {

@@ -2,6 +2,21 @@ import type { SkImage, SkSVG } from '@shopify/react-native-skia';
 import type { LegacyConfettiProps } from 'react-native-fast-confetti';
 import type { TextureType, RadiusType } from '../constants/config';
 
+export function getNewTextureProps(
+  textureType: TextureType,
+  moneyStackImage: SkImage,
+  snowFlakeSVG: SkSVG
+): { image: SkImage } | { svg: SkSVG } | Record<string, never> {
+  switch (textureType) {
+    case 'money':
+      return { image: moneyStackImage };
+    case 'snowflake':
+      return { svg: snowFlakeSVG };
+    default:
+      return {};
+  }
+}
+
 export function getTextureProps(
   textureType: TextureType,
   moneyStackImage: SkImage,

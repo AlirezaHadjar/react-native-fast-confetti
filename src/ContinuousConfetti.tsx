@@ -1,57 +1,36 @@
+import { forwardRef } from 'react';
 import { InternalConfetti } from './Confetti';
-import type { ConfettiMethods, ContinuousConfettiProps } from './types';
-import { useRef, useImperativeHandle, forwardRef } from 'react';
+import { Flake } from './FlakeComponent';
+import type {
+  ConfettiMethods,
+  ContinuousConfettiProps,
+  InternalConfettiProps,
+} from './types';
 
-/**
- * ContinuousConfetti: Uses two staggered Confetti instances to create
- * an uninterrupted stream of confetti. Will be migrated to the new
- * physics-based API in a future update.
- */
-export const ContinuousConfetti = forwardRef<
+// ContinuousConfettiProps is ConfettiProps minus `infinite`.
+// The discriminated union (image | svg | neither) is structurally identical,
+// but TS can't resolve spreading one union into another directly.
+const ContinuousConfettiInner = forwardRef<
   ConfettiMethods,
   ContinuousConfettiProps
->((props, ref) => {
-  const confettiRef1 = useRef<ConfettiMethods>(null);
-  const confettiRef2 = useRef<ConfettiMethods>(null);
+>(({ verticalSpacing = 200, ...props }, ref) => (
+  <InternalConfetti
+    {...(props as InternalConfettiProps)}
+    ref={ref}
+    verticalSpacing={verticalSpacing}
+    infinite
+    continuous
+  />
+));
 
-  useImperativeHandle(ref, () => ({
-    restart: () => {
-      confettiRef1.current?.restart();
-      confettiRef2.current?.restart();
-    },
-    pause: () => {
-      confettiRef1.current?.pause();
-      confettiRef2.current?.pause();
-    },
-    reset: () => {
-      confettiRef1.current?.reset();
-      confettiRef2.current?.reset();
-    },
-    resume: () => {
-      confettiRef1.current?.resume();
-      confettiRef2.current?.resume();
-    },
-  }));
+ContinuousConfettiInner.displayName = 'ContinuousConfetti';
 
-  // Note: ContinuousConfetti currently does not produce a seamless
-  // stream with the physics-based engine. It runs two infinite instances
-  // side-by-side as a temporary measure. A proper continuous mode will
-  // be implemented in a follow-up.
-  return (
-    <>
-      <InternalConfetti
-        {...(props as any)}
-        ref={confettiRef1}
-        infinite
-      />
-      <InternalConfetti
-        {...(props as any)}
-        ref={confettiRef2}
-        infinite
-        phaseOffset={0.5}
-      />
-    </>
-  );
-});
+const ContinuousConfetti = ContinuousConfettiInner as React.ForwardRefExoticComponent<
+  ContinuousConfettiProps & React.RefAttributes<ConfettiMethods>
+> & {
+  Flake: typeof Flake;
+};
 
-ContinuousConfetti.displayName = 'ContinuousConfetti';
+ContinuousConfetti.Flake = Flake;
+
+export { ContinuousConfetti };

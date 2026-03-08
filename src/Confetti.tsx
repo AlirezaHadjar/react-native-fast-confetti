@@ -16,7 +16,6 @@ import {
   useDerivedValue,
   useSharedValue,
   withTiming,
-  withDelay,
   Easing,
 } from 'react-native-reanimated';
 import { generateFallingBoxesArray, estimateFallingDuration } from './utils';
@@ -51,6 +50,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       drift = DEFAULT_CONFETTI_DRIFT,
       autoplay = true,
       infinite = false,
+      continuous = false,
       fadeOutOnEnd = false,
       onAnimationEnd,
       onAnimationStart,
@@ -62,7 +62,6 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       verticalSpacing = DEFAULT_VERTICAL_SPACING,
       flakeStyle = 'solid',
       initialScale = 0.3,
-      phaseOffset = 0,
       ...textureRootProps
     },
     ref
@@ -127,6 +126,9 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
 
     const progress = useSharedValue(0);
     const running = useSharedValue(false);
+    // Tracks how many full cycles have completed so we can compute
+    // monotonic elapsed time: totalElapsed = cycleCount + progress.
+    const cycleCount = useSharedValue(0);
 
     const opacity = useDerivedValue(() => {
       if (!fadeOutOnEnd) return 1;
@@ -155,6 +157,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       'worklet';
       pause();
       progress.set(0);
+      cycleCount.set(0);
     };
 
     const refreshBoxes = useCallback(() => {
@@ -177,6 +180,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
         totalTime,
         gravity,
         infinite,
+        continuous,
       });
       boxes.set(result.boxes);
       trajectories.set(result.trajectories);
@@ -200,6 +204,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       totalTime,
       gravity,
       infinite,
+      continuous,
     ]);
 
     const JSOnStart = useCallback(
@@ -224,12 +229,14 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
 
         refreshBoxes();
         progress.set(0);
+        cycleCount.set(0);
         running.set(true);
         UIOnStart();
 
         function repeatAnimation() {
           'worklet';
           UIOnEnd();
+          cycleCount.set(cycleCount.get() + 1);
           if (infinite) {
             cancelAnimation(progress);
             progress.set(0);
@@ -243,34 +250,30 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
           }
         }
 
-        const initialAnimation = withTiming(
-          1,
-          { duration, easing: Easing.linear },
-          (finished) => {
-            'worklet';
-            if (!finished || !infinite) {
-              if (finished) UIOnEnd();
-              return;
-            }
-            repeatAnimation();
-          }
-        );
-        const startDelay = Math.round(phaseOffset * duration);
         progress.set(
-          startDelay > 0
-            ? withDelay(startDelay, initialAnimation)
-            : initialAnimation
+          withTiming(
+            1,
+            { duration, easing: Easing.linear },
+            (finished) => {
+              'worklet';
+              if (!finished || !infinite) {
+                if (finished) UIOnEnd();
+                return;
+              }
+              repeatAnimation();
+            }
+          )
         );
       },
       [
         refreshBoxes,
         progress,
         running,
+        cycleCount,
         UIOnStart,
         UIOnEnd,
         infinite,
         duration,
-        phaseOffset,
       ]
     );
 
@@ -332,7 +335,21 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       const piece = boxes.get()[i];
       if (!piece) return;
 
-      const p = progress.get();
+      const globalP = progress.get();
+
+      // In continuous mode, compute each piece's local progress from
+      // monotonic elapsed time. Pieces start their trajectory (p=0, at
+      // spawn position above viewport) only once elapsed >= phaseOffset.
+      let p: number;
+      if (continuous) {
+        const elapsed = cycleCount.get() + globalP;
+        const pieceElapsed = elapsed - piece.phaseOffset;
+        // Before this piece's spawn time, pin to p=0 (spawn position,
+        // above the viewport). It sits there invisibly until its turn.
+        p = pieceElapsed <= 0 ? 0 : pieceElapsed % 1.0;
+      } else {
+        p = globalP;
+      }
       const t = p * totalTime;
 
       // --- Trajectory lookup ---
@@ -361,12 +378,16 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       const oscillatingScale = hasTexture
         ? absClamped
         : (rawCos >= 0 ? 1 : -1) * absClamped;
-      const appearScale = interpolate(
-        p,
-        [0, 0.05],
-        [initialScale, 1],
-        Extrapolation.CLAMP
-      );
+      // In continuous mode, skip appear scale — pieces start at terminal velocity.
+      // In single/infinite mode, scale in over the first 5% of progress.
+      const appearScale = continuous
+        ? 1
+        : interpolate(
+            p,
+            [0, 0.05],
+            [initialScale, 1],
+            Extrapolation.CLAMP
+          );
       const scale = appearScale * oscillatingScale * piece.depthScale;
 
       // --- RSXform ---

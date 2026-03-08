@@ -412,6 +412,7 @@ export const generateFallingBoxesArray = ({
   totalTime,
   gravity,
   infinite,
+  continuous,
 }: {
   count: number;
   colorsVariations: number;
@@ -430,6 +431,7 @@ export const generateFallingBoxesArray = ({
   totalTime: number;
   gravity: number;
   infinite?: boolean;
+  continuous?: boolean;
 }) => {
   'worklet';
 
@@ -456,6 +458,22 @@ export const generateFallingBoxesArray = ({
   const stridePerPiece = (samplesPerPiece + 1) * 3;
   const trajectories: number[] = new Array(count * stridePerPiece);
   const boxes: FallingBox[] = new Array(count);
+
+  // Pre-compute stratified phase offsets and shuffle (Fisher-Yates) to
+  // break the correlation between grid index and temporal phase.
+  // Without this, sequential grid positions get sequential offsets → diagonal banding.
+  const phaseOffsets: number[] = new Array(count);
+  if (continuous) {
+    for (let i = 0; i < count; i++) {
+      phaseOffsets[i] = (i + Math.random()) / count;
+    }
+    for (let i = count - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = phaseOffsets[i]!;
+      phaseOffsets[i] = phaseOffsets[j]!;
+      phaseOffsets[j] = tmp;
+    }
+  }
 
   for (let i = 0; i < count; i++) {
     // Grid position (same layout logic as before)
@@ -532,6 +550,7 @@ export const generateFallingBoxesArray = ({
       sizeIndex: Math.round(getRandomValue(0, sizeVariations - 1)),
       spinPhase: getRandomValue(0, 2 * Math.PI),
       spinRate,
+      phaseOffset: continuous ? phaseOffsets[i]! : 0,
     };
   }
 
