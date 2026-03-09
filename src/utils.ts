@@ -1,12 +1,9 @@
-import { vec, type SkImage, type SkSVG } from '@shopify/react-native-skia';
+import { type SkImage, type SkSVG } from '@shopify/react-native-skia';
 import {
   RANDOM_INITIAL_Y_JIGGLE,
   DEFAULT_CONFETTI_ROTATION,
-  DEFAULT_PICONFETTI_ROTATION,
   DEFAULT_CONFETTI_RANDOM_SPEED,
   DEFAULT_CONFETTI_RANDOM_OFFSET,
-  DEFAULT_PICONFETTI_RANDOM_OFFSET,
-  DEFAULT_PICONFETTI_RANDOM_SPEED,
   DEFAULT_CANNON_CONFETTI_ROTATION,
   DEFAULT_CANNON_CONFETTI_SPEED_VARIATION,
   DEFAULT_CANNON_CONFETTI_DEPTH,
@@ -16,6 +13,10 @@ import {
   TRAJECTORY_SAMPLE_COUNT,
   DEFAULT_TANGENTIAL_DRAG_RATIO,
   DEFAULT_ROTATIONAL_DAMPING,
+  DEFAULT_PI_CONFETTI_ROTATION,
+  DEFAULT_PI_CONFETTI_SPEED_VARIATION,
+  DEFAULT_PI_CONFETTI_DEPTH,
+  DEFAULT_PI_CONFETTI_LAUNCH_DELAY_MAX,
 } from './constants';
 import { integrateTrajectory } from './physics';
 import { Extrapolation, interpolate } from 'react-native-reanimated';
@@ -137,70 +138,120 @@ export const generatePIBoxesArray = ({
   count,
   colorsVariations,
   sizeVariations,
+  spread,
   rotation,
-  randomSpeed,
-  randomOffset,
+  speedVariation,
+  depth,
+  launchDelayMax,
 }: {
   count: number;
   colorsVariations: number;
   sizeVariations: number;
+  spread: number;
   rotation?: Rotation;
-  randomSpeed?: Range;
-  randomOffset?: RandomOffset;
+  speedVariation?: Range;
+  depth?: Range;
+  launchDelayMax: number;
 }) => {
   'worklet';
 
-  rotation = rotation ?? DEFAULT_PICONFETTI_ROTATION;
-  randomSpeed = randomSpeed ?? DEFAULT_PICONFETTI_RANDOM_SPEED;
-  randomOffset = randomOffset ?? DEFAULT_PICONFETTI_RANDOM_OFFSET;
-
   const xRotationRange = resolveRange(
-    rotation.x,
-    DEFAULT_PICONFETTI_ROTATION.x
+    rotation?.x,
+    DEFAULT_PI_CONFETTI_ROTATION.x
   );
   const zRotationRange = resolveRange(
-    rotation.z,
-    DEFAULT_PICONFETTI_ROTATION.z
+    rotation?.z,
+    DEFAULT_PI_CONFETTI_ROTATION.z
   );
-  const randomSpeedRange = resolveRange(
-    randomSpeed,
-    DEFAULT_PICONFETTI_RANDOM_SPEED
+  const speedRange = resolveRange(
+    speedVariation,
+    DEFAULT_PI_CONFETTI_SPEED_VARIATION
   );
-  const randomXOffsetRange = resolveRange(
-    randomOffset.x,
-    DEFAULT_PICONFETTI_RANDOM_OFFSET.x
-  );
-  const randomYOffsetRange = resolveRange(
-    randomOffset.y,
-    DEFAULT_PICONFETTI_RANDOM_OFFSET.y
-  );
+  const depthRange = resolveRange(depth, DEFAULT_PI_CONFETTI_DEPTH);
 
-  return new Array(count).fill(0).map(() => ({
-    clockwise: getRandomBoolean(),
-    maxRotation: {
-      x: getRandomValue(xRotationRange.min, xRotationRange.max),
-      z: getRandomValue(zRotationRange.min, zRotationRange.max),
-    },
-    colorIndex: Math.round(getRandomValue(0, colorsVariations - 1)),
-    sizeIndex: Math.round(getRandomValue(0, sizeVariations - 1)),
-    randomXs: randomXArray(6, -5, 5), // Array of randomX values for horizontal movement
-    initialRandomY: getRandomValue(
-      -RANDOM_INITIAL_Y_JIGGLE,
-      RANDOM_INITIAL_Y_JIGGLE
-    ),
-    initialRotation: getRandomValue(0.1 * Math.PI, Math.PI),
-    randomSpeed: getRandomValue(randomSpeedRange.min, randomSpeedRange.max), // Random speed multiplier
-    randomOffsetX: getRandomValue(
-      randomXOffsetRange.min,
-      randomXOffsetRange.max
-    ), // Random X offset for initial position
-    randomOffsetY: getRandomValue(
-      randomYOffsetRange.min,
-      randomYOffsetRange.max
-    ), // Random X offset for initial position
-    delayBlast: getRandomValue(0, 0.6), // Random velocity multiplier
-    randomAcceleration: vec(getRandomValue(0.1, 0.3), getRandomValue(0.1, 0.3)), // Random acceleration multiplier
-  }));
+  const halfSpread = spread / 2;
+  // Center the spread around "upward" (-PI/2)
+  const baseAngle = -Math.PI / 2;
+
+  return new Array(count).fill(0).map((_, i) => {
+    // Golden angle distribution mapped to spread range
+    const goldenAngle =
+      baseAngle + ((((i * 137.5) % 360) * Math.PI) / 180 - Math.PI) * (halfSpread / Math.PI);
+
+    return {
+      angle: goldenAngle,
+      speedMultiplier: getRandomValue(speedRange.min, speedRange.max),
+      launchDelay: getRandomValue(0, launchDelayMax),
+      depthScale: getRandomValue(depthRange.min, depthRange.max),
+      clockwise: getRandomBoolean(),
+      maxRotation: {
+        x: getRandomValue(xRotationRange.min, xRotationRange.max),
+        z: getRandomValue(zRotationRange.min, zRotationRange.max),
+      },
+      colorIndex: Math.round(getRandomValue(0, colorsVariations - 1)),
+      sizeIndex: Math.round(getRandomValue(0, sizeVariations - 1)),
+      initialRotation: getRandomValue(0.1 * Math.PI, Math.PI),
+    };
+  });
+};
+
+export const estimatePIDuration = ({
+  initialSpeed,
+  gravity,
+  drag,
+  depth,
+  speedVariation,
+  sprayDurationMs,
+  containerHeight,
+  blastY,
+}: {
+  initialSpeed: number;
+  gravity: number;
+  drag: number;
+  depth?: Range;
+  speedVariation?: Range;
+  sprayDurationMs?: number;
+  containerHeight: number;
+  blastY: number;
+}): number => {
+  // Terminal velocity under drag: v_term = g/drag (in normalized units)
+  // Time for the slowest piece (launched straight up at max speed) to:
+  //   1. Decelerate to zero  2. Fall back to launch height  3. Continue falling to screen bottom
+  const scaledGravity = gravity * containerHeight;
+  const terminalVelocity = scaledGravity / drag;
+
+  // Worst-case: piece launched straight up at max speed
+  const depthMax = depth?.max ?? DEFAULT_PI_CONFETTI_DEPTH.max;
+  const maxSpeedVar =
+    speedVariation?.max ?? DEFAULT_PI_CONFETTI_SPEED_VARIATION.max;
+  const maxSpeed = initialSpeed * maxSpeedVar * depthMax * containerHeight;
+
+  // Time to reach apex (velocity = 0) for upward launch: v(t) = (vy - g/drag) * e^(-drag*t) + g/drag = 0
+  // For upward launch, vy is negative (upward), so time to apex:
+  const vy = -maxSpeed; // upward
+  const apexTime = Math.log(1 - vy * drag / scaledGravity) / drag;
+
+  // Height at apex: y(t) = blastY + (g/drag)*t + ((vy - g/drag)/drag) * (1 - e^(-drag*t))
+  const expAtApex = 1 - Math.exp(-drag * apexTime);
+  const apexY =
+    blastY +
+    (scaledGravity / drag) * apexTime +
+    ((vy - scaledGravity / drag) / drag) * expAtApex;
+
+  // Remaining fall distance from apex to bottom of screen
+  const remainingFall = containerHeight - apexY;
+
+  // Time to fall remaining distance at ~terminal velocity (conservative)
+  const fallTime = remainingFall > 0 ? remainingFall / terminalVelocity : 0;
+
+  const totalTimeSec = (apexTime + fallTime) * 1.2; // 20% safety margin
+
+  if (sprayDurationMs !== undefined) {
+    return Math.ceil(totalTimeSec * 1000 + sprayDurationMs);
+  }
+  return Math.ceil(
+    (totalTimeSec * 1000) / (1 - DEFAULT_PI_CONFETTI_LAUNCH_DELAY_MAX)
+  );
 };
 
 export const createTextureProps = <T extends 'svg' | 'image'>(

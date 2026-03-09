@@ -15,8 +15,6 @@ export const DEFAULT_FLAKE_SIZE: FlakeSize[] = [
 
 export const DEFAULT_FALL_DURATION = 8000;
 
-export const DEFAULT_BLAST_DURATION = 300;
-
 export const DEFAULT_COLORS = [
   '#FF5733',
   '#33FF57',
@@ -36,8 +34,6 @@ export const DEFAULT_VERTICAL_SPACING = 30;
 
 export const RANDOM_INITIAL_Y_JIGGLE = 20;
 
-export const DEFAULT_BLAST_RADIUS = 180;
-
 /**
  * Default rotation configuration for regular Confetti component.
  * Provides separate X and Z rotation ranges for more flexible animation control.
@@ -53,27 +49,7 @@ export const DEFAULT_CONFETTI_ROTATION: DeepRequired<Rotation> = {
   },
 };
 
-/**
- * Default rotation configuration for PIConfetti component.
- * Provides separate X and Z rotation ranges for more flexible animation control.
- */
-export const DEFAULT_PICONFETTI_ROTATION: DeepRequired<Rotation> = {
-  x: {
-    min: 1 * Math.PI,
-    max: 3 * Math.PI,
-  },
-  z: {
-    min: 1 * Math.PI,
-    max: 3 * Math.PI,
-  },
-};
-
 export const DEFAULT_CONFETTI_RANDOM_SPEED: Required<Range> = {
-  min: 0.9,
-  max: 1.3,
-};
-
-export const DEFAULT_PICONFETTI_RANDOM_SPEED: Required<Range> = {
   min: 0.9,
   max: 1.3,
 };
@@ -81,11 +57,6 @@ export const DEFAULT_PICONFETTI_RANDOM_SPEED: Required<Range> = {
 export const DEFAULT_CONFETTI_RANDOM_OFFSET: DeepRequired<RandomOffset> = {
   x: { min: -10, max: 10 },
   y: { min: -10, max: 10 },
-};
-
-export const DEFAULT_PICONFETTI_RANDOM_OFFSET: DeepRequired<RandomOffset> = {
-  x: { min: -50, max: 50 },
-  y: { min: 0, max: 150 },
 };
 
 export const CONTINUOUS_CONFETTI_RANDOM_SPEED: DeepRequired<Range> = {
@@ -131,6 +102,30 @@ export const DEFAULT_CANNON_CONFETTI_DEPTH: Required<Range> = {
 };
 
 export const DEFAULT_CANNON_CONFETTI_ROTATION: DeepRequired<Rotation> = {
+  x: {
+    min: 2 * Math.PI,
+    max: 10 * Math.PI,
+  },
+  z: {
+    min: 2 * Math.PI,
+    max: 10 * Math.PI,
+  },
+};
+
+export const DEFAULT_PI_CONFETTI_GRAVITY = 3.0;
+export const DEFAULT_PI_CONFETTI_DRAG = 3.0;
+export const DEFAULT_PI_CONFETTI_INITIAL_SPEED = 1.0;
+export const DEFAULT_PI_CONFETTI_SPREAD = 2 * Math.PI;
+export const DEFAULT_PI_CONFETTI_SPEED_VARIATION: Required<Range> = {
+  min: 0.0,
+  max: 1.0,
+};
+export const DEFAULT_PI_CONFETTI_LAUNCH_DELAY_MAX = 0.15;
+export const DEFAULT_PI_CONFETTI_DEPTH: Required<Range> = {
+  min: 1,
+  max: 1.1,
+};
+export const DEFAULT_PI_CONFETTI_ROTATION: DeepRequired<Rotation> = {
   x: {
     min: 2 * Math.PI,
     max: 10 * Math.PI,

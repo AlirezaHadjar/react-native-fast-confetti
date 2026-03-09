@@ -1,5 +1,11 @@
 import { useRSXformBuffer, Canvas, Atlas } from '@shopify/react-native-skia';
-import { useImperativeHandle, forwardRef, useCallback, useMemo } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  forwardRef,
+  useMemo,
+} from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import {
   cancelAnimation,
@@ -10,15 +16,20 @@ import {
   useDerivedValue,
   useSharedValue,
   withTiming,
+  Easing,
 } from 'react-native-reanimated';
-import { generatePIBoxesArray } from './utils';
 import {
-  DEFAULT_BLAST_DURATION,
-  DEFAULT_BLAST_RADIUS,
+  generatePIBoxesArray,
+  resolveNamedPosition,
+  estimatePIDuration,
+} from './utils';
+import {
   DEFAULT_BOXES_COUNT,
-  DEFAULT_COLORS,
-  DEFAULT_FALL_DURATION,
-  DEFAULT_FLAKE_SIZE,
+  DEFAULT_PI_CONFETTI_GRAVITY,
+  DEFAULT_PI_CONFETTI_DRAG,
+  DEFAULT_PI_CONFETTI_INITIAL_SPEED,
+  DEFAULT_PI_CONFETTI_SPREAD,
+  DEFAULT_PI_CONFETTI_LAUNCH_DELAY_MAX,
 } from './constants';
 import type {
   PIConfettiMethods,
@@ -27,111 +38,167 @@ import type {
   Position,
 } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
-import { useVariations } from './hooks/sizeVariations';
+import { useConfettiFlakes } from './hooks/useConfettiFlakes';
+import { Flake } from './FlakeComponent';
 
-const PIConfetti = forwardRef<PIConfettiMethods, PIConfettiProps>(
+const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
   (
     {
+      children,
       count = DEFAULT_BOXES_COUNT,
-      flakeSize = DEFAULT_FLAKE_SIZE,
-      fallDuration = DEFAULT_FALL_DURATION,
-      blastDuration = DEFAULT_BLAST_DURATION,
-      rotation,
-      colors = DEFAULT_COLORS,
+      colors: rootColors,
+      gravity = DEFAULT_PI_CONFETTI_GRAVITY,
+      drag = DEFAULT_PI_CONFETTI_DRAG,
+      initialSpeed = DEFAULT_PI_CONFETTI_INITIAL_SPEED,
+      spread = DEFAULT_PI_CONFETTI_SPREAD,
+      speedVariation,
       blastPosition: _blastPosition,
+      autoplay = true,
+      infinite = false,
+      fadeOutOnEnd = false,
+      rotation,
+      depth,
+      flakeStyle = 'solid',
+      initialScale = 0.3,
+      sprayDuration,
       onAnimationEnd,
       onAnimationStart,
       width: _width,
       height: _height,
-      blastRadius = DEFAULT_BLAST_RADIUS,
-      fadeOutOnEnd = false,
       containerStyle,
-      ...flakeProps
+      ...textureRootProps
     },
     ref
   ) => {
-    const _radiusRange =
-      'radiusRange' in flakeProps ? flakeProps.radiusRange : undefined;
-    const blastProgress = useSharedValue(0);
-    const fallProgress = useSharedValue(0);
+    const { width: DEFAULT_SCREEN_WIDTH, height: DEFAULT_SCREEN_HEIGHT } =
+      useWindowDimensions();
+    const containerWidth = _width || DEFAULT_SCREEN_WIDTH;
+    const containerHeight = _height || DEFAULT_SCREEN_HEIGHT;
+
+    // --- Resolve texture from root props ---
+    const rootImage =
+      'image' in textureRootProps ? textureRootProps.image : undefined;
+    const rootSvg =
+      'svg' in textureRootProps ? textureRootProps.svg : undefined;
+    const textureProps = useMemo(() => {
+      if (rootImage) {
+        return { type: 'image' as const, content: rootImage };
+      }
+      if (rootSvg) {
+        return { type: 'svg' as const, content: rootSvg };
+      }
+      return undefined;
+    }, [rootImage, rootSvg]);
+
+    const hasTexture = textureProps !== undefined;
+
+    // --- Parse children for flake sizes ---
+    const { allColors, sizeVariations } = useConfettiFlakes({
+      children,
+      rootColors,
+      rootFlakeStyle: flakeStyle,
+      hasTexture,
+    });
+
+    // --- Resolve blast position ---
+    const defaultBlastPosition = useMemo(() => {
+      if (_blastPosition == null) {
+        return { x: containerWidth / 2, y: 150 };
+      }
+      if (typeof _blastPosition === 'object') {
+        return _blastPosition;
+      }
+      return resolveNamedPosition(_blastPosition, containerWidth, containerHeight);
+    }, [_blastPosition, containerWidth, containerHeight]);
+
+    // --- Auto-compute duration from physics ---
+    const duration = estimatePIDuration({
+      initialSpeed,
+      gravity,
+      drag,
+      depth,
+      speedVariation,
+      sprayDurationMs: sprayDuration,
+      containerHeight,
+      blastY: defaultBlastPosition.y,
+    });
+
+    // --- Compute launch delay max from sprayDuration ---
+    const launchDelayMax =
+      sprayDuration !== undefined
+        ? Math.min(sprayDuration / duration, 1)
+        : DEFAULT_PI_CONFETTI_LAUNCH_DELAY_MAX;
+
+    const dynamicBlastPosition = useSharedValue<Position | null>(null);
+    const progress = useSharedValue(0);
+    const running = useSharedValue(false);
+
     const opacity = useDerivedValue(() => {
       if (!fadeOutOnEnd) return 1;
       return interpolate(
-        fallProgress.get(),
-        [0, 1],
+        progress.get(),
+        [0.5, 0.9],
         [1, 0],
         Extrapolation.CLAMP
       );
     }, [fadeOutOnEnd]);
-    const running = useSharedValue(false);
 
-    const { width: DEFAULT_SCREEN_WIDTH, height: DEFAULT_SCREEN_HEIGHT } =
-      useWindowDimensions();
-    const containerWidth = _width || DEFAULT_SCREEN_WIDTH;
-    const containerHeight = _height || DEFAULT_SCREEN_HEIGHT + 100;
-    const defaultBlastPosition = useMemo(() => {
-      return (
-        _blastPosition || {
-          x: containerWidth / 2,
-          y: 150,
-        }
-      );
-    }, [_blastPosition, containerWidth]);
-
-    // Store dynamic blast position - can be overridden via restart method
-    const dynamicBlastPosition = useSharedValue<Position | null>(null);
-    const sizeVariations = useVariations({
-      flakeSize,
-      _radiusRange,
-    });
     const boxes = useSharedValue(
       generatePIBoxesArray({
         count,
-        colorsVariations: colors.length,
+        colorsVariations: allColors.length,
         sizeVariations: sizeVariations.length,
+        spread,
         rotation,
+        speedVariation,
+        depth,
+        launchDelayMax,
       })
     );
+
     const { texture, sprites } = useConfettiLogic({
       sizeVariations,
-      colors,
+      colors: allColors,
       boxes,
-      textureProps:
-        flakeProps.type === 'image' && flakeProps.flakeImage
-          ? { type: 'image', content: flakeProps.flakeImage }
-          : flakeProps.type === 'svg' && flakeProps.flakeSvg
-            ? { type: 'svg', content: flakeProps.flakeSvg }
-            : undefined,
+      textureProps,
     });
 
-    const pause = useCallback(() => {
+    const pause = () => {
       'worklet';
-
       running.set(false);
-      cancelAnimation(blastProgress);
-      cancelAnimation(fallProgress);
-    }, [blastProgress, fallProgress, running]);
+      cancelAnimation(progress);
+    };
 
-    const reset = useCallback(() => {
+    const reset = () => {
       'worklet';
-
       pause();
-
-      blastProgress.set(0);
-      fallProgress.set(0);
-    }, [blastProgress, fallProgress, pause]);
+      progress.set(0);
+    };
 
     const refreshBoxes = useCallback(() => {
       'worklet';
-
       const newBoxes = generatePIBoxesArray({
         count,
-        colorsVariations: colors.length,
+        colorsVariations: allColors.length,
         sizeVariations: sizeVariations.length,
+        spread,
         rotation,
+        speedVariation,
+        depth,
+        launchDelayMax,
       });
       boxes.set(newBoxes);
-    }, [count, colors.length, sizeVariations.length, rotation, boxes]);
+    }, [
+      count,
+      allColors.length,
+      sizeVariations.length,
+      spread,
+      rotation,
+      speedVariation,
+      depth,
+      launchDelayMax,
+      boxes,
+    ]);
 
     const JSOnStart = useCallback(
       () => onAnimationStart?.(),
@@ -139,163 +206,194 @@ const PIConfetti = forwardRef<PIConfettiMethods, PIConfettiProps>(
     );
     const JSOnEnd = useCallback(() => onAnimationEnd?.(), [onAnimationEnd]);
 
-    const runBlastAnimation = useCallback(
-      ({
-        blastDuration: _blastDuration,
-        fallDuration: _fallDuration,
-      }: {
-        blastDuration: number;
-        fallDuration: number;
-      }) => {
-        'worklet';
-        if (_blastDuration > 0)
-          blastProgress.set(withTiming(1, { duration: _blastDuration }));
-        else blastProgress.set(1);
-        if (_fallDuration > 0)
-          fallProgress.set(
-            withTiming(1, { duration: _fallDuration }, () => {
-              runOnJS(JSOnEnd)();
-            })
-          );
-        else fallProgress.set(1);
-      },
-      [JSOnEnd, blastProgress, fallProgress]
-    );
+    const UIOnStart = useCallback(() => {
+      'worklet';
+      runOnJS(JSOnStart)();
+    }, [JSOnStart]);
 
-    const restart = useCallback(
-      (options: PIConfettiRestartOptions = {}) => {
+    const UIOnEnd = useCallback(() => {
+      'worklet';
+      runOnJS(JSOnEnd)();
+    }, [JSOnEnd]);
+
+    const workletRestart = useCallback(
+      (resolvedPosition: Position | null) => {
         'worklet';
 
-        // Update dynamic blast position if provided
-        dynamicBlastPosition.set(options.blastPosition || null);
-
+        dynamicBlastPosition.set(resolvedPosition);
         refreshBoxes();
-        reset();
+        progress.set(0);
         running.set(true);
-        runOnJS(JSOnStart)();
-        runBlastAnimation({ blastDuration, fallDuration });
+        UIOnStart();
+
+        function repeatAnimation() {
+          'worklet';
+          UIOnEnd();
+          refreshBoxes();
+          if (infinite) {
+            cancelAnimation(progress);
+            progress.set(0);
+            progress.set(
+              withTiming(
+                1,
+                { duration, easing: Easing.linear },
+                (finished) => {
+                  'worklet';
+                  if (!finished || !infinite) return;
+                  repeatAnimation();
+                }
+              )
+            );
+          }
+        }
+
+        progress.set(
+          withTiming(
+            1,
+            { duration, easing: Easing.linear },
+            (finished) => {
+              'worklet';
+              if (!finished || !infinite) {
+                if (finished) UIOnEnd();
+                return;
+              }
+              repeatAnimation();
+            }
+          )
+        );
       },
       [
-        refreshBoxes,
-        reset,
-        running,
-        JSOnStart,
-        runBlastAnimation,
-        blastDuration,
-        fallDuration,
         dynamicBlastPosition,
+        refreshBoxes,
+        progress,
+        running,
+        UIOnStart,
+        UIOnEnd,
+        infinite,
+        duration,
       ]
+    );
+
+    const jsRestart = useCallback(
+      (options: PIConfettiRestartOptions = {}) => {
+        let resolvedPosition: Position | null = null;
+        if (options.blastPosition != null) {
+          resolvedPosition = typeof options.blastPosition === 'object'
+            ? options.blastPosition
+            : resolveNamedPosition(
+                options.blastPosition,
+                containerWidth,
+                containerHeight
+              );
+        }
+        runOnUI(workletRestart)(resolvedPosition);
+      },
+      [workletRestart, containerWidth, containerHeight]
     );
 
     const resume = () => {
       'worklet';
-
       if (running.get()) return;
       running.set(true);
-      const blastTimeLeft = (1 - blastProgress.get()) * blastDuration;
-      const fallTimeLeft = (1 - fallProgress.get()) * fallDuration;
-      runBlastAnimation({
-        blastDuration: blastTimeLeft,
-        fallDuration: fallTimeLeft,
-      });
+
+      const remaining = duration * (1 - progress.get());
+
+      function repeatAnimation() {
+        'worklet';
+        UIOnEnd();
+        refreshBoxes();
+        if (infinite) {
+          cancelAnimation(progress);
+          progress.set(0);
+          progress.set(
+            withTiming(
+              1,
+              { duration, easing: Easing.linear },
+              (finished) => {
+                'worklet';
+                if (!finished || !infinite) return;
+                repeatAnimation();
+              }
+            )
+          );
+        }
+      }
+
+      progress.set(
+        withTiming(
+          1,
+          { duration: remaining, easing: Easing.linear },
+          (finished) => {
+            'worklet';
+            if (!finished || !infinite) {
+              if (finished) UIOnEnd();
+              return;
+            }
+            repeatAnimation();
+          }
+        )
+      );
     };
 
     useImperativeHandle(ref, () => ({
       pause: runOnUI(pause),
       reset: runOnUI(reset),
       resume: runOnUI(resume),
-      restart: runOnUI(restart),
+      restart: jsRestart,
     }));
 
-    const getPosition = (index: number) => {
-      'worklet';
-      const currentBlastPosition =
-        dynamicBlastPosition.get() || defaultBlastPosition;
-      const centerX = currentBlastPosition.x; // Horizontal center of the container
-      const centerY = currentBlastPosition.y; // Vertical center of the container
-      const maxRadius = blastRadius; // Maximum radius for the circle
+    useEffect(() => {
+      runOnUI(() => {
+        if (autoplay && !running.get()) workletRestart(null);
+      })();
+    }, [autoplay, workletRestart, running]);
 
-      // Generate a pseudo-random radius and angle based on index
-      const radius = Math.sqrt((index + 1) / count) * maxRadius;
-      const angle = ((index * 137.5) % 360) * (Math.PI / 180); // Using golden angle for uniform distribution
-
-      // Calculate x and y based on radius and angle
-      const x = centerX + radius * Math.cos(angle);
-      const y = centerY + radius * Math.sin(angle);
-
-      return { x, y };
-    };
+    // Physics constants scaled to container height
+    const scaledGravity = gravity * containerHeight;
+    // Duration in seconds for physics equations
+    const totalTime = duration / 1000;
 
     const transforms = useRSXformBuffer(count, (val, i) => {
       'worklet';
       const piece = boxes.get()[i];
       if (!piece) return;
 
-      const { x, y } = getPosition(i);
-
-      let tx = x;
-      let ty = y;
-
       const currentBlastPosition =
         dynamicBlastPosition.get() || defaultBlastPosition;
-      const diffX = x - currentBlastPosition.x;
-      const diffY = y - currentBlastPosition.y;
+      const blastX = currentBlastPosition.x;
+      const blastY = currentBlastPosition.y;
 
-      const delayedBlastProgress = interpolate(
-        blastProgress.get(),
-        [piece.delayBlast, 1],
+      const speed =
+        initialSpeed *
+        containerHeight *
+        piece.speedMultiplier *
+        piece.depthScale;
+      const vx = speed * Math.cos(piece.angle);
+      const vy = speed * Math.sin(piece.angle);
+
+      // Current time based on progress, accounting for launch delay
+      const effectiveProgress = interpolate(
+        progress.get(),
+        [piece.launchDelay, 1],
         [0, 1],
-        Extrapolation.IDENTITY
+        Extrapolation.CLAMP
       );
+      const t = effectiveProgress * totalTime;
 
-      tx += -diffX * (1 - delayedBlastProgress);
-      ty += -diffY * (1 - delayedBlastProgress);
+      // Physics: drag applied to both axes, gravity on vertical
+      const expDecay = 1 - Math.exp(-drag * t);
+      const tx = blastX + (vx / drag) * expDecay;
+      const ty =
+        blastY +
+        (scaledGravity / drag) * t +
+        ((vy - scaledGravity / drag) / drag) * expDecay;
 
-      const fallDistance = interpolate(
-        fallProgress.get(),
-        [0, 1],
-        [0, containerHeight - currentBlastPosition.y + blastRadius]
-      );
-
-      const spreadDistanceX = interpolate(
-        fallProgress.get(),
-        [0, 1],
-        [0, piece.randomOffsetX]
-      );
-      const spreadDistanceY = interpolate(
-        fallProgress.get(),
-        [0, 1],
-        [0, piece.randomOffsetY]
-      );
-
-      tx += spreadDistanceX;
-      ty += fallDistance + spreadDistanceY;
-
-      // Interpolate between randomX values for smooth left-right movement
-      const jigglingStartPos = 0.1;
-      const randomX = interpolate(
-        fallProgress.get(),
-        [
-          0,
-          jigglingStartPos,
-          ...new Array(piece.randomXs.length)
-            .fill(0)
-            .map(
-              (_, index) =>
-                jigglingStartPos +
-                ((index + 1) * (1 - jigglingStartPos)) / piece.randomXs.length
-            ),
-        ],
-        [0, 0, ...piece.randomXs] // Use the randomX array for horizontal movement
-      );
-
-      tx += randomX;
-
+      // Rotation
       const rotationDirection = piece.clockwise ? 1 : -1;
       const rz =
         piece.initialRotation +
         interpolate(
-          fallProgress.get(),
+          progress.get(),
           [0, 1],
           [0, rotationDirection * piece.maxRotation.z],
           Extrapolation.CLAMP
@@ -303,31 +401,29 @@ const PIConfetti = forwardRef<PIConfettiMethods, PIConfettiProps>(
       const rx =
         piece.initialRotation +
         interpolate(
-          fallProgress.get(),
+          progress.get(),
           [0, 1],
           [0, rotationDirection * piece.maxRotation.x],
           Extrapolation.CLAMP
         );
 
-      const oscillatingScale = Math.abs(Math.cos(rx)); // Scale goes from 1 -> 0 -> 1
-      const blastScale = interpolate(
-        blastProgress.get(),
-        [0, 0.2, 1],
-        [0, 1, 1],
+      // Scale: appearance animation at launch + oscillation
+      const oscillatingScale = Math.abs(Math.cos(rx));
+      const appearScale = interpolate(
+        effectiveProgress,
+        [0, 0.05],
+        [initialScale, 1],
         Extrapolation.CLAMP
       );
-      const scale = blastScale * oscillatingScale;
+      const scale = appearScale * oscillatingScale * piece.depthScale;
 
       const size = sizeVariations[piece.sizeIndex]!;
-
       const px = size.width / 2;
       const py = size.height / 2;
 
-      // Apply the transformation, including the flipping effect and randomX oscillation
       const s = Math.sin(rz) * scale;
       const c = Math.cos(rz) * scale;
 
-      // Use the interpolated randomX for horizontal oscillation
       val.set(c, s, tx - c * px + s * py, ty - s * px - c * py);
     });
 
@@ -346,7 +442,14 @@ const PIConfetti = forwardRef<PIConfettiMethods, PIConfettiProps>(
   }
 );
 
-PIConfetti.displayName = 'PIConfetti';
+PIConfettiInner.displayName = 'PIConfetti';
+
+const PIConfetti = PIConfettiInner as typeof PIConfettiInner & {
+  Flake: typeof Flake;
+};
+
+PIConfetti.Flake = Flake;
+
 export { PIConfetti };
 
 const styles = StyleSheet.create({
