@@ -1,4 +1,4 @@
-import { makeMutable } from 'react-native-reanimated';
+import { makeMutable, requestAnimationFrame } from 'react-native-reanimated';
 
 type AnyFunction = (...args: any[]) => any;
 
