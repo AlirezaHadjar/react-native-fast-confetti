@@ -62,6 +62,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       verticalSpacing = DEFAULT_VERTICAL_SPACING,
       flakeStyle = 'solid',
       initialScale = 0.3,
+      tumbleClamp = 0.15,
       ...textureRootProps
     },
     ref
@@ -251,18 +252,14 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
         }
 
         progress.set(
-          withTiming(
-            1,
-            { duration, easing: Easing.linear },
-            (finished) => {
-              'worklet';
-              if (!finished || !infinite) {
-                if (finished) UIOnEnd();
-                return;
-              }
-              repeatAnimation();
+          withTiming(1, { duration, easing: Easing.linear }, (finished) => {
+            'worklet';
+            if (!finished || !infinite) {
+              if (finished) UIOnEnd();
+              return;
             }
-          )
+            repeatAnimation();
+          })
         );
       },
       [
@@ -373,7 +370,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       // --- Scale from tumble ---
       // Clamp so edge-on pieces stay visible (uniform scale shrinks both axes)
       const rawCos = Math.cos(tumbleTheta);
-      const absClamped = Math.max(Math.abs(rawCos), 0.9);
+      const absClamped = Math.max(Math.abs(rawCos), tumbleClamp);
       // For textured pieces (image/SVG), skip the sign flip to avoid mirroring.
       const oscillatingScale = hasTexture
         ? absClamped
@@ -382,12 +379,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       // In single/infinite mode, scale in over the first 5% of progress.
       const appearScale = continuous
         ? 1
-        : interpolate(
-            p,
-            [0, 0.05],
-            [initialScale, 1],
-            Extrapolation.CLAMP
-          );
+        : interpolate(p, [0, 0.05], [initialScale, 1], Extrapolation.CLAMP);
       const scale = appearScale * oscillatingScale * piece.depthScale;
 
       // --- RSXform ---

@@ -578,11 +578,14 @@ export const generateFallingBoxesArray = ({
     // cycles match the outgoing batch's speed with no visible seam.
     const initialVy = infinite
       ? vTermApprox * getRandomValue(0.95, 1.05)
-      : getRandomValue(0, 0.15) * scaledGravity;
+      : getRandomValue(0, 0.4) * scaledGravity;
+
+    // Random initial horizontal velocity so pieces scatter laterally from the start
+    const initialVx = getRandomValue(-0.15, 0.15) * scaledGravity;
 
     // Integrate ODE trajectory — writes directly into the shared flat array
     integrateTrajectory(
-      spawnX, spawnY, 0, initialVy,
+      spawnX, spawnY, initialVx, initialVy,
       getRandomValue(0, 2 * Math.PI),
       tumbleDir * tumbleRate,
       { Cn, Ct, Ccouple, Crot, tumbleBias, g: effectiveGravity },

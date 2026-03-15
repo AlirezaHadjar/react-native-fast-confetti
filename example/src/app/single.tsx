@@ -69,6 +69,7 @@ export default function SingleScreen() {
         infinite
         flakeStyle="glossy"
         gravity={1}
+        tumbleClamp={config.textureType === 'money' ? 0.9 : 0.15}
         {...textureProps}
       >
         {renderFlakes()}

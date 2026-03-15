@@ -32,7 +32,7 @@ export const DEFAULT_AUTOSTART_DELAY = 0;
 
 export const DEFAULT_VERTICAL_SPACING = 30;
 
-export const RANDOM_INITIAL_Y_JIGGLE = 20;
+export const RANDOM_INITIAL_Y_JIGGLE = 60;
 
 /**
  * Default rotation configuration for regular Confetti component.
@@ -80,7 +80,7 @@ export const DEFAULT_CONFETTI_FLUTTER: Required<Range> = {
   max: 0.08,
 };
 
-export const DEFAULT_CONFETTI_DRIFT = 0.5;
+export const DEFAULT_CONFETTI_DRIFT = 0.7;
 export const TRAJECTORY_SAMPLE_COUNT = 120;
 export const DEFAULT_TANGENTIAL_DRAG_RATIO = 0.25;
 export const DEFAULT_ROTATIONAL_DAMPING = 2.0;

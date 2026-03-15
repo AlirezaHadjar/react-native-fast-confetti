@@ -51,6 +51,7 @@ export default function ContinuousScreen() {
         ref={confettiRef}
         rotation={rotation}
         count={200}
+        tumbleClamp={config.textureType === 'money' ? 0.9 : 0.15}
         {...textureProps}
       >
         {renderFlakes()}

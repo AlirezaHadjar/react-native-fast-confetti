@@ -287,6 +287,13 @@ type ConfettiBaseProps = {
    * @default 0.3
    */
   initialScale?: number;
+  /**
+   * @description Minimum scale when a piece is edge-on during tumble.
+   * Lower values create a more dramatic flip effect. Higher values (e.g. 0.9)
+   * keep pieces mostly flat, which works better for image textures like money.
+   * @default 0.15
+   */
+  tumbleClamp?: number;
 };
 
 export type ConfettiProps = ConfettiBaseProps &
