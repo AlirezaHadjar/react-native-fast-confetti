@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet } from 'react-native';
+import { colors } from '../constants/colors';
 import { Dropdown } from 'react-native-element-dropdown';
 import type { DropdownOption } from '../constants/config';
 
@@ -36,22 +37,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 5,
-    color: '#333',
+    color: colors.label,
   },
   dropdown: {
     height: 50,
-    borderColor: '#ddd',
+    borderColor: colors.separator,
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: colors.secondaryBackground,
   },
   placeholderStyle: {
     fontSize: 16,
-    color: '#999',
+    color: colors.tertiaryLabel,
   },
   selectedTextStyle: {
     fontSize: 16,
-    color: '#333',
+    color: colors.label,
   },
 });

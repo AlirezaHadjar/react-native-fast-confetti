@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { colors } from '../constants/colors';
 import { ContinuousConfetti } from 'react-native-fast-confetti';
 import type { ConfettiMethods } from 'react-native-fast-confetti';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
@@ -73,7 +74,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: colors.background,
     justifyContent: 'center',
   },
   controls: {
