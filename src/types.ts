@@ -631,10 +631,11 @@ type CannonConfettiBaseProps = {
    */
   gravity?: number;
   /**
-   * @description Air resistance coefficient.
+   * @description Air resistance coefficient. Can be a single number applied
+   * to both axes, or an object with separate `horizontal` and `vertical` values.
    * @default 2.0
    */
-  drag?: number;
+  drag?: number | { horizontal: number; vertical: number };
   /**
    * @description Whether the animation should play on mount.
    * @default true

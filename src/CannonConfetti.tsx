@@ -51,7 +51,7 @@ const CannonConfettiInner = forwardRef<
     {
       children,
       gravity = DEFAULT_CANNON_CONFETTI_GRAVITY,
-      drag = DEFAULT_CANNON_CONFETTI_DRAG,
+      drag: dragProp = DEFAULT_CANNON_CONFETTI_DRAG,
       autoplay = true,
       infinite = false,
       fadeOutOnEnd = false,
@@ -76,6 +76,12 @@ const CannonConfettiInner = forwardRef<
       useWindowDimensions();
     const containerWidth = _width || DEFAULT_SCREEN_WIDTH;
     const containerHeight = _height || DEFAULT_SCREEN_HEIGHT;
+
+    // --- Resolve drag into horizontal / vertical ---
+    const hDrag =
+      typeof dragProp === 'number' ? dragProp : dragProp.horizontal;
+    const vDrag =
+      typeof dragProp === 'number' ? dragProp : dragProp.vertical;
 
     // --- Resolve texture from root props ---
     const rootImage =
@@ -118,7 +124,7 @@ const CannonConfettiInner = forwardRef<
     const duration = estimateCannonDuration({
       cannonConfigs,
       gravity,
-      drag,
+      drag: vDrag,
       sprayDurationMs: sprayDuration,
     });
 
@@ -399,13 +405,16 @@ const CannonConfettiInner = forwardRef<
       );
       const t = effectiveProgress * totalTime;
 
-      // Physics: drag applied to both axes, gravity on vertical
-      const expDecay = 1 - Math.exp(-drag * t);
-      const tx = cannonX + (vx / drag) * expDecay;
+      // Physics: polynomial decay for horizontal (gentler than exponential),
+      // exponential decay + gravity for vertical
+      const normalizedT = Math.min(t / totalTime, 1);
+      const hDecayFactor = 1 - Math.pow(1 - normalizedT, hDrag + 1);
+      const vExpDecay = 1 - Math.exp(-vDrag * t);
+      const tx = cannonX + ((vx * totalTime) / (hDrag + 1)) * hDecayFactor;
       const ty =
         cannonY +
-        (scaledGravity / drag) * t +
-        ((vy - scaledGravity / drag) / drag) * expDecay;
+        (scaledGravity / vDrag) * t +
+        ((vy - scaledGravity / vDrag) / vDrag) * vExpDecay;
 
       // Rotation
       const rotationDirection = piece.clockwise ? 1 : -1;

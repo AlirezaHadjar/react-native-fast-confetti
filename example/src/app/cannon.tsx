@@ -61,11 +61,10 @@ export default function CannonScreen() {
         autoplay
         infinite
         rotation={rotation}
-        gravity={2}
-        sprayDuration={500}
+        gravity={3}
+        sprayDuration={300}
         initialScale={0.7}
         flakeStyle="glossy"
-        drag={3}
         {...cannonTextureProps}
       >
         <CannonConfetti.Origin
@@ -84,7 +83,12 @@ export default function CannonScreen() {
         >
           {renderFlakes()}
         </CannonConfetti.Origin>
-        <CannonConfetti.Origin position="bottom-center" count={150} speed={4}>
+        <CannonConfetti.Origin
+          position="bottom-center"
+          count={150}
+          speed={4}
+          target={'center'}
+        >
           {renderFlakes()}
         </CannonConfetti.Origin>
       </CannonConfetti>
