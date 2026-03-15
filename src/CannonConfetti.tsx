@@ -4,14 +4,12 @@ import {
   useEffect,
   useImperativeHandle,
   forwardRef,
-  useMemo,
 } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import {
   cancelAnimation,
   Extrapolation,
   interpolate,
-  runOnJS,
   runOnUI,
   useDerivedValue,
   useSharedValue,
@@ -41,6 +39,8 @@ import type {
 } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useCannonOrigins } from './hooks/useCannonOrigins';
+import { useTextureProps } from './hooks/useTextureProps';
+import { useAnimationCallbacks } from './hooks/useAnimationCallbacks';
 import { Origin, Flake } from './CannonConfettiComponents';
 
 const CannonConfettiInner = forwardRef<
@@ -84,21 +84,7 @@ const CannonConfettiInner = forwardRef<
       typeof dragProp === 'number' ? dragProp : dragProp.vertical;
 
     // --- Resolve texture from root props ---
-    const rootImage =
-      'image' in textureRootProps ? textureRootProps.image : undefined;
-    const rootSvg =
-      'svg' in textureRootProps ? textureRootProps.svg : undefined;
-    const textureProps = useMemo(() => {
-      if (rootImage) {
-        return { type: 'image' as const, content: rootImage };
-      }
-      if (rootSvg) {
-        return { type: 'svg' as const, content: rootSvg };
-      }
-      return undefined;
-    }, [rootImage, rootSvg]);
-
-    const hasTexture = textureProps !== undefined;
+    const { textureProps, hasTexture } = useTextureProps(textureRootProps);
 
     // --- Parse children + build atlas via hook ---
     const {
@@ -181,21 +167,10 @@ const CannonConfettiInner = forwardRef<
       boxes.set(newBoxes);
     }, [cannonConfigs, boxes, dynamicCannonConfigs, launchDelayMax]);
 
-    const JSOnStart = useCallback(
-      () => onAnimationStart?.(),
-      [onAnimationStart]
+    const { UIOnStart, UIOnEnd } = useAnimationCallbacks(
+      onAnimationStart,
+      onAnimationEnd
     );
-    const JSOnEnd = useCallback(() => onAnimationEnd?.(), [onAnimationEnd]);
-
-    const UIOnStart = useCallback(() => {
-      'worklet';
-      runOnJS(JSOnStart)();
-    }, [JSOnStart]);
-
-    const UIOnEnd = useCallback(() => {
-      'worklet';
-      runOnJS(JSOnEnd)();
-    }, [JSOnEnd]);
 
     const workletRestart = useCallback(
       (
@@ -396,9 +371,11 @@ const CannonConfettiInner = forwardRef<
       const vx = speed * Math.cos(angle);
       const vy = speed * Math.sin(angle);
 
+      const p = progress.get();
+
       // Current time based on progress, accounting for launch delay
       const effectiveProgress = interpolate(
-        progress.get(),
+        p,
         [piece.launchDelay, 1],
         [0, 1],
         Extrapolation.CLAMP
@@ -421,7 +398,7 @@ const CannonConfettiInner = forwardRef<
       const rz =
         piece.initialRotation +
         interpolate(
-          progress.get(),
+          p,
           [0, 1],
           [0, rotationDirection * piece.maxRotation.z],
           Extrapolation.CLAMP
@@ -429,7 +406,7 @@ const CannonConfettiInner = forwardRef<
       const rx =
         piece.initialRotation +
         interpolate(
-          progress.get(),
+          p,
           [0, 1],
           [0, rotationDirection * piece.maxRotation.x],
           Extrapolation.CLAMP

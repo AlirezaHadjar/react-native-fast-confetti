@@ -11,7 +11,6 @@ import {
   cancelAnimation,
   Extrapolation,
   interpolate,
-  runOnJS,
   runOnUI,
   useDerivedValue,
   useSharedValue,
@@ -39,6 +38,8 @@ import type {
 } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useConfettiFlakes } from './hooks/useConfettiFlakes';
+import { useTextureProps } from './hooks/useTextureProps';
+import { useAnimationCallbacks } from './hooks/useAnimationCallbacks';
 import { Flake } from './FlakeComponent';
 
 const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
@@ -76,21 +77,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
     const containerHeight = _height || DEFAULT_SCREEN_HEIGHT;
 
     // --- Resolve texture from root props ---
-    const rootImage =
-      'image' in textureRootProps ? textureRootProps.image : undefined;
-    const rootSvg =
-      'svg' in textureRootProps ? textureRootProps.svg : undefined;
-    const textureProps = useMemo(() => {
-      if (rootImage) {
-        return { type: 'image' as const, content: rootImage };
-      }
-      if (rootSvg) {
-        return { type: 'svg' as const, content: rootSvg };
-      }
-      return undefined;
-    }, [rootImage, rootSvg]);
-
-    const hasTexture = textureProps !== undefined;
+    const { textureProps, hasTexture } = useTextureProps(textureRootProps);
 
     // --- Parse children for flake sizes ---
     const { allColors, sizeVariations } = useConfettiFlakes({
@@ -200,21 +187,10 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       boxes,
     ]);
 
-    const JSOnStart = useCallback(
-      () => onAnimationStart?.(),
-      [onAnimationStart]
+    const { UIOnStart, UIOnEnd } = useAnimationCallbacks(
+      onAnimationStart,
+      onAnimationEnd
     );
-    const JSOnEnd = useCallback(() => onAnimationEnd?.(), [onAnimationEnd]);
-
-    const UIOnStart = useCallback(() => {
-      'worklet';
-      runOnJS(JSOnStart)();
-    }, [JSOnStart]);
-
-    const UIOnEnd = useCallback(() => {
-      'worklet';
-      runOnJS(JSOnEnd)();
-    }, [JSOnEnd]);
 
     const workletRestart = useCallback(
       (resolvedPosition: Position | null) => {
@@ -371,9 +347,11 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       const vx = speed * Math.cos(piece.angle);
       const vy = speed * Math.sin(piece.angle);
 
+      const p = progress.get();
+
       // Current time based on progress, accounting for launch delay
       const effectiveProgress = interpolate(
-        progress.get(),
+        p,
         [piece.launchDelay, 1],
         [0, 1],
         Extrapolation.CLAMP
@@ -393,7 +371,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       const rz =
         piece.initialRotation +
         interpolate(
-          progress.get(),
+          p,
           [0, 1],
           [0, rotationDirection * piece.maxRotation.z],
           Extrapolation.CLAMP
@@ -401,7 +379,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       const rx =
         piece.initialRotation +
         interpolate(
-          progress.get(),
+          p,
           [0, 1],
           [0, rotationDirection * piece.maxRotation.x],
           Extrapolation.CLAMP

@@ -4,14 +4,12 @@ import {
   useEffect,
   useImperativeHandle,
   forwardRef,
-  useMemo,
 } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import {
   cancelAnimation,
   Extrapolation,
   interpolate,
-  runOnJS,
   runOnUI,
   useDerivedValue,
   useSharedValue,
@@ -37,6 +35,8 @@ import type {
 } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useConfettiFlakes } from './hooks/useConfettiFlakes';
+import { useTextureProps } from './hooks/useTextureProps';
+import { useAnimationCallbacks } from './hooks/useAnimationCallbacks';
 import { Flake } from './FlakeComponent';
 
 const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
@@ -73,21 +73,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
     const containerHeight = _height || DEFAULT_SCREEN_HEIGHT;
 
     // --- Resolve texture from root props ---
-    const rootImage =
-      'image' in textureRootProps ? textureRootProps.image : undefined;
-    const rootSvg =
-      'svg' in textureRootProps ? textureRootProps.svg : undefined;
-    const textureProps = useMemo(() => {
-      if (rootImage) {
-        return { type: 'image' as const, content: rootImage };
-      }
-      if (rootSvg) {
-        return { type: 'svg' as const, content: rootSvg };
-      }
-      return undefined;
-    }, [rootImage, rootSvg]);
-
-    const hasTexture = textureProps !== undefined;
+    const { textureProps, hasTexture } = useTextureProps(textureRootProps);
 
     // --- Parse children + build atlas via hook ---
     const { allColors, sizeVariations } = useConfettiFlakes({
@@ -208,21 +194,10 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       continuous,
     ]);
 
-    const JSOnStart = useCallback(
-      () => onAnimationStart?.(),
-      [onAnimationStart]
+    const { UIOnStart, UIOnEnd } = useAnimationCallbacks(
+      onAnimationStart,
+      onAnimationEnd
     );
-    const JSOnEnd = useCallback(() => onAnimationEnd?.(), [onAnimationEnd]);
-
-    const UIOnStart = useCallback(() => {
-      'worklet';
-      runOnJS(JSOnStart)();
-    }, [JSOnStart]);
-
-    const UIOnEnd = useCallback(() => {
-      'worklet';
-      runOnJS(JSOnEnd)();
-    }, [JSOnEnd]);
 
     const restart = useCallback(
       (_options: ConfettiRestartOptions = {}) => {
