@@ -79,6 +79,7 @@ const styles = StyleSheet.create({
   },
   controls: {
     width: '100%',
+    maxWidth: 600,
     marginBottom: 30,
     gap: 15,
     paddingHorizontal: 20,

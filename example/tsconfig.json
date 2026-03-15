@@ -1,6 +1,7 @@
 {
   "extends": "../tsconfig",
   "compilerOptions": {
+    "lib": ["ESNext", "DOM"],
     "paths": {
       "react-native-fast-confetti": ["../src/index"]
     }

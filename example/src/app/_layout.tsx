@@ -1,6 +1,24 @@
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { Platform, useColorScheme } from 'react-native';
 import { colors } from '../constants/colors';
+
+function useWebFontFix() {
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const style = document.createElement('style');
+    style.textContent = `
+      * {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif !important;
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+}
 
 function getIOSVersion(): number {
   if (Platform.OS !== 'ios') return 0;
@@ -13,6 +31,7 @@ function isIOS26OrLater(): boolean {
 }
 
 export default function RootLayout() {
+  useWebFontFix();
   const colorScheme = useColorScheme();
   const titleColor = colorScheme === 'dark' ? '#fff' : '#000';
 
