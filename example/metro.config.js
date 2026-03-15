@@ -1,16 +1,16 @@
 const path = require('path');
-const { getDefaultConfig } = require('@expo/metro-config');
-const { getConfig } = require('react-native-builder-bob/metro-config');
+const { getDefaultConfig } = require('expo/metro-config');
 
-const root = path.resolve(__dirname, '..');
+const monorepoRoot = path.resolve(__dirname, '..');
+const config = getDefaultConfig(__dirname);
 
-/**
- * Metro configuration
- * https://facebook.github.io/metro/docs/configuration
- *
- * @type {import('metro-config').MetroConfig}
- */
-module.exports = getConfig(getDefaultConfig(__dirname), {
-  root,
-  project: __dirname,
-});
+// Watch the monorepo root so Metro can resolve the library source
+config.watchFolders = [monorepoRoot];
+
+// Resolve peer deps from the monorepo root node_modules
+config.resolver.nodeModulesPaths = [
+  path.resolve(__dirname, 'node_modules'),
+  path.resolve(monorepoRoot, 'node_modules'),
+];
+
+module.exports = config;
