@@ -44,6 +44,7 @@
       "version": "1.0.0",
       "dependencies": {
         "@expo/metro-runtime": "~55.0.6",
+        "@expo/ui": "~55.0.2",
         "@shopify/react-native-skia": "2.5.1",
         "babel-plugin-react-compiler": "19.1.0-rc.3",
         "eslint-plugin-react-compiler": "^19.1.0-rc.2",
@@ -451,6 +452,8 @@
     "@expo/spawn-async": ["@expo/spawn-async@1.7.2", "", { "dependencies": { "cross-spawn": "^7.0.3" } }, "sha512-QdWi16+CHB9JYP7gma19OVVg0BFkvU8zNj9GjWorYI8Iv8FUxjOCcYRuAmX4s/h91e4e7BPsskc8cSrZYho9Ew=="],
 
     "@expo/sudo-prompt": ["@expo/sudo-prompt@9.3.2", "", {}, "sha512-HHQigo3rQWKMDzYDLkubN5WQOYXJJE2eNqIQC2axC2iO3mHdwnIR7FgZVvHWtBwAdzBgAP0ECp8KqS8TiMKvgw=="],
+
+    "@expo/ui": ["@expo/ui@55.0.2", "", { "dependencies": { "sf-symbols-typescript": "^2.1.0" }, "peerDependencies": { "expo": "*", "react": "*", "react-native": "*" } }, "sha512-nVWFz0/7w/+Tr0/Jd3TTTY3HUrMSQzOfbuL1nl257zGfJzp2cGmHNuaRlh3Yi72NcVlFNLRbZzLdH3Jwa1R0jg=="],
 
     "@expo/vector-icons": ["@expo/vector-icons@15.1.1", "", { "peerDependencies": { "expo-font": ">=14.0.4", "react": "*", "react-native": "*" } }, "sha512-Iu2VkcoI5vygbtYngm7jb4ifxElNVXQYdDrYkT7UCEIiKLeWnQY0wf2ZhHZ+Wro6Sc5TaumpKUOqDRpLi5rkvw=="],
 

@@ -29,6 +29,8 @@ export default function RootLayout() {
             ? { backgroundColor: colors.background as string }
             : undefined,
         headerTintColor: titleColor,
+        headerTitleAlign: 'center',
+        headerShadowVisible: false,
         headerTitleStyle: { color: titleColor },
       }}
     >

@@ -9,7 +9,8 @@
     "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "confetti.example"
+      "bundleIdentifier": "confetti.example",
+      "appleTeamId": "LYW59CWY29"
     },
     "android": {
       "adaptiveIcon": {

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@expo/metro-runtime": "~55.0.6",
+    "@expo/ui": "~55.0.2",
     "@shopify/react-native-skia": "2.5.1",
     "babel-plugin-react-compiler": "19.1.0-rc.3",
     "eslint-plugin-react-compiler": "^19.1.0-rc.2",

@@ -5,6 +5,8 @@ import {
   StyleSheet,
   View,
   Dimensions,
+  Platform,
+  useColorScheme,
 } from 'react-native';
 import { Link } from 'expo-router';
 import { colors } from '../constants/colors';
@@ -144,6 +146,8 @@ const modes = [
 
 function ModeCard({ item }: { item: (typeof modes)[number] }) {
   const blurTargetRef = useRef(null);
+  const colorScheme = useColorScheme();
+  const isAndroidDark = Platform.OS === 'android' && colorScheme === 'dark';
 
   return (
     <Link href={`/${item.key}`} asChild>
@@ -165,10 +169,12 @@ function ModeCard({ item }: { item: (typeof modes)[number] }) {
             <Text style={styles.cardTitle}>{item.title}</Text>
           </View>
           <BlurView
-            intensity={8}
+            intensity={isAndroidDark ? 70 : 8}
             blurMethod="dimezisBlurView"
             blurTarget={blurTargetRef}
-            tint="systemThickMaterial"
+            tint={
+              isAndroidDark ? 'systemChromeMaterialDark' : 'systemThickMaterial'
+            }
             style={styles.cardDescriptionContainer}
           >
             <Text style={styles.cardDescription}>{item.description}</Text>
@@ -197,7 +203,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   cardDescriptionContainer: {
-    paddingVertical: 20,
+    paddingVertical: 16,
     paddingHorizontal: 18,
   },
   cardTitleContainer: {
