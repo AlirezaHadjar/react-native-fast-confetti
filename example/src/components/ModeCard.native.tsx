@@ -7,11 +7,12 @@ import {
   Platform,
   useColorScheme,
 } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, useIsFocused } from 'expo-router';
 import { BlurView, BlurTargetView } from 'expo-blur';
 import type { ModeCardProps } from './ModeCard';
 
 export function ModeCard({ item, styles }: ModeCardProps) {
+  const isFocused = useIsFocused();
   const blurTargetRef = useRef(null);
   const colorScheme = useColorScheme();
   const isAndroidDark = Platform.OS === 'android' && colorScheme === 'dark';
@@ -29,7 +30,7 @@ export function ModeCard({ item, styles }: ModeCardProps) {
                 },
               ]}
             >
-              {item.render()}
+              {isFocused ? item.render() : null}
             </View>
           </BlurTargetView>
           <View style={styles.cardTitleContainer}>
@@ -40,9 +41,7 @@ export function ModeCard({ item, styles }: ModeCardProps) {
             blurMethod="dimezisBlurView"
             blurTarget={blurTargetRef}
             tint={
-              isAndroidDark
-                ? 'systemChromeMaterialDark'
-                : 'systemThickMaterial'
+              isAndroidDark ? 'systemChromeMaterialDark' : 'systemThickMaterial'
             }
             style={styles.cardDescriptionContainer}
           >

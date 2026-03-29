@@ -27,10 +27,7 @@ export function ConfigDropdown<T extends string | number>({
       <Host matchContents>
         <ContextMenu>
           <ContextMenu.Trigger>
-            <Button
-              variant="bordered"
-              onPress={() => setExpanded(!expanded)}
-            >
+            <Button variant="bordered" onPress={() => setExpanded(!expanded)}>
               {selectedLabel}
             </Button>
           </ContextMenu.Trigger>
@@ -42,6 +39,7 @@ export function ConfigDropdown<T extends string | number>({
                   onChange(option.value);
                   setExpanded(false);
                 }}
+                elementColors={{ contentColor: colors.label }}
               >
                 {option.label}
               </Button>

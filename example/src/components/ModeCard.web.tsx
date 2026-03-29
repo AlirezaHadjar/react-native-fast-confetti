@@ -1,13 +1,15 @@
 import { Text, Pressable, StyleSheet, View } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, useIsFocused } from 'expo-router';
 import type { ModeCardProps } from './ModeCard';
 
 export function ModeCard({ item, styles }: ModeCardProps) {
+  const isFocused = useIsFocused();
+
   return (
     <Link href={`/${item.key}`} asChild>
       <Pressable style={styles.card}>
         <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
-          {item.render()}
+          {isFocused ? item.render() : null}
         </View>
         <View style={styles.cardTitleContainer}>
           <Text style={styles.cardTitle}>{item.title}</Text>

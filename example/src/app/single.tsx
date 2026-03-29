@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { colors } from '../constants/colors';
 import { Confetti } from 'react-native-fast-confetti';
 import type { ConfettiMethods } from 'react-native-fast-confetti';
@@ -66,7 +66,7 @@ export default function SingleScreen() {
         rotation={rotation}
         verticalSpacing={config.verticalSpacing}
         autoplay
-        count={400}
+        count={Platform.OS === 'web' ? 2000 : 400}
         infinite
         flakeStyle="glossy"
         gravity={1}
