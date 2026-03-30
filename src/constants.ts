@@ -30,7 +30,7 @@ export const DEFAULT_COLORS = [
 
 export const DEFAULT_AUTOSTART_DELAY = 0;
 
-export const DEFAULT_VERTICAL_SPACING = 30;
+export const DEFAULT_VERTICAL_SPACING = 70;
 
 export const RANDOM_INITIAL_Y_JIGGLE = 60;
 

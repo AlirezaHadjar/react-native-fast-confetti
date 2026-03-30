@@ -18,9 +18,9 @@ export const radiusOptions: DropdownOption<RadiusType>[] = [
 ];
 
 export const verticalSpacingOptions: DropdownOption<number>[] = [
-  { label: 'Dense', value: 5 },
-  { label: 'Normal', value: 20 },
-  { label: 'Loose', value: 50 },
+  { label: 'V. Dense', value: 5 },
+  { label: 'Dense', value: 20 },
+  { label: 'Normal', value: 50 },
   { label: 'V. Loose', value: 100 },
 ];
 

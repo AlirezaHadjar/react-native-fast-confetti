@@ -1,10 +1,5 @@
 import { useRSXformBuffer, Canvas, Atlas } from '@shopify/react-native-skia';
-import {
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  forwardRef,
-} from 'react';
+import { useCallback, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import {
   cancelAnimation,
@@ -65,7 +60,7 @@ const CannonConfettiInner = forwardRef<
       depth: rootDepth,
       speedVariation: rootSpeedVariation,
       target: rootTarget,
-      sprayDuration,
+      sprayDuration = 300,
       initialScale = 0.3,
       flakeStyle = 'solid',
       ...textureRootProps
@@ -78,10 +73,8 @@ const CannonConfettiInner = forwardRef<
     const containerHeight = _height || DEFAULT_SCREEN_HEIGHT;
 
     // --- Resolve drag into horizontal / vertical ---
-    const hDrag =
-      typeof dragProp === 'number' ? dragProp : dragProp.horizontal;
-    const vDrag =
-      typeof dragProp === 'number' ? dragProp : dragProp.vertical;
+    const hDrag = typeof dragProp === 'number' ? dragProp : dragProp.horizontal;
+    const vDrag = typeof dragProp === 'number' ? dragProp : dragProp.vertical;
 
     // --- Resolve texture from root props ---
     const { textureProps, hasTexture } = useTextureProps(textureRootProps);

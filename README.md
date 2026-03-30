@@ -2,6 +2,9 @@
 
 The fastest confetti animation library for React Native, powered by Skia Atlas API.
 
+> [!NOTE]
+> Still using v1? [Click here for the v1 documentation.](README_V1.md)
+
 <table>
   <tr>
     <td align="center">

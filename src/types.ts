@@ -102,7 +102,7 @@ type BaseConfettiProps = {
   fadeOutOnEnd?: boolean;
   /**
    * @description The approximate space between confetti flakes vertically. Lower value results in denser confetti.
-   * @default 30
+   * @default 70
    */
   verticalSpacing?: number;
   /**
@@ -223,7 +223,7 @@ type ConfettiBaseProps = {
    * @description Controls how much confetti pieces drift horizontally as they fall.
    * 0 means pieces fall straight down from their spawn column.
    * 1 means full physics-driven lateral displacement.
-   * @default 0.5
+   * @default 0.7
    */
   drift?: number;
   /**
@@ -274,7 +274,7 @@ type ConfettiBaseProps = {
   /**
    * @description The approximate space between confetti flakes vertically.
    * Lower value results in denser confetti.
-   * @default 30
+   * @default 70
    */
   verticalSpacing?: number;
   /**
@@ -344,7 +344,7 @@ type PIConfettiBaseProps = {
   gravity?: number;
   /**
    * @description Air resistance coefficient.
-   * @default 2.0
+   * @default 3.0
    */
   drag?: number;
   /**
@@ -359,7 +359,7 @@ type PIConfettiBaseProps = {
   spread?: number;
   /**
    * @description Per-piece speed multiplier range.
-   * @default { min: 0.6, max: 1.2 }
+   * @default { min: 0.0, max: 1.0 }
    */
   speedVariation?: Range;
   /**
@@ -454,7 +454,7 @@ export type PIConfettiProps = PIConfettiBaseProps &
 
 export type ContinuousConfettiProps = StrictOmit<ConfettiProps, 'infinite'>;
 
-export type ConfettiRestartOptions = {};
+export type ConfettiRestartOptions = Record<string, never>;
 
 export type PIConfettiRestartOptions = {
   /**
@@ -633,7 +633,7 @@ type CannonConfettiBaseProps = {
   /**
    * @description Air resistance coefficient. Can be a single number applied
    * to both axes, or an object with separate `horizontal` and `vertical` values.
-   * @default 2.0
+   * @default 3.0
    */
   drag?: number | { horizontal: number; vertical: number };
   /**
