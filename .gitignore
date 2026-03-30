@@ -41,12 +41,8 @@ project.xcworkspace
 local.properties
 android.iml
 
-# Cocoapods
-#
-example/ios/Pods
-
 # Ruby
-example/vendor/
+**/vendor/
 
 # node.js
 #
@@ -85,6 +81,6 @@ android/generated
 # React Native Nitro Modules
 nitrogen/
 
-# example native folder
-example/android/
-example/ios/
+# CNG native folders
+**/android/
+**/ios/

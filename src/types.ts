@@ -1,19 +1,15 @@
+import type React from 'react';
 import type { SkImage, SkSVG } from '@shopify/react-native-skia';
 import type { StyleProp, ViewStyle } from 'react-native';
-import type { WithTimingConfig } from 'react-native-reanimated';
 
 type StrictOmit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
 
-/**
- * Utility type that recursively makes all optional properties required (including nested ones)
- */
-export type DeepRequired<T> = {
-  [K in keyof T]: Required<DeepRequired<T[K]>>;
-};
+export type FlakeStyle = 'solid' | 'glossy';
 
 export type FlakeSize = {
   width: number;
   height: number;
+  radius?: number;
 };
 
 export type Position = {
@@ -22,271 +18,308 @@ export type Position = {
 };
 
 export type Range = {
-  min?: number;
-  max?: number;
+  min: number;
+  max: number;
 };
+
+export type Drag = number | { horizontal: number; vertical: number };
 
 export type Rotation = {
   x?: Range;
   z?: Range;
 };
 
-export type RandomOffset = {
-  x?: Range;
-  y?: Range;
+export type FallingBox = {
+  spawnX: number;
+  spawnY: number;
+  depthScale: number;
+  clockwise: boolean;
+  colorIndex: number;
+  sizeIndex: number;
+  spinPhase: number;
+  spinRate: number;
+  phaseOffset: number;
+  isTextured: boolean;
 };
 
-type BaseConfettiProps = {
+type ConfettiBaseProps = {
   /**
-   * @description number of confetti pieces to render.
+   * @description Flake size variants defined as children (<Confetti.Flake>).
+   */
+  children?: React.ReactNode;
+  /**
+   * @description Number of confetti pieces to render.
    * @default 200
    */
   count?: number;
   /**
-   * @description the size confetti's flake.
+   * @description The array of confetti flake colors.
    */
-  flakeSize?: FlakeSize;
+  colors?: string[];
   /**
-   * @description The width of the confetti's container.
-   * @default SCREEN_WIDTH
+   * @description Gravity constant (normalized to container height).
+   * @default 1.0
    */
-  width?: number;
+  gravity?: number;
   /**
-   * @description The height of the confetti's container.
-   * @default SCREEN_HEIGHT
+   * @description Controls how much the confetti tumble affects its trajectory.
+   * Higher values create more dramatic horizontal drift and vertical bobbing.
+   * At high values, pieces may momentarily stall or drift sideways.
+   * @default { min: 0.03, max: 0.08 }
    */
-  height?: number;
+  wobble?: Range;
   /**
-   * @description The duration of confetti falling down (milliseconds).
-   * @default 8000
+   * @description Controls how much confetti pieces drift horizontally as they fall.
+   * 0 means pieces fall straight down from their spawn column.
+   * 1 means full physics-driven lateral displacement.
+   * @default 0.7
    */
-  fallDuration?: number;
+  drift?: number;
   /**
-   * @description The duration of confetti blast (milliseconds).
-   * @default 300
-   */
-  blastDuration?: number;
-  /**
-   * @description Wether the animation should play on mount.
+   * @description Whether the animation should play on mount.
    * @default true
    */
   autoplay?: boolean;
   /**
-   * @description Wether the animation should play again after it ends.
-   * @default true
+   * @description Whether the animation should play again after it ends.
+   * @default false
    */
-  isInfinite?: boolean;
+  infinite?: boolean;
   /**
-   * @description The array of confetti flakes color.
+   * @description Should the confetti flakes fade out as they reach the end.
    */
-  colors?: string[];
+  fadeOutOnEnd?: boolean;
   /**
-   * @description The delay in milliseconds before the confetti animation starts automatically after initialization.
+   * @description The delay in milliseconds before the confetti animation starts
+   * automatically after mounting (only applies when `autoplay` is true).
    * @default 0
    */
   autoStartDelay?: number;
   /**
-   * @description Should the confetti flakes fade out as they reach the bottom.
-   */
-  fadeOutOnEnd?: boolean;
-  /**
-   * @description The approximate space between confetti flakes vertically. Lower value results in denser confetti.
-   * @default 30
-   */
-  verticalSpacing?: number;
-  /**
-   * @description A callback that is called when the falling animation starts.
+   * @description A callback that is called when the animation starts.
    */
   onAnimationStart?: () => void;
   /**
-   * @description A callback that is called when the falling animation starts.
+   * @description A callback that is called when the animation ends.
    */
   onAnimationEnd?: () => void;
   /**
-   * @description Controls the random size variation of confetti flakes. Value between 0 and 1.
-   * A value of 0.1 means flakes can vary up to 10% smaller than the base size, with more flakes
-   * clustering towards the original size and fewer towards the minimum size.
-   * Recommended value is between 0 and 0.5
-   * @default 0
-   */
-  sizeVariation?: number;
-  /**
-   * @description The rotation configuration for confetti flakes.
-   * Object with optional x and y properties, each containing optional min and max values.
-   * @default { x: { min: 2 * Math.PI, max: 20 * Math.PI }, y: { min: 2 * Math.PI, max: 20 * Math.PI } }
-   */
-  rotation?: Rotation;
-
-  /**
-   * @description The random speed multiplier for confetti flakes.
-   * @default { min: 0.9, max: 1.3 }
-   */
-  randomSpeed?: Range;
-
-  /**
-   * @description The random offset for confetti flakes.
-   * @default { x: { min: -50, max: 50 }, y: { min: 0, max: 150 } }
-   */
-  randomOffset?: RandomOffset;
-
-  /**
    * @description The style of the confetti container.
-   * if you use a padding on the container, you need to set the height/width of the container to the same as the parent container.
+   * Numeric `width` and `height` values in this style will be used for
+   * physics calculations. Falls back to screen dimensions if not provided.
    */
   containerStyle?: StyleProp<ViewStyle>;
+  /**
+   * @description The rotation configuration for confetti flakes.
+   */
+  rotation?: Rotation;
+  /**
+   * @description Per-piece depth scale range to simulate 3D perspective.
+   * @default { min: 0.8, max: 1.0 }
+   */
+  depth?: Range;
+  /**
+   * @description The approximate space between confetti flakes vertically.
+   * Lower value results in denser confetti.
+   * @default 70
+   */
+  verticalSpacing?: number;
+  /**
+   * @description The visual style of the default confetti flakes.
+   * @default 'glossy'
+   */
+  flakeStyle?: FlakeStyle;
+  /**
+   * @description The scale particles start at before animating to full size.
+   * @default 0.3
+   */
+  initialScale?: number;
+  /**
+   * @description Controls how dramatically confetti pieces flip during tumble.
+   * Higher values create more dramatic flips where pieces nearly disappear edge-on.
+   * Lower values (e.g. 0.1) keep pieces mostly flat, which works better for
+   * image textures like money.
+   * @default 0.85
+   */
+  flipIntensity?: number;
 };
 
-type EasingPropsWithCannons = {
-  /**
-   * @description An array of positions from which confetti flakes should blast.
-   */
-  cannonsPositions: Position[];
-  /**
-   * @description The easing function for the falling animation.
-   * @default Easing.inOut(Easing.quad)
-   */
-  fallEasing?: WithTimingConfig['easing'];
-  /**
-   * @description The easing function for the blast animation. Only available when cannonsPositions is defined.
-   * @default Easing.inOut(Easing.quad)
-   */
-  blastEasing?: WithTimingConfig['easing'];
-};
+export type ConfettiProps = ConfettiBaseProps & FlakeTexture;
 
-type EasingPropsWithoutCannons = {
-  /**
-   * @description An array of positions from which confetti flakes should blast.
-   */
-  cannonsPositions?: undefined;
-  /**
-   * @description The easing function for the falling animation.
-   * @default Easing.inOut(Easing.quad)
-   */
-  fallEasing?: WithTimingConfig['easing'];
-  blastEasing?: never;
-};
-
-type EasingProps = (EasingPropsWithCannons | EasingPropsWithoutCannons) & {
-  /**
-   * @description The easing function for both falling and blast animations.
-   * @default Easing.inOut(Easing.quad)
-   * @deprecated Use `fallEasing` and `blastEasing` instead. This prop will be used as fallback if the specific easing props are not provided.
-   */
-  easing?: WithTimingConfig['easing'];
-};
-
-type TextureProps =
-  | {
-      /**
-       * @description Use this to render images as confetti flakes.
-       */
-      type: 'image';
-      /**
-       * @description The image to use as confetti flake.
-       */
-      flakeImage: SkImage;
-    }
-  | {
-      /**
-       * @description Use this to render custom SVGs as confetti flakes.
-       */
-      type: 'svg';
-      /**
-       * @description The SVG to use as confetti flake.
-       */
-      flakeSvg: SkSVG;
-    }
-  | {
-      /**
-       * @description Use this to render default confetti flakes.
-       */
-      type?: 'default';
-
-      /**
-       * @description The range of the radius of the confetti flakes.
-       * A tuple of [min, max] values from which a random radius will be selected for each flake.
-       * @default '[0, 0]'
-       */
-      radiusRange?: [number, number];
-    };
-
-export type ConfettiProps = BaseConfettiProps & TextureProps & EasingProps;
 export type InternalConfettiProps = ConfettiProps & {
-  isContinuous?: 1 | 2;
+  /** When true, uses per-piece phase offsets for a seamless continuous stream. */
+  continuous?: boolean;
 };
 
-type PIBaseProps = StrictOmit<
-  BaseConfettiProps,
-  | 'autoplay'
-  | 'verticalSpacing'
-  | 'autoStartDelay'
-  | 'isInfinite'
-  | 'rotation'
+type OriginPropsBase = {
+  /**
+   * @description Number of confetti pieces from this origin.
+   * @default 100
+   */
+  count?: number;
+  /**
+   * @description Launch cone width in radians. Full circle = 2 * Math.PI.
+   * @default 2 * Math.PI
+   */
+  spread?: number;
+  /**
+   * @description Base launch speed (normalized to container height).
+   * @default 1
+   */
+  initialSpeed?: number;
+  /**
+   * @description Per-piece speed multiplier range.
+   * @default { min: 0.0, max: 1.0 }
+   */
+  speedVariation?: Range;
+  /**
+   * @description The array of confetti flake colors for this origin.
+   */
+  colors?: string[];
+  /**
+   * @description The rotation configuration for confetti flakes from this origin.
+   */
+  rotation?: Rotation;
+  /**
+   * @description Per-piece depth scale range to simulate 3D perspective.
+   * @default { min: 1, max: 1.1 }
+   */
+  depth?: Range;
+  /**
+   * @description The visual style of default confetti flakes for this origin.
+   * @default inherits from root
+   */
+  flakeStyle?: FlakeStyle;
+  /**
+   * @description Flake size variants defined as children.
+   */
+  children?: React.ReactNode;
+};
+
+export type PIOriginProps = OriginPropsBase & {
+  /**
+   * @description The position from which confetti flakes should blast.
+   * Can be a named position string or an explicit {x, y} coordinate.
+   */
+  blastPosition: NamedPosition | Position;
+  /**
+   * @description Delay in milliseconds before this origin starts firing.
+   * Applied on top of the root `autoStartDelay`.
+   * @default 0
+   */
+  delay?: number;
+};
+
+type BurstConfettiBaseProps = {
+  /**
+   * @description Must contain at least one Origin child.
+   */
+  children: React.ReactNode;
+  /**
+   * @description Gravity constant (normalized to container height).
+   * @default 3.0
+   */
+  gravity?: number;
+  /**
+   * @description Air resistance coefficient. Can be a single number applied
+   * to both axes, or an object with separate `horizontal` and `vertical` values.
+   * @default 3.0
+   */
+  drag?: Drag;
+  /**
+   * @description Whether the animation should play on mount.
+   * @default true
+   */
+  autoplay?: boolean;
+  /**
+   * @description Whether the animation should play again after it ends.
+   * @default false
+   */
+  infinite?: boolean;
+  /**
+   * @description Should the confetti flakes fade out as they reach the end.
+   */
+  fadeOutOnEnd?: boolean;
+  /**
+   * @description The delay in milliseconds before the confetti animation starts
+   * automatically after mounting (only applies when `autoplay` is true).
+   * @default 0
+   */
+  autoStartDelay?: number;
+  /**
+   * @description A callback that is called when the animation starts.
+   */
+  onAnimationStart?: () => void;
+  /**
+   * @description A callback that is called when the animation ends.
+   */
+  onAnimationEnd?: () => void;
+  /**
+   * @description The style of the confetti container.
+   * Numeric `width` and `height` values in this style will be used for
+   * physics calculations. Falls back to screen dimensions if not provided.
+   */
+  containerStyle?: StyleProp<ViewStyle>;
+  /**
+   * @description Default colors for all origins. Can be overridden per-origin.
+   */
+  colors?: string[];
+  /**
+   * @description Default rotation for all origins. Can be overridden per-origin.
+   */
+  rotation?: Rotation;
+  /**
+   * @description Default depth range for all origins. Can be overridden per-origin.
+   * @default { min: 1, max: 1.1 }
+   */
+  depth?: Range;
+  /**
+   * @description Default speed variation range for all origins. Can be overridden per-origin.
+   * @default { min: 0.0, max: 1.0 }
+   */
+  speedVariation?: Range;
+  /**
+   * @description Duration in milliseconds over which confetti pieces are staggered at launch.
+   * 0 means all pieces launch simultaneously (instant burst).
+   */
+  sprayDuration?: number;
+  /**
+   * @description The scale particles start at before animating to full size.
+   * @default 0.3
+   */
+  initialScale?: number;
+  /**
+   * @description The visual style of the default confetti flakes.
+   * @default 'glossy'
+   */
+  flakeStyle?: FlakeStyle;
+  /**
+   * @description Controls how dramatically confetti pieces flip during tumble.
+   * Higher values create more dramatic flips where pieces nearly disappear edge-on.
+   * Lower values (e.g. 0.1) keep pieces mostly flat, which works better for
+   * image textures.
+   * @default 0.85
+   */
+  flipIntensity?: number;
+};
+
+type PIConfettiBaseProps = BurstConfettiBaseProps;
+
+export type PIConfettiProps = PIConfettiBaseProps & FlakeTexture;
+
+export type ContinuousConfettiProps = StrictOmit<
+  ConfettiProps,
+  'infinite' | 'onAnimationEnd' | 'fadeOutOnEnd'
 >;
-
-export type PIConfettiProps = PIBaseProps &
-  TextureProps & {
-    /**
-     * @description The position from which confetti flakes should blast.
-     * @default { x: containerWidth / 2, y: 150 }
-     */
-    blastPosition?: Position;
-    /**
-     * @description The radius of the blast.
-     * @default 180
-     */
-    blastRadius?: number;
-    /**
-     * @description The rotation configuration for confetti flakes.
-     * Object with optional x and y properties, each containing optional min and max values.
-     * @default { x: { min: 1 * Math.PI, max: 3 * Math.PI }, y: { min: 1 * Math.PI, max: 3 * Math.PI } }
-     */
-    rotation?: Rotation;
-  };
-
-type BaseContinuousConfettiProps = StrictOmit<
-  BaseConfettiProps,
-  'isInfinite' | 'verticalSpacing'
->;
-
-export type ContinuousConfettiProps = BaseContinuousConfettiProps &
-  TextureProps & {
-    /**
-     * @description The approximate space between confetti flakes vertically. It's recommended to set some large value e.g. 200
-     * @default 200
-     */
-    verticalSpacing?: number;
-  };
-
-export type ConfettiRestartOptions = {
-  /**
-   * @description Optional array of cannon positions to override the prop
-   */
-  cannonsPositions?: Position[];
-};
-
-export type BlastConfiguration = {
-  /**
-   * @description The position where this blast should originate
-   */
-  position: Position;
-  /**
-   * @description The delay in milliseconds before this blast starts (relative to restart call)
-   */
-  delay: number;
-};
 
 export type PIConfettiRestartOptions = {
   /**
-   * @description Optional single blast position to override the prop (for backward compatibility)
+   * @description Optional array of origins to override positions and delays.
    */
-  blastPosition?: Position;
-  /**
-   * @description Optional array of blast configurations with positions and delays.
-   * When provided, the total confetti count will be distributed evenly across all blasts.
-   * Each blast can have its own position and delay.
-   */
-  blastConfigurations?: BlastConfiguration[];
+  origins?: {
+    blastPosition: NamedPosition | Position;
+    delay?: number;
+  }[];
 };
 
 type BaseConfettiMethods = {
@@ -308,7 +341,7 @@ export type ConfettiMethods = BaseConfettiMethods & {
   /**
    * @description start the animation from the beginning
    */
-  restart: (options?: ConfettiRestartOptions) => void;
+  restart: () => void;
 };
 
 export type PIConfettiMethods = BaseConfettiMethods & {
@@ -316,4 +349,122 @@ export type PIConfettiMethods = BaseConfettiMethods & {
    * @description start the animation from the beginning
    */
   restart: (options?: PIConfettiRestartOptions) => void;
+};
+
+export type NamedPosition =
+  | 'bottom-left'
+  | 'bottom-right'
+  | 'bottom-center'
+  | 'top-left'
+  | 'top-right'
+  | 'top-center'
+  | 'center-left'
+  | 'center-right'
+  | 'center';
+
+export type CannonOriginProps = OriginPropsBase & {
+  /**
+   * @description The position of this cannon origin.
+   * Can be a named position string or an explicit {x, y} coordinate.
+   */
+  position: NamedPosition | Position;
+  /**
+   * @description The target position that this cannon aims at.
+   * Overrides the root-level target for this specific origin.
+   * @default center-top of the container
+   */
+  target?: NamedPosition | Position;
+};
+
+type FlakeSizeShorthand = {
+  /**
+   * @description Shorthand for width and height (sets both to this value).
+   */
+  size: number;
+  width?: never;
+  height?: never;
+};
+
+type FlakeSizeExplicit = {
+  size?: never;
+  /**
+   * @description Width of the flake.
+   */
+  width: number;
+  /**
+   * @description Height of the flake.
+   */
+  height: number;
+};
+
+type FlakeBase = {
+  /**
+   * @description Corner radius of the flake.
+   */
+  radius?: number;
+  /**
+   * @description The visual style of this flake.
+   * Overrides the origin-level and root-level flakeStyle.
+   * @default inherits from origin or root
+   */
+  flakeStyle?: FlakeStyle;
+  /**
+   * @description Custom color palette for this flake group.
+   * Overrides the parent-level colors for confetti pieces using this flake variant.
+   */
+  colors?: string[];
+};
+
+type FlakeTexture =
+  | {
+      /**
+       * @description A Skia image to use as this flake's texture.
+       */
+      image: SkImage;
+      svg?: never;
+    }
+  | {
+      image?: never;
+      /**
+       * @description A Skia SVG to use as this flake's texture.
+       */
+      svg: SkSVG;
+    }
+  | {
+      image?: never;
+      svg?: never;
+    };
+
+export type FlakeProps = (FlakeSizeShorthand | FlakeSizeExplicit) &
+  FlakeBase &
+  FlakeTexture;
+
+export type CannonConfettiRestartOptions = {
+  /**
+   * @description Optional array of cannon origins to override the children origins.
+   * Accepts named positions or explicit {x, y} coordinates.
+   */
+  origins?: (NamedPosition | Position)[];
+  /**
+   * @description Optional array of targets corresponding to each origin.
+   * Each target can be a named position or an explicit {x, y} coordinate.
+   */
+  targets?: (NamedPosition | Position)[];
+};
+
+type CannonConfettiBaseProps = BurstConfettiBaseProps & {
+  /**
+   * @description Default target position that all cannons aim at. Can be overridden per-origin.
+   * @default center-top of the container
+   */
+  target?: NamedPosition | Position;
+};
+
+export type CannonConfettiProps = CannonConfettiBaseProps & FlakeTexture;
+
+export type CannonConfettiMethods = BaseConfettiMethods & {
+  /**
+   * @description start the animation from the beginning
+   */
+  restart: (options?: CannonConfettiRestartOptions) => void;
 };

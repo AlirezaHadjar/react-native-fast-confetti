@@ -1,8 +1,9 @@
 {
-  "extends": "../tsconfig",
+  "extends": "expo/tsconfig.base",
   "compilerOptions": {
+    "strict": true,
     "paths": {
-      "react-native-fast-confetti": ["../src/index"]
+      "react-native-fast-confetti": ["../src/index.tsx"]
     }
   }
 }

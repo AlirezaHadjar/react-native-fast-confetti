@@ -1,62 +1,33 @@
-import { Easing } from 'react-native-reanimated';
+import { forwardRef } from 'react';
 import { InternalConfetti } from './Confetti';
-import {
-  CONTINUOUS_CONFETTI_RANDOM_OFFSET,
-  CONTINUOUS_CONFETTI_RANDOM_SPEED,
-} from './constants';
-import type { ConfettiMethods, ContinuousConfettiProps } from './types';
-import { useRef, useImperativeHandle, forwardRef } from 'react';
+import { Flake } from './FlakeComponent';
+import type {
+  ConfettiMethods,
+  ContinuousConfettiProps,
+  InternalConfettiProps,
+} from './types';
 
-export const ContinuousConfetti = forwardRef<
+const ContinuousConfettiInner = forwardRef<
   ConfettiMethods,
   ContinuousConfettiProps
->((props, ref) => {
-  const confettiRef1 = useRef<ConfettiMethods>(null);
-  const confettiRef2 = useRef<ConfettiMethods>(null);
+>(({ verticalSpacing = 200, ...props }, ref) => (
+  <InternalConfetti
+    {...(props as InternalConfettiProps)}
+    ref={ref}
+    verticalSpacing={verticalSpacing}
+    infinite
+    continuous
+  />
+));
 
-  useImperativeHandle(ref, () => ({
-    restart: () => {
-      confettiRef1.current?.restart();
-      confettiRef2.current?.restart();
-    },
-    pause: () => {
-      confettiRef1.current?.pause();
-      confettiRef2.current?.pause();
-    },
-    reset: () => {
-      confettiRef1.current?.reset();
-      confettiRef2.current?.reset();
-    },
-    resume: () => {
-      confettiRef1.current?.resume();
-      confettiRef2.current?.resume();
-    },
-  }));
+ContinuousConfettiInner.displayName = 'ContinuousConfetti';
 
-  return (
-    <>
-      <InternalConfetti
-        randomSpeed={CONTINUOUS_CONFETTI_RANDOM_SPEED}
-        randomOffset={CONTINUOUS_CONFETTI_RANDOM_OFFSET}
-        verticalSpacing={CONTINUOUS_CONFETTI_RANDOM_OFFSET.y?.max}
-        {...props}
-        ref={confettiRef1}
-        isInfinite
-        isContinuous={1}
-        fallEasing={Easing.linear}
-      />
-      <InternalConfetti
-        randomSpeed={CONTINUOUS_CONFETTI_RANDOM_SPEED}
-        randomOffset={CONTINUOUS_CONFETTI_RANDOM_OFFSET}
-        verticalSpacing={CONTINUOUS_CONFETTI_RANDOM_OFFSET.y?.max}
-        {...props}
-        ref={confettiRef2}
-        isInfinite
-        isContinuous={2}
-        fallEasing={Easing.linear}
-      />
-    </>
-  );
-});
+const ContinuousConfetti = ContinuousConfettiInner as React.ForwardRefExoticComponent<
+  ContinuousConfettiProps & React.RefAttributes<ConfettiMethods>
+> & {
+  Flake: typeof Flake;
+};
 
-ContinuousConfetti.displayName = 'ContinuousConfetti';
+ContinuousConfetti.Flake = Flake;
+
+export { ContinuousConfetti };
