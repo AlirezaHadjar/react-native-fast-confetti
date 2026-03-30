@@ -211,7 +211,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
     const transforms = useRSXformBuffer(totalCount, (val, i) => {
       'worklet';
       const piece = boxes.get()[i];
-      if (!piece || !running.get()) {
+      if (!piece) {
         val.set(0, 0, -10000, -10000);
         return;
       }
@@ -275,7 +275,10 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
 
       // Scale: appearance animation at launch + oscillation
       const minFlipScale = 1 - flipIntensity;
-      const oscillatingScale = Math.max(Math.abs(Math.cos(rx)), minFlipScale);
+      const oscillatingScale =
+        piece.maxRotation.x === 0
+          ? 1
+          : Math.max(Math.abs(Math.cos(rx)), minFlipScale);
       const appearScale = interpolate(
         effectiveProgress,
         [0, 0.05],

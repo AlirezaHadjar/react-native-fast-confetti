@@ -316,7 +316,10 @@ const CannonConfettiInner = forwardRef<
         piece.initialRotation + p * rotationDirection * piece.maxRotation.x;
 
       const minFlipScale = 1 - flipIntensity;
-      const oscillatingScale = Math.max(Math.abs(Math.cos(rx)), minFlipScale);
+      const oscillatingScale =
+        piece.maxRotation.x === 0
+          ? 1
+          : Math.max(Math.abs(Math.cos(rx)), minFlipScale);
       const appearScale = interpolate(
         effectiveProgress,
         [0, 0.05],
