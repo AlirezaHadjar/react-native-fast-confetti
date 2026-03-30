@@ -10,6 +10,7 @@ export type {
   CannonConfettiMethods,
   NamedPosition,
   FlakeStyle,
+  Drag,
 } from './types';
 
 export { Confetti } from './Confetti';

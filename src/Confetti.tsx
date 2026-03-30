@@ -22,7 +22,7 @@ import {
   DEFAULT_BOXES_COUNT,
   DEFAULT_VERTICAL_SPACING,
   DEFAULT_CONFETTI_GRAVITY,
-  DEFAULT_CONFETTI_FLUTTER,
+  DEFAULT_CONFETTI_WOBBLE,
   DEFAULT_CONFETTI_DRIFT,
   RANDOM_INITIAL_Y_JIGGLE,
   TRAJECTORY_SAMPLE_COUNT,
@@ -31,12 +31,10 @@ import type {
   ConfettiMethods,
   ConfettiProps,
   InternalConfettiProps,
-  ConfettiRestartOptions,
   FallingBox,
 } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useConfettiFlakes } from './hooks/useConfettiFlakes';
-import { useTextureProps } from './hooks/useTextureProps';
 import { useAnimationCallbacks } from './hooks/useAnimationCallbacks';
 import { Flake } from './FlakeComponent';
 
@@ -47,7 +45,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       count = DEFAULT_BOXES_COUNT,
       colors: rootColors,
       gravity = DEFAULT_CONFETTI_GRAVITY,
-      flutter,
+      wobble,
       drift = DEFAULT_CONFETTI_DRIFT,
       autoplay = true,
       infinite = false,
@@ -56,34 +54,33 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       autoStartDelay = 0,
       onAnimationEnd,
       onAnimationStart,
-      width: _width,
-      height: _height,
       containerStyle,
       rotation,
       depth,
       verticalSpacing = DEFAULT_VERTICAL_SPACING,
       flakeStyle = 'glossy',
       initialScale = 0.3,
-      tumbleClamp = 0.15,
-      ...textureRootProps
+      flipIntensity = 0.85,
     },
     ref
   ) => {
     const { width: DEFAULT_SCREEN_WIDTH, height: DEFAULT_SCREEN_HEIGHT } =
       useWindowDimensions();
-    const containerWidth = _width || DEFAULT_SCREEN_WIDTH;
-    const containerHeight = _height || DEFAULT_SCREEN_HEIGHT;
-
-    // --- Resolve texture from root props ---
-    const { textureProps, hasTexture } = useTextureProps(textureRootProps);
+    const flatStyle = StyleSheet.flatten(containerStyle);
+    const containerWidth =
+      (typeof flatStyle?.width === 'number' ? flatStyle.width : null) ??
+      DEFAULT_SCREEN_WIDTH;
+    const containerHeight =
+      (typeof flatStyle?.height === 'number' ? flatStyle.height : null) ??
+      DEFAULT_SCREEN_HEIGHT;
 
     // --- Parse children + build atlas via hook ---
-    const { allColors, sizeVariations } = useConfettiFlakes({
-      children,
-      rootColors,
-      rootFlakeStyle: flakeStyle,
-      hasTexture,
-    });
+    const { allColors, sizeVariations, sizeColorOverrides } =
+      useConfettiFlakes({
+        children,
+        rootColors,
+        rootFlakeStyle: flakeStyle,
+      });
 
     // --- Compute grid layout for spawn positions ---
     const maxFlakeWidth = Math.max(...sizeVariations.map((f) => f.width));
@@ -105,12 +102,12 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       verticalSpacing / 2;
 
     // --- Auto-compute duration from physics ---
-    const maxFlutter = flutter?.max ?? DEFAULT_CONFETTI_FLUTTER.max;
+    const maxWobble = wobble?.max ?? DEFAULT_CONFETTI_WOBBLE.max;
     const duration = estimateFallingDuration({
       gravity,
       containerHeight,
       verticalOffset,
-      maxFlutter,
+      maxWobble,
     });
 
     const progress = useSharedValue(0);
@@ -133,7 +130,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       sizeVariations,
       colors: allColors,
       boxes,
-      textureProps,
+      sizeColorOverrides,
     });
 
     const pause = () => {
@@ -155,6 +152,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
         count,
         colorsVariations: allColors.length,
         sizeVariations: sizeVariations.length,
+        sizeColorOverrides,
         containerWidth,
         containerHeight,
         verticalSpacing,
@@ -165,7 +163,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
         rowsNum,
         rotation,
         depth,
-        flutter,
+        wobble,
         totalTime,
         gravity,
         infinite,
@@ -177,6 +175,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       count,
       allColors.length,
       sizeVariations.length,
+      sizeColorOverrides,
       boxes,
       trajectories,
       containerWidth,
@@ -189,7 +188,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       rowsNum,
       rotation,
       depth,
-      flutter,
+      wobble,
       totalTime,
       gravity,
       infinite,
@@ -202,7 +201,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
     );
 
     const restart = useCallback(
-      (_options: ConfettiRestartOptions = {}, delay: number = 0) => {
+      (delay: number = 0) => {
         'worklet';
 
         refreshBoxes();
@@ -303,7 +302,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
 
     useEffect(() => {
       runOnUI(() => {
-        if (autoplay && !running.get()) restart({}, autoStartDelay);
+        if (autoplay && !running.get()) restart(autoStartDelay);
       })();
     }, [autoplay, autoStartDelay, restart, running]);
 
@@ -354,9 +353,10 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       // --- Scale from tumble ---
       // Clamp so edge-on pieces stay visible (uniform scale shrinks both axes)
       const rawCos = Math.cos(tumbleTheta);
-      const absClamped = Math.max(Math.abs(rawCos), tumbleClamp);
+      const minFlipScale = 1 - flipIntensity;
+      const absClamped = Math.max(Math.abs(rawCos), minFlipScale);
       // For textured pieces (image/SVG), skip the sign flip to avoid mirroring.
-      const oscillatingScale = hasTexture
+      const oscillatingScale = piece.isTextured
         ? absClamped
         : (rawCos >= 0 ? 1 : -1) * absClamped;
       // In continuous mode, skip appear scale — pieces start at terminal velocity.

@@ -37,8 +37,6 @@ const modes = [
         autoplay
         count={100}
         containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
-        height={ITEM_HEIGHT}
-        width={ITEM_WIDTH}
         verticalSpacing={50}
         infinite
         flakeStyle="glossy"
@@ -56,8 +54,6 @@ const modes = [
       <ContinuousConfetti
         autoplay
         count={400}
-        width={ITEM_WIDTH}
-        height={ITEM_HEIGHT}
         containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
         verticalSpacing={120}
         flakeStyle="glossy"
@@ -80,8 +76,6 @@ const modes = [
         gravity={6}
         infinite
         initialSpeed={4}
-        width={ITEM_WIDTH}
-        height={ITEM_HEIGHT}
         containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
       >
         {previewFlakes(PIConfetti.Flake)}
@@ -102,14 +96,12 @@ const modes = [
         drag={{ vertical: 3, horizontal: 6 }}
         sprayDuration={300}
         initialScale={0.7}
-        width={ITEM_WIDTH}
-        height={ITEM_HEIGHT}
         containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
       >
         <CannonConfetti.Origin
           position="bottom-left"
           count={50}
-          speed={6}
+          initialSpeed={6}
           spread={Math.PI / 3}
           depth={{ min: 1, max: 1.1 }}
         >
@@ -118,7 +110,7 @@ const modes = [
         <CannonConfetti.Origin
           position="bottom-right"
           count={50}
-          speed={6}
+          initialSpeed={6}
           spread={Math.PI / 3}
           depth={{ min: 1, max: 1.1 }}
         >
@@ -127,7 +119,7 @@ const modes = [
         <CannonConfetti.Origin
           position="bottom-center"
           count={50}
-          speed={4}
+          initialSpeed={4}
           spread={Math.PI / 3}
         >
           {previewFlakes(CannonConfetti.Flake)}

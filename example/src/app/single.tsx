@@ -5,7 +5,7 @@ import { Confetti } from 'react-native-fast-confetti';
 import type { ConfettiMethods } from 'react-native-fast-confetti';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
 import { useScreenConfig } from '../hooks/useScreenConfig';
-import { getNewTextureProps, getRotation } from '../utils/confettiConfig';
+import { getTextureProps, getRotation } from '../utils/confettiConfig';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { textureOptions, verticalSpacingOptions } from '../constants/config';
@@ -20,7 +20,7 @@ export default function SingleScreen() {
   const rotation = getRotation(config.textureType, 'single');
   const confettiKey = `single-${config.textureType}-${config.verticalSpacing}`;
 
-  const textureProps = getNewTextureProps(
+  const textureProps = getTextureProps(
     config.textureType,
     moneyStackImage!,
     snowFlakeSVG!
@@ -28,10 +28,10 @@ export default function SingleScreen() {
 
   const renderFlakes = () => {
     if (config.textureType === 'money') {
-      return <Confetti.Flake size={50} />;
+      return <Confetti.Flake size={50} {...textureProps} />;
     }
     if (config.textureType === 'snowflake') {
-      return <Confetti.Flake size={10} />;
+      return <Confetti.Flake size={10} {...textureProps} />;
     }
     return (
       <>
@@ -70,8 +70,7 @@ export default function SingleScreen() {
         infinite
         flakeStyle="glossy"
         gravity={1}
-        tumbleClamp={config.textureType === 'money' ? 0.9 : 0.15}
-        {...textureProps}
+        flipIntensity={config.textureType === 'money' ? 0.1 : 0.85}
       >
         {renderFlakes()}
       </Confetti>

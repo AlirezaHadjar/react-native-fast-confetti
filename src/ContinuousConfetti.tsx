@@ -4,18 +4,14 @@ import { Flake } from './FlakeComponent';
 import type {
   ConfettiMethods,
   ContinuousConfettiProps,
-  InternalConfettiProps,
 } from './types';
 
-// ContinuousConfettiProps is ConfettiProps minus `infinite`.
-// The discriminated union (image | svg | neither) is structurally identical,
-// but TS can't resolve spreading one union into another directly.
 const ContinuousConfettiInner = forwardRef<
   ConfettiMethods,
   ContinuousConfettiProps
 >(({ verticalSpacing = 200, ...props }, ref) => (
   <InternalConfetti
-    {...(props as InternalConfettiProps)}
+    {...props}
     ref={ref}
     verticalSpacing={verticalSpacing}
     infinite

@@ -5,7 +5,7 @@ import {
   DEFAULT_CANNON_CONFETTI_DEPTH,
   DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX,
   DEFAULT_CONFETTI_DEPTH,
-  DEFAULT_CONFETTI_FLUTTER,
+  DEFAULT_CONFETTI_WOBBLE,
   TRAJECTORY_SAMPLE_COUNT,
   DEFAULT_TANGENTIAL_DRAG_RATIO,
   DEFAULT_ROTATIONAL_DAMPING,
@@ -29,19 +29,18 @@ export const getRandomValue = (min: number, max: number): number => {
 };
 
 export const resolveRange = (
-  range?: { min?: number; max?: number },
-  defaultRange?: { min: number; max: number }
+  range: { min: number; max: number } | undefined,
+  defaultRange: { min: number; max: number }
 ) => {
   'worklet';
-  const finalMin = range?.min ?? defaultRange?.min ?? 0;
-  const finalMax = range?.max ?? defaultRange?.max ?? 0;
-  return { min: finalMin, max: finalMax };
+  return range ?? defaultRange;
 };
 
 export const generatePIBoxesArray = ({
   count,
   colorsVariations,
   sizeVariations,
+  sizeColorOverrides,
   spread,
   rotation,
   speedVariation,
@@ -51,6 +50,7 @@ export const generatePIBoxesArray = ({
   count: number;
   colorsVariations: number;
   sizeVariations: number;
+  sizeColorOverrides: (number | null)[];
   spread: number;
   rotation?: Rotation;
   speedVariation?: Range;
@@ -82,6 +82,8 @@ export const generatePIBoxesArray = ({
     const goldenAngle =
       baseAngle + ((((i * 137.5) % 360) * Math.PI) / 180 - Math.PI) * (halfSpread / Math.PI);
 
+    const sizeIndex = Math.round(getRandomValue(0, sizeVariations - 1));
+    const colorOverride = sizeColorOverrides[sizeIndex];
     return {
       angle: goldenAngle,
       speedMultiplier: getRandomValue(speedRange.min, speedRange.max),
@@ -92,9 +94,10 @@ export const generatePIBoxesArray = ({
         x: getRandomValue(xRotationRange.min, xRotationRange.max),
         z: getRandomValue(zRotationRange.min, zRotationRange.max),
       },
-      colorIndex: Math.round(getRandomValue(0, colorsVariations - 1)),
-      sizeIndex: Math.round(getRandomValue(0, sizeVariations - 1)),
+      colorIndex: colorOverride ?? Math.round(getRandomValue(0, colorsVariations - 1)),
+      sizeIndex,
       initialRotation: getRandomValue(0.1 * Math.PI, Math.PI),
+      isTextured: colorOverride !== null && colorOverride !== undefined,
     };
   });
 };
@@ -102,7 +105,7 @@ export const generatePIBoxesArray = ({
 export const estimatePIDuration = ({
   initialSpeed,
   gravity,
-  drag,
+  vDrag,
   depth,
   speedVariation,
   sprayDurationMs,
@@ -111,7 +114,7 @@ export const estimatePIDuration = ({
 }: {
   initialSpeed: number;
   gravity: number;
-  drag: number;
+  vDrag: number;
   depth?: Range;
   speedVariation?: Range;
   sprayDurationMs?: number;
@@ -121,7 +124,7 @@ export const estimatePIDuration = ({
   // Terminal velocity under drag: v_term = g/drag (in normalized units)
   // Time for the slowest piece (launched straight up at max speed) to:
   //   1. Decelerate to zero  2. Fall back to launch height  3. Continue falling to screen bottom
-  const safeDrag = Math.max(drag, 0.001);
+  const safeDrag = Math.max(vDrag, 0.001);
   const scaledGravity = Math.max(gravity * containerHeight, 0.001);
   const terminalVelocity = scaledGravity / safeDrag;
 
@@ -245,9 +248,11 @@ export const estimateCannonDuration = ({
 export const generateCannonBoxesArray = ({
   cannonConfigs,
   launchDelayMax,
+  sizeColorOverrides,
 }: {
   cannonConfigs: CannonConfig[];
   launchDelayMax: number;
+  sizeColorOverrides: (number | null)[];
 }) => {
   'worklet';
 
@@ -265,6 +270,7 @@ export const generateCannonBoxesArray = ({
     initialRotation: number;
     targetX: number;
     targetY: number;
+    isTextured: boolean;
   }[] = [];
 
   for (let cannonIndex = 0; cannonIndex < cannonConfigs.length; cannonIndex++) {
@@ -289,6 +295,13 @@ export const generateCannonBoxesArray = ({
     const depthRange = resolveRange(depth, DEFAULT_CANNON_CONFETTI_DEPTH);
 
     for (let j = 0; j < config.count; j++) {
+      const sizeIndex = Math.round(
+        getRandomValue(
+          config.sizeStart,
+          config.sizeStart + config.sizeCount - 1
+        )
+      );
+      const colorOverride = sizeColorOverrides[sizeIndex];
       result.push({
         cannonIndex,
         angleOffset: getRandomValue(-halfSpread, halfSpread),
@@ -301,21 +314,17 @@ export const generateCannonBoxesArray = ({
           x: getRandomValue(xRotationRange.min, xRotationRange.max),
           z: getRandomValue(zRotationRange.min, zRotationRange.max),
         },
-        colorIndex: Math.round(
+        colorIndex: colorOverride ?? Math.round(
           getRandomValue(
             config.colorStart,
             config.colorStart + config.colorCount - 1
           )
         ),
-        sizeIndex: Math.round(
-          getRandomValue(
-            config.sizeStart,
-            config.sizeStart + config.sizeCount - 1
-          )
-        ),
+        sizeIndex,
         initialRotation: getRandomValue(0.1 * Math.PI, Math.PI),
         targetX: config.target.x,
         targetY: config.target.y,
+        isTextured: colorOverride !== null && colorOverride !== undefined,
       });
     }
   }
@@ -327,12 +336,12 @@ export const estimateFallingDuration = ({
   gravity,
   containerHeight,
   verticalOffset,
-  maxFlutter,
+  maxWobble,
 }: {
   gravity: number;
   containerHeight: number;
   verticalOffset: number;
-  maxFlutter?: number;
+  maxWobble?: number;
 }): number => {
   // Angle-averaged terminal velocity: as the piece tumbles, drag varies between
   // Cn (broadside) and Ct (edge-on). The time-averaged effective drag coefficient
@@ -344,14 +353,15 @@ export const estimateFallingDuration = ({
   const terminalVelocity = Math.sqrt(scaledGravity / angleAvgDrag);
   const totalFallDistance = containerHeight + Math.abs(verticalOffset);
   const timeSec = totalFallDistance / terminalVelocity;
-  const flutterMargin = 1.1 + (maxFlutter ?? 1.5) * 0.2;
-  return Math.ceil(timeSec * 1000 * flutterMargin);
+  const wobbleMargin = 1.1 + (maxWobble ?? 1.5) * 0.2;
+  return Math.ceil(timeSec * 1000 * wobbleMargin);
 };
 
 export const generateFallingBoxesArray = ({
   count,
   colorsVariations,
   sizeVariations,
+  sizeColorOverrides,
   containerWidth,
   containerHeight,
   verticalSpacing,
@@ -362,7 +372,7 @@ export const generateFallingBoxesArray = ({
   rowsNum,
   rotation,
   depth,
-  flutter,
+  wobble,
   totalTime,
   gravity,
   infinite,
@@ -371,6 +381,7 @@ export const generateFallingBoxesArray = ({
   count: number;
   colorsVariations: number;
   sizeVariations: number;
+  sizeColorOverrides: (number | null)[];
   containerWidth: number;
   containerHeight: number;
   verticalSpacing: number;
@@ -381,7 +392,7 @@ export const generateFallingBoxesArray = ({
   rowsNum: number;
   rotation?: Rotation;
   depth?: Range;
-  flutter?: Range;
+  wobble?: Range;
   totalTime: number;
   gravity: number;
   infinite?: boolean;
@@ -392,7 +403,7 @@ export const generateFallingBoxesArray = ({
   const xRotationRange = resolveRange(rotation?.x, DEFAULT_CONFETTI_ROTATION.x);
   const zRotationRange = resolveRange(rotation?.z, DEFAULT_CONFETTI_ROTATION.z);
   const depthRange = resolveRange(depth, DEFAULT_CONFETTI_DEPTH);
-  const flutterRange = resolveRange(flutter, DEFAULT_CONFETTI_FLUTTER);
+  const wobbleRange = resolveRange(wobble, DEFAULT_CONFETTI_WOBBLE);
 
   const scaledGravity = gravity * containerHeight;
   const Cn = 4.0 / scaledGravity;
@@ -457,8 +468,8 @@ export const generateFallingBoxesArray = ({
 
     // ODE parameters per piece (depth only affects visual size, not physics)
     const effectiveGravity = scaledGravity;
-    // Scale flutter into coupling strength — modulates tumble speed
-    const Ccouple = (getRandomValue(flutterRange.min, flutterRange.max) * 5) / scaledGravity;
+    // Scale wobble into coupling strength — modulates tumble speed
+    const Ccouple = (getRandomValue(wobbleRange.min, wobbleRange.max) * 5) / scaledGravity;
     const Crot = DEFAULT_ROTATIONAL_DAMPING;
     // Minimum tumbleRate so tumbleBias always dominates coupling torque.
     // Stall condition: tumbleBias < Ccouple * vn * vt (peak at ~v_term²)
@@ -498,16 +509,19 @@ export const generateFallingBoxesArray = ({
       i * stridePerPiece
     );
 
+    const sizeIndex = Math.round(getRandomValue(0, sizeVariations - 1));
+    const colorOverride = sizeColorOverrides[sizeIndex];
     boxes[i] = {
       spawnX,
       spawnY,
       depthScale,
       clockwise,
-      colorIndex: Math.round(getRandomValue(0, colorsVariations - 1)),
-      sizeIndex: Math.round(getRandomValue(0, sizeVariations - 1)),
+      colorIndex: colorOverride ?? Math.round(getRandomValue(0, colorsVariations - 1)),
+      sizeIndex,
       spinPhase: getRandomValue(0, 2 * Math.PI),
       spinRate,
       phaseOffset: continuous ? phaseOffsets[i]! : 0,
+      isTextured: colorOverride !== null && colorOverride !== undefined,
     };
   }
 

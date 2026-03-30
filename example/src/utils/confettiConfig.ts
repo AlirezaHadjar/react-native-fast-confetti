@@ -1,7 +1,7 @@
 import type { SkImage, SkSVG } from '@shopify/react-native-skia';
 import type { TextureType } from '../constants/config';
 
-export function getNewTextureProps(
+export function getTextureProps(
   textureType: TextureType,
   moneyStackImage: SkImage,
   snowFlakeSVG: SkSVG

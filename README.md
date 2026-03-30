@@ -53,6 +53,7 @@ import { Confetti } from 'react-native-fast-confetti';
 &lt;Confetti.Flake width={8} height={14} radius={6.5} /&gt;
 &lt;Confetti.Flake width={8} height={14} radius={4} /&gt;
 &lt;/Confetti&gt;;
+
 </pre>
 </td>
 
@@ -75,6 +76,7 @@ import { ContinuousConfetti } from 'react-native-fast-confetti';
 &lt;ContinuousConfetti autoplay&gt;
 &lt;ContinuousConfetti.Flake size={12} radius={6} /&gt;
 &lt;/ContinuousConfetti&gt;;
+
 </pre>
 </td>
 
@@ -97,6 +99,7 @@ import { PIConfetti } from 'react-native-fast-confetti';
 &lt;PIConfetti autoplay blastPosition="center"&gt;
 &lt;PIConfetti.Flake size={12} /&gt;
 &lt;/PIConfetti&gt;;
+
 </pre>
 </td>
 
@@ -117,13 +120,14 @@ Launch confetti from multiple origins with individual control over each cannon.
 import { CannonConfetti } from 'react-native-fast-confetti';
 
 &lt;CannonConfetti autoplay gravity={3}&gt;
-&lt;CannonConfetti.Origin position="bottom-left" count={150} speed={3}&gt;
+&lt;CannonConfetti.Origin position="bottom-left" count={150} initialSpeed={3}&gt;
 &lt;CannonConfetti.Flake size={12} radius={6} /&gt;
 &lt;/CannonConfetti.Origin&gt;
-&lt;CannonConfetti.Origin position="bottom-right" count={150} speed={3}&gt;
+&lt;CannonConfetti.Origin position="bottom-right" count={150} initialSpeed={3}&gt;
 &lt;CannonConfetti.Flake size={12} /&gt;
 &lt;/CannonConfetti.Origin&gt;
 &lt;/CannonConfetti&gt;;
+
 </pre>
 </td>
 
@@ -181,7 +185,7 @@ ref.current?.reset();
   </tr>
 </table>
 
-Pass a Skia image or SVG directly as a prop:
+Pass a Skia image or SVG directly on the Flake component:
 
 ```tsx
 import { useImage, useSVG } from '@shopify/react-native-skia';
@@ -191,13 +195,20 @@ const moneyImage = useImage(require('./money.png'));
 const snowSvg = useSVG(require('./snowflake.svg'));
 
 // Image texture
-<Confetti image={moneyImage} autoplay>
-  <Confetti.Flake size={50} />
+<Confetti autoplay>
+  <Confetti.Flake size={50} image={moneyImage} />
 </Confetti>
 
 // SVG texture
-<Confetti svg={snowSvg} autoplay>
-  <Confetti.Flake size={30} />
+<Confetti autoplay>
+  <Confetti.Flake size={30} svg={snowSvg} />
+</Confetti>
+
+// Mixed textures — combine different flake types
+<Confetti autoplay>
+  <Confetti.Flake size={50} image={moneyImage} />
+  <Confetti.Flake size={30} svg={snowSvg} />
+  <Confetti.Flake width={8} height={14} />
 </Confetti>
 ```
 
@@ -229,26 +240,22 @@ Available named positions: `top-left`, `top-center`, `top-right`, `center-left`,
 | `colors`           | Built-in palette | Array of color strings.       |
 | `flakeStyle`       | 'glossy'         | `'solid'` or `'glossy'`.      |
 | `fadeOutOnEnd`     | false            | Fade pieces as they exit.     |
-| `image`            | N/A              | Skia image texture.           |
-| `svg`              | N/A              | Skia SVG texture.             |
 | `onAnimationStart` | N/A              | Called when animation starts. |
 | `onAnimationEnd`   | N/A              | Called when animation ends.   |
-| `width`            | Screen width     | Container width.              |
-| `height`           | Screen height    | Container height.             |
 
 <details>
 <summary>Advanced props — these work well out of the box, but you can tweak them for full customizability.</summary>
 
-| Name              | Default                  | Description                             |
-| ----------------- | ------------------------ | --------------------------------------- |
-| `flutter`         | { min: 0.03, max: 0.08 } | Tumble/bobbing intensity.               |
-| `drift`           | 0.7                      | Horizontal drift (0-1).                 |
-| `tumbleClamp`     | 0.15                     | Minimum scale during tumble (0.15-0.9). |
-| `rotation`        | N/A                      | Rotation range config.                  |
-| `depth`           | { min: 0.8, max: 1.0 }   | 3D perspective scale range.             |
-| `initialScale`    | 0.3                      | Scale at spawn before growing.          |
-| `verticalSpacing` | 70                       | Space between rows. Lower = denser.     |
-| `containerStyle`  | N/A                      | Style for the container.                |
+| Name              | Default                  | Description                                                     |
+| ----------------- | ------------------------ | --------------------------------------------------------------- |
+| `wobble`          | { min: 0.03, max: 0.08 } | Tumble/bobbing intensity.                                       |
+| `drift`           | 0.7                      | Horizontal drift (0-1).                                         |
+| `flipIntensity`   | 0.85                     | How dramatically pieces flip (0-1). Lower = flatter.            |
+| `rotation`        | N/A                      | Rotation range config.                                          |
+| `depth`           | { min: 0.8, max: 1.0 }   | 3D perspective scale range.                                     |
+| `initialScale`    | 0.3                      | Scale at spawn before growing.                                  |
+| `verticalSpacing` | 70                       | Space between rows. Lower = denser.                             |
+| `containerStyle`  | N/A                      | Style for the container. Numeric width/height used for physics. |
 
 </details>
 
@@ -257,6 +264,7 @@ Available named positions: `top-left`, `top-center`, `top-right`, `center-left`,
 Same as `<Confetti />` except:
 
 - No `infinite` prop (always infinite)
+- No `onAnimationEnd` or `fadeOutOnEnd` props (animation never ends)
 - `verticalSpacing` defaults to `200`
 
 ### `<PIConfetti />` Props
@@ -273,26 +281,23 @@ Same as `<Confetti />` except:
 | `colors`           | Built-in palette      | Array of color strings.                     |
 | `flakeStyle`       | 'glossy'              | `'solid'` or `'glossy'`.                    |
 | `fadeOutOnEnd`     | false                 | Fade pieces as they exit.                   |
-| `image`            | N/A                   | Skia image texture.                         |
-| `svg`              | N/A                   | Skia SVG texture.                           |
 | `onAnimationStart` | N/A                   | Called when animation starts.               |
 | `onAnimationEnd`   | N/A                   | Called when animation ends.                 |
-| `width`            | Screen width          | Container width.                            |
-| `height`           | Screen height         | Container height.                           |
 
 <details>
 <summary>Advanced props — these work well out of the box, but you can tweak them for full customizability.</summary>
 
-| Name             | Default                | Description                       |
-| ---------------- | ---------------------- | --------------------------------- |
-| `drag`           | 3.0                    | Air resistance.                   |
-| `spread`         | 2\*PI                  | Launch cone width (radians).      |
-| `sprayDuration`  | N/A                    | Stagger pieces over N ms.         |
-| `speedVariation` | { min: 0.0, max: 1.0 } | Per-piece speed multiplier range. |
-| `rotation`       | N/A                    | Rotation range config.            |
-| `depth`          | { min: 1, max: 1.1 }   | 3D perspective scale range.       |
-| `initialScale`   | 0.3                    | Scale at spawn before growing.    |
-| `containerStyle` | N/A                    | Style for the container.          |
+| Name             | Default                | Description                                                     |
+| ---------------- | ---------------------- | --------------------------------------------------------------- |
+| `drag`           | 3.0                    | Air resistance. Number or `{ horizontal, vertical }`.           |
+| `spread`         | 2\*PI                  | Launch cone width (radians).                                    |
+| `sprayDuration`  | N/A                    | Stagger pieces over N ms.                                       |
+| `speedVariation` | { min: 0.0, max: 1.0 } | Per-piece speed multiplier range.                               |
+| `flipIntensity`  | 0.85                   | How dramatically pieces flip (0-1). Lower = flatter.            |
+| `rotation`       | N/A                    | Rotation range config.                                          |
+| `depth`          | { min: 1, max: 1.1 }   | 3D perspective scale range.                                     |
+| `initialScale`   | 0.3                    | Scale at spawn before growing.                                  |
+| `containerStyle` | N/A                    | Style for the container. Numeric width/height used for physics. |
 
 </details>
 
@@ -308,25 +313,22 @@ Same as `<Confetti />` except:
 | `colors`           | Built-in palette | Default colors for all origins.              |
 | `flakeStyle`       | 'glossy'         | Default `'solid'` or `'glossy'` for origins. |
 | `fadeOutOnEnd`     | false            | Fade pieces as they exit.                    |
-| `image`            | N/A              | Skia image texture.                          |
-| `svg`              | N/A              | Skia SVG texture.                            |
 | `onAnimationStart` | N/A              | Called when animation starts.                |
 | `onAnimationEnd`   | N/A              | Called when animation ends.                  |
-| `width`            | Screen width     | Container width.                             |
-| `height`           | Screen height    | Container height.                            |
 
 <details>
 <summary>Advanced props — these work well out of the box, but you can tweak them for full customizability.</summary>
 
-| Name             | Default                | Description                                           |
-| ---------------- | ---------------------- | ----------------------------------------------------- |
-| `drag`           | 3.0                    | Air resistance. Number or `{ horizontal, vertical }`. |
-| `sprayDuration`  | 300                    | Stagger all cannons over N ms.                        |
-| `speedVariation` | { min: 0.8, max: 1.2 } | Default speed variation for origins.                  |
-| `rotation`       | N/A                    | Default rotation config for origins.                  |
-| `depth`          | { min: 1, max: 1.1 }   | Default depth range for origins.                      |
-| `initialScale`   | 0.3                    | Scale at spawn before growing.                        |
-| `containerStyle` | N/A                    | Style for the container.                              |
+| Name             | Default                | Description                                                     |
+| ---------------- | ---------------------- | --------------------------------------------------------------- |
+| `drag`           | 3.0                    | Air resistance. Number or `{ horizontal, vertical }`.           |
+| `sprayDuration`  | 300                    | Stagger all cannons over N ms.                                  |
+| `speedVariation` | { min: 0.8, max: 1.2 } | Default speed variation for origins.                            |
+| `flipIntensity`  | 0.85                   | How dramatically pieces flip (0-1). Lower = flatter.            |
+| `rotation`       | N/A                    | Default rotation config for origins.                            |
+| `depth`          | { min: 1, max: 1.1 }   | Default depth range for origins.                                |
+| `initialScale`   | 0.3                    | Scale at spawn before growing.                                  |
+| `containerStyle` | N/A                    | Style for the container. Numeric width/height used for physics. |
 
 </details>
 
@@ -336,7 +338,7 @@ Same as `<Confetti />` except:
 | --------------------- | ------- | ---------------------------------------------------------- |
 | `position` (required) | -       | Where the cannon fires from. Named position or `{ x, y }`. |
 | `count`               | 100     | Number of pieces from this origin.                         |
-| `speed`               | 2.0     | Launch speed.                                              |
+| `initialSpeed`        | 2.0     | Launch speed.                                              |
 | `spread`              | PI/5    | Launch cone width (radians).                               |
 | `target`              | N/A     | Aim point (overrides root `target`).                       |
 
@@ -364,8 +366,8 @@ Define flake sizes as children of any confetti component (or origin).
 | `height`     | -       | Flake height (use instead of `size` for non-square). |
 | `radius`     | 0       | Corner radius.                                       |
 | `flakeStyle` | N/A     | Override the parent's `flakeStyle`.                  |
-
-> Use either `size` or `width`/`height`, not both.
+| `image`      | N/A     | Skia image texture for this flake.                   |
+| `svg`        | N/A     | Skia SVG texture for this flake.                     |
 
 ## Migrating from v1
 

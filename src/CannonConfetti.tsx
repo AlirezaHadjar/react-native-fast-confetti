@@ -35,7 +35,6 @@ import type {
 } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useCannonOrigins } from './hooks/useCannonOrigins';
-import { useTextureProps } from './hooks/useTextureProps';
 import { useAnimationCallbacks } from './hooks/useAnimationCallbacks';
 import { Origin, Flake } from './CannonConfettiComponents';
 
@@ -54,8 +53,6 @@ const CannonConfettiInner = forwardRef<
       autoStartDelay = 0,
       onAnimationEnd,
       onAnimationStart,
-      width: _width,
-      height: _height,
       containerStyle,
       colors: rootColors,
       rotation: rootRotation,
@@ -64,23 +61,24 @@ const CannonConfettiInner = forwardRef<
       target: rootTarget,
       sprayDuration = 300,
       initialScale = 0.3,
-      tumbleClamp = 0.15,
+      flipIntensity = 0.85,
       flakeStyle = 'glossy',
-      ...textureRootProps
     },
     ref
   ) => {
     const { width: DEFAULT_SCREEN_WIDTH, height: DEFAULT_SCREEN_HEIGHT } =
       useWindowDimensions();
-    const containerWidth = _width || DEFAULT_SCREEN_WIDTH;
-    const containerHeight = _height || DEFAULT_SCREEN_HEIGHT;
+    const flatStyle = StyleSheet.flatten(containerStyle);
+    const containerWidth =
+      (typeof flatStyle?.width === 'number' ? flatStyle.width : null) ??
+      DEFAULT_SCREEN_WIDTH;
+    const containerHeight =
+      (typeof flatStyle?.height === 'number' ? flatStyle.height : null) ??
+      DEFAULT_SCREEN_HEIGHT;
 
     // --- Resolve drag into horizontal / vertical ---
     const hDrag = typeof dragProp === 'number' ? dragProp : dragProp.horizontal;
     const vDrag = typeof dragProp === 'number' ? dragProp : dragProp.vertical;
-
-    // --- Resolve texture from root props ---
-    const { textureProps, hasTexture } = useTextureProps(textureRootProps);
 
     // --- Parse children + build atlas via hook ---
     const {
@@ -88,6 +86,7 @@ const CannonConfettiInner = forwardRef<
       cannonConfigs,
       allColors,
       sizeVariations,
+      sizeColorOverrides,
       totalCount,
     } = useCannonOrigins({
       children,
@@ -99,7 +98,6 @@ const CannonConfettiInner = forwardRef<
       rootFlakeStyle: flakeStyle,
       containerWidth,
       containerHeight,
-      hasTexture,
     });
 
     // --- Auto-compute duration from physics ---
@@ -131,6 +129,7 @@ const CannonConfettiInner = forwardRef<
       generateCannonBoxesArray({
         cannonConfigs,
         launchDelayMax,
+        sizeColorOverrides,
       })
     );
 
@@ -138,7 +137,7 @@ const CannonConfettiInner = forwardRef<
       sizeVariations,
       colors: allColors,
       boxes,
-      textureProps,
+      sizeColorOverrides,
     });
 
     const pause = () => {
@@ -159,9 +158,10 @@ const CannonConfettiInner = forwardRef<
       const newBoxes = generateCannonBoxesArray({
         cannonConfigs: currentConfigs,
         launchDelayMax,
+        sizeColorOverrides,
       });
       boxes.set(newBoxes);
-    }, [cannonConfigs, boxes, dynamicCannonConfigs, launchDelayMax]);
+    }, [cannonConfigs, boxes, dynamicCannonConfigs, launchDelayMax, sizeColorOverrides]);
 
     const { UIOnStart, UIOnEnd } = useAnimationCallbacks(
       onAnimationStart,
@@ -419,7 +419,8 @@ const CannonConfettiInner = forwardRef<
         );
 
       // Scale: appearance animation at launch + oscillation
-      const oscillatingScale = Math.max(Math.abs(Math.cos(rx)), tumbleClamp);
+      const minFlipScale = 1 - flipIntensity;
+      const oscillatingScale = Math.max(Math.abs(Math.cos(rx)), minFlipScale);
       const appearScale = interpolate(
         effectiveProgress,
         [0, 0.05],

@@ -1,5 +1,4 @@
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
-import { type ConfettiProps, type FlakeStyle } from '../types';
 import {
   Skia,
   useTexture,
@@ -8,13 +7,10 @@ import {
   rect,
   vec,
   LinearGradient,
-  type SkSVG,
   ImageSVG,
-  type SkImage,
   Image,
 } from '@shopify/react-native-skia';
-
-type Strict<T> = T extends undefined ? never : T;
+import type { SizeVariation } from './useConfettiFlakes';
 
 function lightenColor(color: string, amount: number): Float32Array {
   const c = Skia.Color(color);
@@ -35,25 +31,12 @@ export const useConfettiLogic = <T extends MinimalBox>({
   sizeVariations,
   colors,
   boxes,
-  textureProps,
+  sizeColorOverrides,
 }: {
-  colors: Strict<ConfettiProps['colors']>;
+  colors: string[];
   boxes: SharedValue<T[]>;
-  sizeVariations: {
-    width: number;
-    height: number;
-    radius: number;
-    flakeStyle?: FlakeStyle;
-  }[];
-  textureProps?:
-    | {
-        type: 'image';
-        content: SkImage;
-      }
-    | {
-        type: 'svg';
-        content: SkSVG;
-      };
+  sizeVariations: SizeVariation[];
+  sizeColorOverrides: (number | null)[];
 }) => {
   const maxWidth = Math.max(...sizeVariations.map((size) => size.width));
   const maxHeight = Math.max(...sizeVariations.map((size) => size.height));
@@ -62,46 +45,59 @@ export const useConfettiLogic = <T extends MinimalBox>({
     <Group>
       {colors.map((color, colorIndex) => {
         return sizeVariations.map((size, sizeIndex) => {
-          if (textureProps?.type === 'svg') {
-            return (
-              <ImageSVG
-                key={`${colorIndex}-${sizeIndex}`}
-                x={sizeIndex * maxWidth}
-                y={colorIndex * maxHeight}
-                width={size.width}
-                height={size.height}
-                svg={textureProps.content}
-              />
-            );
-          }
-          if (textureProps?.type === 'image') {
+          const cellX = sizeIndex * maxWidth;
+          const cellY = colorIndex * maxHeight;
+          const key = `${colorIndex}-${sizeIndex}`;
+
+          // If this size has a texture AND this is its dedicated color row, render texture
+          if (
+            size.texture &&
+            sizeColorOverrides[sizeIndex] === colorIndex
+          ) {
+            if (size.texture.type === 'svg') {
+              return (
+                <ImageSVG
+                  key={key}
+                  x={cellX}
+                  y={cellY}
+                  width={size.width}
+                  height={size.height}
+                  svg={size.texture.content}
+                />
+              );
+            }
             return (
               <Image
-                key={`${colorIndex}-${sizeIndex}`}
-                x={sizeIndex * maxWidth}
-                y={colorIndex * maxHeight}
+                key={key}
+                x={cellX}
+                y={cellY}
                 width={size.width}
                 height={size.height}
-                image={textureProps.content}
+                image={size.texture.content}
               />
             );
           }
-          const flakeX = sizeIndex * maxWidth;
-          const flakeY = colorIndex * maxHeight;
+
+          // Non-textured cell: render colored rect (or skip if this is a texture row for another size)
+          if (size.texture) {
+            // This size is textured but this isn't its color row — render nothing visible
+            return null;
+          }
+
           if (size.flakeStyle === 'glossy') {
             const lighter = lightenColor(color, 0.35);
             return (
               <RoundedRect
-                key={`${colorIndex}-${sizeIndex}`}
-                x={flakeX}
-                y={flakeY}
+                key={key}
+                x={cellX}
+                y={cellY}
                 width={size.width}
                 height={size.height}
                 r={size.radius}
               >
                 <LinearGradient
-                  start={vec(flakeX, flakeY)}
-                  end={vec(flakeX, flakeY + size.height)}
+                  start={vec(cellX, cellY)}
+                  end={vec(cellX, cellY + size.height)}
                   colors={[lighter, color]}
                   positions={[0, 0.6]}
                 />
@@ -110,9 +106,9 @@ export const useConfettiLogic = <T extends MinimalBox>({
           }
           return (
             <RoundedRect
-              key={`${colorIndex}-${sizeIndex}`}
-              x={flakeX}
-              y={flakeY}
+              key={key}
+              x={cellX}
+              y={cellY}
               width={size.width}
               height={size.height}
               r={size.radius}

@@ -5,7 +5,7 @@ import { PIConfetti } from 'react-native-fast-confetti';
 import type { PIConfettiMethods } from 'react-native-fast-confetti';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
 import { useScreenConfig } from '../hooks/useScreenConfig';
-import { getRotation } from '../utils/confettiConfig';
+import { getTextureProps, getRotation } from '../utils/confettiConfig';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { textureOptions } from '../constants/config';
@@ -21,19 +21,18 @@ export default function PIScreen() {
   const rotation = getRotation(config.textureType, 'pi');
   const confettiKey = `pi-${config.textureType}`;
 
-  const piTextureProps =
-    config.textureType === 'money'
-      ? { image: moneyStackImage! }
-      : config.textureType === 'snowflake'
-        ? { svg: snowFlakeSVG! }
-        : {};
+  const textureProps = getTextureProps(
+    config.textureType,
+    moneyStackImage!,
+    snowFlakeSVG!
+  );
 
   const renderFlakes = () => {
     if (config.textureType === 'money') {
-      return <PIConfetti.Flake size={50} />;
+      return <PIConfetti.Flake size={50} {...textureProps} />;
     }
     if (config.textureType === 'snowflake') {
-      return <PIConfetti.Flake size={10} />;
+      return <PIConfetti.Flake size={10} {...textureProps} />;
     }
     return (
       <>
@@ -60,7 +59,6 @@ export default function PIScreen() {
         count={500}
         blastPosition={{ x: width / 2, y: 450 }}
         rotation={rotation}
-        {...piTextureProps}
       >
         {renderFlakes()}
       </PIConfetti>

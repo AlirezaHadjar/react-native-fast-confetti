@@ -39,7 +39,6 @@ import type {
 } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useConfettiFlakes } from './hooks/useConfettiFlakes';
-import { useTextureProps } from './hooks/useTextureProps';
 import { useAnimationCallbacks } from './hooks/useAnimationCallbacks';
 import { Flake } from './FlakeComponent';
 
@@ -50,7 +49,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       count = DEFAULT_BOXES_COUNT,
       colors: rootColors,
       gravity = DEFAULT_PI_CONFETTI_GRAVITY,
-      drag = DEFAULT_PI_CONFETTI_DRAG,
+      drag: dragProp = DEFAULT_PI_CONFETTI_DRAG,
       initialSpeed = DEFAULT_PI_CONFETTI_INITIAL_SPEED,
       spread = DEFAULT_PI_CONFETTI_SPREAD,
       speedVariation,
@@ -63,32 +62,36 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       depth,
       flakeStyle = 'glossy',
       initialScale = 0.3,
-      tumbleClamp = 0.15,
+      flipIntensity = 0.85,
       sprayDuration,
       onAnimationEnd,
       onAnimationStart,
-      width: _width,
-      height: _height,
       containerStyle,
-      ...textureRootProps
     },
     ref
   ) => {
     const { width: DEFAULT_SCREEN_WIDTH, height: DEFAULT_SCREEN_HEIGHT } =
       useWindowDimensions();
-    const containerWidth = _width || DEFAULT_SCREEN_WIDTH;
-    const containerHeight = _height || DEFAULT_SCREEN_HEIGHT;
+    const flatStyle = StyleSheet.flatten(containerStyle);
+    const containerWidth =
+      (typeof flatStyle?.width === 'number' ? flatStyle.width : null) ??
+      DEFAULT_SCREEN_WIDTH;
+    const containerHeight =
+      (typeof flatStyle?.height === 'number' ? flatStyle.height : null) ??
+      DEFAULT_SCREEN_HEIGHT;
 
-    // --- Resolve texture from root props ---
-    const { textureProps, hasTexture } = useTextureProps(textureRootProps);
+    // --- Resolve drag into horizontal / vertical ---
+    const hDrag = typeof dragProp === 'number' ? dragProp : dragProp.horizontal;
+    const vDrag = typeof dragProp === 'number' ? dragProp : dragProp.vertical;
 
     // --- Parse children for flake sizes ---
-    const { allColors, sizeVariations } = useConfettiFlakes({
-      children,
-      rootColors,
-      rootFlakeStyle: flakeStyle,
-      hasTexture,
-    });
+    const { allColors, sizeVariations, sizeColorOverrides } = useConfettiFlakes(
+      {
+        children,
+        rootColors,
+        rootFlakeStyle: flakeStyle,
+      }
+    );
 
     // --- Resolve blast position ---
     const defaultBlastPosition = useMemo(() => {
@@ -98,14 +101,18 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       if (typeof _blastPosition === 'object') {
         return _blastPosition;
       }
-      return resolveNamedPosition(_blastPosition, containerWidth, containerHeight);
+      return resolveNamedPosition(
+        _blastPosition,
+        containerWidth,
+        containerHeight
+      );
     }, [_blastPosition, containerWidth, containerHeight]);
 
     // --- Auto-compute duration from physics ---
     const duration = estimatePIDuration({
       initialSpeed,
       gravity,
-      drag,
+      vDrag,
       depth,
       speedVariation,
       sprayDurationMs: sprayDuration,
@@ -138,6 +145,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         count,
         colorsVariations: allColors.length,
         sizeVariations: sizeVariations.length,
+        sizeColorOverrides,
         spread,
         rotation,
         speedVariation,
@@ -150,7 +158,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       sizeVariations,
       colors: allColors,
       boxes,
-      textureProps,
+      sizeColorOverrides,
     });
 
     const pause = () => {
@@ -171,6 +179,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         count,
         colorsVariations: allColors.length,
         sizeVariations: sizeVariations.length,
+        sizeColorOverrides,
         spread,
         rotation,
         speedVariation,
@@ -182,6 +191,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       count,
       allColors.length,
       sizeVariations.length,
+      sizeColorOverrides,
       spread,
       rotation,
       speedVariation,
@@ -213,15 +223,11 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
             cancelAnimation(progress);
             progress.set(0);
             progress.set(
-              withTiming(
-                1,
-                { duration, easing: Easing.linear },
-                (finished) => {
-                  'worklet';
-                  if (!finished || !infinite) return;
-                  repeatAnimation();
-                }
-              )
+              withTiming(1, { duration, easing: Easing.linear }, (finished) => {
+                'worklet';
+                if (!finished || !infinite) return;
+                repeatAnimation();
+              })
             );
           }
         }
@@ -257,13 +263,14 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       (options: PIConfettiRestartOptions = {}) => {
         let resolvedPosition: Position | null = null;
         if (options.blastPosition != null) {
-          resolvedPosition = typeof options.blastPosition === 'object'
-            ? options.blastPosition
-            : resolveNamedPosition(
-                options.blastPosition,
-                containerWidth,
-                containerHeight
-              );
+          resolvedPosition =
+            typeof options.blastPosition === 'object'
+              ? options.blastPosition
+              : resolveNamedPosition(
+                  options.blastPosition,
+                  containerWidth,
+                  containerHeight
+                );
         }
         runOnUI(workletRestart)(resolvedPosition);
       },
@@ -285,15 +292,11 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
           cancelAnimation(progress);
           progress.set(0);
           progress.set(
-            withTiming(
-              1,
-              { duration, easing: Easing.linear },
-              (finished) => {
-                'worklet';
-                if (!finished || !infinite) return;
-                repeatAnimation();
-              }
-            )
+            withTiming(1, { duration, easing: Easing.linear }, (finished) => {
+              'worklet';
+              if (!finished || !infinite) return;
+              repeatAnimation();
+            })
           );
         }
       }
@@ -364,14 +367,16 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       );
       const t = effectiveProgress * totalTime;
 
-      // Physics: drag applied to both axes, gravity on vertical
-      const safeDrag = Math.max(drag, 0.001);
-      const expDecay = 1 - Math.exp(-safeDrag * t);
-      const tx = blastX + (vx / safeDrag) * expDecay;
+      // Physics: separate drag for horizontal and vertical axes
+      const safeHDrag = Math.max(hDrag, 0.001);
+      const safeVDrag = Math.max(vDrag, 0.001);
+      const hExpDecay = 1 - Math.exp(-safeHDrag * t);
+      const vExpDecay = 1 - Math.exp(-safeVDrag * t);
+      const tx = blastX + (vx / safeHDrag) * hExpDecay;
       const ty =
         blastY +
-        (scaledGravity / safeDrag) * t +
-        ((vy - scaledGravity / safeDrag) / safeDrag) * expDecay;
+        (scaledGravity / safeVDrag) * t +
+        ((vy - scaledGravity / safeVDrag) / safeVDrag) * vExpDecay;
 
       // Rotation
       const rotationDirection = piece.clockwise ? 1 : -1;
@@ -393,7 +398,8 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         );
 
       // Scale: appearance animation at launch + oscillation
-      const oscillatingScale = Math.max(Math.abs(Math.cos(rx)), tumbleClamp);
+      const minFlipScale = 1 - flipIntensity;
+      const oscillatingScale = Math.max(Math.abs(Math.cos(rx)), minFlipScale);
       const appearScale = interpolate(
         effectiveProgress,
         [0, 0.05],

@@ -5,7 +5,7 @@ import { ContinuousConfetti } from 'react-native-fast-confetti';
 import type { ConfettiMethods } from 'react-native-fast-confetti';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
 import { useScreenConfig } from '../hooks/useScreenConfig';
-import { getNewTextureProps, getRotation } from '../utils/confettiConfig';
+import { getTextureProps, getRotation } from '../utils/confettiConfig';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { textureOptions } from '../constants/config';
@@ -20,7 +20,7 @@ export default function ContinuousScreen() {
   const rotation = getRotation(config.textureType, 'continuous');
   const confettiKey = `continuous-${config.textureType}`;
 
-  const textureProps = getNewTextureProps(
+  const textureProps = getTextureProps(
     config.textureType,
     moneyStackImage!,
     snowFlakeSVG!
@@ -28,10 +28,10 @@ export default function ContinuousScreen() {
 
   const renderFlakes = () => {
     if (config.textureType === 'money') {
-      return <ContinuousConfetti.Flake size={50} />;
+      return <ContinuousConfetti.Flake size={50} {...textureProps} />;
     }
     if (config.textureType === 'snowflake') {
-      return <ContinuousConfetti.Flake size={10} />;
+      return <ContinuousConfetti.Flake size={10} {...textureProps} />;
     }
     return <ContinuousConfetti.Flake width={15} height={8} />;
   };
@@ -52,8 +52,7 @@ export default function ContinuousScreen() {
         ref={confettiRef}
         rotation={rotation}
         count={200}
-        tumbleClamp={config.textureType === 'money' ? 0.9 : 0.15}
-        {...textureProps}
+        flipIntensity={config.textureType === 'money' ? 0.1 : 0.85}
       >
         {renderFlakes()}
       </ContinuousConfetti>

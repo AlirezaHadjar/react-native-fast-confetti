@@ -4,13 +4,6 @@ import type { StyleProp, ViewStyle } from 'react-native';
 
 type StrictOmit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
 
-/**
- * Utility type that recursively makes all optional properties required (including nested ones)
- */
-export type DeepRequired<T> = {
-  [K in keyof T]: Required<DeepRequired<T[K]>>;
-};
-
 export type FlakeStyle = 'solid' | 'glossy';
 
 export type FlakeSize = {
@@ -25,9 +18,11 @@ export type Position = {
 };
 
 export type Range = {
-  min?: number;
-  max?: number;
+  min: number;
+  max: number;
 };
+
+export type Drag = number | { horizontal: number; vertical: number };
 
 export type Rotation = {
   x?: Range;
@@ -44,6 +39,7 @@ export type FallingBox = {
   spinPhase: number;
   spinRate: number;
   phaseOffset: number;
+  isTextured: boolean;
 };
 
 type ConfettiBaseProps = {
@@ -71,7 +67,7 @@ type ConfettiBaseProps = {
    * At high values, pieces may momentarily stall or drift sideways.
    * @default { min: 0.03, max: 0.08 }
    */
-  flutter?: Range;
+  wobble?: Range;
   /**
    * @description Controls how much confetti pieces drift horizontally as they fall.
    * 0 means pieces fall straight down from their spawn column.
@@ -108,17 +104,9 @@ type ConfettiBaseProps = {
    */
   onAnimationEnd?: () => void;
   /**
-   * @description The width of the confetti's container.
-   * @default SCREEN_WIDTH
-   */
-  width?: number;
-  /**
-   * @description The height of the confetti's container.
-   * @default SCREEN_HEIGHT
-   */
-  height?: number;
-  /**
    * @description The style of the confetti container.
+   * Numeric `width` and `height` values in this style will be used for
+   * physics calculations. Falls back to screen dimensions if not provided.
    */
   containerStyle?: StyleProp<ViewStyle>;
   /**
@@ -147,35 +135,16 @@ type ConfettiBaseProps = {
    */
   initialScale?: number;
   /**
-   * @description Minimum scale when a piece is edge-on during tumble.
-   * Lower values create a more dramatic flip effect. Higher values (e.g. 0.9)
-   * keep pieces mostly flat, which works better for image textures like money.
-   * @default 0.15
+   * @description Controls how dramatically confetti pieces flip during tumble.
+   * Higher values create more dramatic flips where pieces nearly disappear edge-on.
+   * Lower values (e.g. 0.1) keep pieces mostly flat, which works better for
+   * image textures like money.
+   * @default 0.85
    */
-  tumbleClamp?: number;
+  flipIntensity?: number;
 };
 
-export type ConfettiProps = ConfettiBaseProps &
-  (
-    | {
-        /**
-         * @description A Skia image to use as confetti flake texture.
-         */
-        image: SkImage;
-        svg?: never;
-      }
-    | {
-        image?: never;
-        /**
-         * @description A Skia SVG to use as confetti flake texture.
-         */
-        svg: SkSVG;
-      }
-    | {
-        image?: never;
-        svg?: never;
-      }
-  );
+export type ConfettiProps = ConfettiBaseProps;
 
 export type InternalConfettiProps = ConfettiProps & {
   /** When true, uses per-piece phase offsets for a seamless continuous stream. */
@@ -202,10 +171,11 @@ type PIConfettiBaseProps = {
    */
   gravity?: number;
   /**
-   * @description Air resistance coefficient.
+   * @description Air resistance coefficient. Can be a single number applied
+   * to both axes, or an object with separate `horizontal` and `vertical` values.
    * @default 3.0
    */
-  drag?: number;
+  drag?: Drag;
   /**
    * @description Base launch speed (normalized to container height).
    * @default 1
@@ -272,12 +242,13 @@ type PIConfettiBaseProps = {
    */
   sprayDuration?: number;
   /**
-   * @description Minimum scale when a piece is edge-on during tumble.
-   * Lower values create a more dramatic flip effect. Higher values (e.g. 0.9)
-   * keep pieces mostly flat, which works better for image textures like money.
-   * @default 0.15
+   * @description Controls how dramatically confetti pieces flip during tumble.
+   * Higher values create more dramatic flips where pieces nearly disappear edge-on.
+   * Lower values (e.g. 0.1) keep pieces mostly flat, which works better for
+   * image textures.
+   * @default 0.85
    */
-  tumbleClamp?: number;
+  flipIntensity?: number;
   /**
    * @description A callback that is called when the animation starts.
    */
@@ -287,46 +258,19 @@ type PIConfettiBaseProps = {
    */
   onAnimationEnd?: () => void;
   /**
-   * @description The width of the confetti's container.
-   * @default SCREEN_WIDTH
-   */
-  width?: number;
-  /**
-   * @description The height of the confetti's container.
-   * @default SCREEN_HEIGHT
-   */
-  height?: number;
-  /**
    * @description The style of the confetti container.
+   * Numeric `width` and `height` values in this style will be used for
+   * physics calculations. Falls back to screen dimensions if not provided.
    */
   containerStyle?: StyleProp<ViewStyle>;
 };
 
-export type PIConfettiProps = PIConfettiBaseProps &
-  (
-    | {
-        /**
-         * @description A Skia image to use as confetti flake texture.
-         */
-        image: SkImage;
-        svg?: never;
-      }
-    | {
-        image?: never;
-        /**
-         * @description A Skia SVG to use as confetti flake texture.
-         */
-        svg: SkSVG;
-      }
-    | {
-        image?: never;
-        svg?: never;
-      }
-  );
+export type PIConfettiProps = PIConfettiBaseProps;
 
-export type ContinuousConfettiProps = StrictOmit<ConfettiProps, 'infinite'>;
-
-export type ConfettiRestartOptions = Record<string, never>;
+export type ContinuousConfettiProps = StrictOmit<
+  ConfettiProps,
+  'infinite' | 'onAnimationEnd' | 'fadeOutOnEnd'
+>;
 
 export type PIConfettiRestartOptions = {
   /**
@@ -355,7 +299,7 @@ export type ConfettiMethods = BaseConfettiMethods & {
   /**
    * @description start the animation from the beginning
    */
-  restart: (options?: ConfettiRestartOptions) => void;
+  restart: () => void;
 };
 
 export type PIConfettiMethods = BaseConfettiMethods & {
@@ -396,7 +340,7 @@ export type CannonOriginProps = {
    * @description Base launch speed (normalized to container height).
    * @default 2.0
    */
-  speed?: number;
+  initialSpeed?: number;
   /**
    * @description Per-piece speed multiplier range.
    * @default { min: 0.8, max: 1.2 }
@@ -433,26 +377,16 @@ export type CannonOriginProps = {
   children?: React.ReactNode;
 };
 
-type FlakeWithSize = {
+type FlakeSizeShorthand = {
   /**
    * @description Shorthand for width and height (sets both to this value).
    */
   size: number;
   width?: never;
   height?: never;
-  /**
-   * @description Corner radius of the flake.
-   */
-  radius?: number;
-  /**
-   * @description The visual style of this flake.
-   * Overrides the origin-level and root-level flakeStyle.
-   * @default inherits from origin or root
-   */
-  flakeStyle?: FlakeStyle;
 };
 
-type FlakeWithDimensions = {
+type FlakeSizeExplicit = {
   size?: never;
   /**
    * @description Width of the flake.
@@ -462,6 +396,9 @@ type FlakeWithDimensions = {
    * @description Height of the flake.
    */
   height: number;
+};
+
+type FlakeBase = {
   /**
    * @description Corner radius of the flake.
    */
@@ -474,7 +411,29 @@ type FlakeWithDimensions = {
   flakeStyle?: FlakeStyle;
 };
 
-export type FlakeProps = FlakeWithSize | FlakeWithDimensions;
+type FlakeTexture =
+  | {
+      /**
+       * @description A Skia image to use as this flake's texture.
+       */
+      image: SkImage;
+      svg?: never;
+    }
+  | {
+      image?: never;
+      /**
+       * @description A Skia SVG to use as this flake's texture.
+       */
+      svg: SkSVG;
+    }
+  | {
+      image?: never;
+      svg?: never;
+    };
+
+export type FlakeProps = (FlakeSizeShorthand | FlakeSizeExplicit) &
+  FlakeBase &
+  FlakeTexture;
 
 export type CannonConfettiRestartOptions = {
   /**
@@ -504,7 +463,7 @@ type CannonConfettiBaseProps = {
    * to both axes, or an object with separate `horizontal` and `vertical` values.
    * @default 3.0
    */
-  drag?: number | { horizontal: number; vertical: number };
+  drag?: Drag;
   /**
    * @description Whether the animation should play on mount.
    * @default true
@@ -534,17 +493,9 @@ type CannonConfettiBaseProps = {
    */
   onAnimationEnd?: () => void;
   /**
-   * @description The width of the confetti's container.
-   * @default SCREEN_WIDTH
-   */
-  width?: number;
-  /**
-   * @description The height of the confetti's container.
-   * @default SCREEN_HEIGHT
-   */
-  height?: number;
-  /**
    * @description The style of the confetti container.
+   * Numeric `width` and `height` values in this style will be used for
+   * physics calculations. Falls back to screen dimensions if not provided.
    */
   containerStyle?: StyleProp<ViewStyle>;
   /**
@@ -588,35 +539,16 @@ type CannonConfettiBaseProps = {
    */
   flakeStyle?: FlakeStyle;
   /**
-   * @description Minimum scale when a piece is edge-on during tumble.
-   * Lower values create a more dramatic flip effect. Higher values (e.g. 0.9)
-   * keep pieces mostly flat, which works better for image textures like money.
-   * @default 0.15
+   * @description Controls how dramatically confetti pieces flip during tumble.
+   * Higher values create more dramatic flips where pieces nearly disappear edge-on.
+   * Lower values (e.g. 0.1) keep pieces mostly flat, which works better for
+   * image textures like money.
+   * @default 0.85
    */
-  tumbleClamp?: number;
+  flipIntensity?: number;
 };
 
-export type CannonConfettiProps = CannonConfettiBaseProps &
-  (
-    | {
-        /**
-         * @description A Skia image to use as confetti flake texture.
-         */
-        image: SkImage;
-        svg?: never;
-      }
-    | {
-        image?: never;
-        /**
-         * @description A Skia SVG to use as confetti flake texture.
-         */
-        svg: SkSVG;
-      }
-    | {
-        image?: never;
-        svg?: never;
-      }
-  );
+export type CannonConfettiProps = CannonConfettiBaseProps;
 
 export type CannonConfettiMethods = BaseConfettiMethods & {
   /**

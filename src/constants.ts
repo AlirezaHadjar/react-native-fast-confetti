@@ -1,6 +1,5 @@
 import type {
   Rotation,
-  DeepRequired,
   Range,
   FlakeSize,
 } from './types';
@@ -32,7 +31,7 @@ export const RANDOM_INITIAL_Y_JIGGLE = 60;
  * Default rotation configuration for regular Confetti component.
  * Provides separate X and Z rotation ranges for more flexible animation control.
  */
-export const DEFAULT_CONFETTI_ROTATION: DeepRequired<Rotation> = {
+export const DEFAULT_CONFETTI_ROTATION: Required<Rotation> = {
   x: {
     min: 2 * Math.PI,
     max: 20 * Math.PI,
@@ -45,7 +44,7 @@ export const DEFAULT_CONFETTI_ROTATION: DeepRequired<Rotation> = {
 
 export const DEFAULT_CONFETTI_GRAVITY = 1.0;
 export const DEFAULT_CONFETTI_DEPTH: Required<Range> = { min: 0.8, max: 1.0 };
-export const DEFAULT_CONFETTI_FLUTTER: Required<Range> = {
+export const DEFAULT_CONFETTI_WOBBLE: Required<Range> = {
   min: 0.03,
   max: 0.08,
 };
@@ -71,7 +70,7 @@ export const DEFAULT_CANNON_CONFETTI_DEPTH: Required<Range> = {
   max: 1.1,
 };
 
-export const DEFAULT_CANNON_CONFETTI_ROTATION: DeepRequired<Rotation> = {
+export const DEFAULT_CANNON_CONFETTI_ROTATION: Required<Rotation> = {
   x: {
     min: 2 * Math.PI,
     max: 10 * Math.PI,
@@ -95,7 +94,7 @@ export const DEFAULT_PI_CONFETTI_DEPTH: Required<Range> = {
   min: 1,
   max: 1.1,
 };
-export const DEFAULT_PI_CONFETTI_ROTATION: DeepRequired<Rotation> = {
+export const DEFAULT_PI_CONFETTI_ROTATION: Required<Rotation> = {
   x: {
     min: 2 * Math.PI,
     max: 10 * Math.PI,

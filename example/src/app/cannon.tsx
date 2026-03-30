@@ -5,7 +5,7 @@ import { CannonConfetti } from 'react-native-fast-confetti';
 import type { CannonConfettiMethods } from 'react-native-fast-confetti';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
 import { useScreenConfig } from '../hooks/useScreenConfig';
-import { getRotation } from '../utils/confettiConfig';
+import { getTextureProps, getRotation } from '../utils/confettiConfig';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { textureOptions } from '../constants/config';
@@ -20,19 +20,18 @@ export default function CannonScreen() {
   const rotation = getRotation(config.textureType, 'cannon');
   const confettiKey = `cannon-${config.textureType}`;
 
-  const cannonTextureProps =
-    config.textureType === 'money'
-      ? { image: moneyStackImage! }
-      : config.textureType === 'snowflake'
-        ? { svg: snowFlakeSVG! }
-        : {};
+  const textureProps = getTextureProps(
+    config.textureType,
+    moneyStackImage!,
+    snowFlakeSVG!
+  );
 
   const renderFlakes = () => {
     if (config.textureType === 'money') {
-      return <CannonConfetti.Flake size={50} />;
+      return <CannonConfetti.Flake size={50} {...textureProps} />;
     }
     if (config.textureType === 'snowflake') {
-      return <CannonConfetti.Flake size={10} />;
+      return <CannonConfetti.Flake size={10} {...textureProps} />;
     }
     return (
       <>
@@ -66,12 +65,11 @@ export default function CannonScreen() {
         sprayDuration={300}
         initialScale={0.7}
         flakeStyle="glossy"
-        {...cannonTextureProps}
       >
         <CannonConfetti.Origin
           position="bottom-left"
           count={150}
-          speed={3}
+          initialSpeed={3}
           depth={{ min: 1, max: 1.1 }}
         >
           {renderFlakes()}
@@ -79,7 +77,7 @@ export default function CannonScreen() {
         <CannonConfetti.Origin
           position="bottom-right"
           count={150}
-          speed={3}
+          initialSpeed={3}
           depth={{ min: 1, max: 1.1 }}
         >
           {renderFlakes()}
@@ -87,7 +85,7 @@ export default function CannonScreen() {
         <CannonConfetti.Origin
           position="bottom-center"
           count={150}
-          speed={4}
+          initialSpeed={4}
           target={'center'}
         >
           {renderFlakes()}
