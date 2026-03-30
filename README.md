@@ -185,7 +185,7 @@ ref.current?.reset();
   </tr>
 </table>
 
-Pass a Skia image or SVG directly on the Flake component:
+Pass a Skia image or SVG on the parent component or on individual Flake children. Flake-level textures override the parent default.
 
 ```tsx
 import { useImage, useSVG } from '@shopify/react-native-skia';
@@ -194,21 +194,34 @@ import { Confetti } from 'react-native-fast-confetti';
 const moneyImage = useImage(require('./money.png'));
 const snowSvg = useSVG(require('./snowflake.svg'));
 
-// Image texture
-<Confetti autoplay>
-  <Confetti.Flake size={50} image={moneyImage} />
+// Parent-level texture — applies to all flakes
+<Confetti autoplay image={moneyImage}>
+  <Confetti.Flake size={50} />
 </Confetti>
 
-// SVG texture
-<Confetti autoplay>
-  <Confetti.Flake size={30} svg={snowSvg} />
-</Confetti>
-
-// Mixed textures — combine different flake types
+// Flake-level texture — per flake
 <Confetti autoplay>
   <Confetti.Flake size={50} image={moneyImage} />
   <Confetti.Flake size={30} svg={snowSvg} />
   <Confetti.Flake width={8} height={14} />
+</Confetti>
+
+// Parent default + flake override
+<Confetti autoplay image={moneyImage}>
+  <Confetti.Flake size={50} />               {/* uses money image */}
+  <Confetti.Flake size={30} svg={snowSvg} /> {/* overrides with SVG */}
+</Confetti>
+```
+
+### Per-Flake Colors
+
+Each flake group can have its own color palette. Flake-level `colors` override the parent.
+
+```tsx
+<Confetti autoplay colors={['#FF0000', '#00FF00']}>
+  <Confetti.Flake width={8} height={14} /> {/* red/green */}
+  <Confetti.Flake size={12} colors={['#0000FF', '#FFFF00']} />{' '}
+  {/* blue/yellow */}
 </Confetti>
 ```
 
@@ -230,18 +243,20 @@ Available named positions: `top-left`, `top-center`, `top-right`, `center-left`,
 
 ### `<Confetti />` Props
 
-| Name               | Default          | Description                   |
-| ------------------ | ---------------- | ----------------------------- |
-| `count`            | 200              | Number of confetti pieces.    |
-| `autoplay`         | true             | Play animation on mount.      |
-| `autoStartDelay`   | 0                | Delay (ms) before autoplay.   |
-| `infinite`         | false            | Loop the animation.           |
-| `gravity`          | 1.0              | Gravity strength.             |
-| `colors`           | Built-in palette | Array of color strings.       |
-| `flakeStyle`       | 'glossy'         | `'solid'` or `'glossy'`.      |
-| `fadeOutOnEnd`     | false            | Fade pieces as they exit.     |
-| `onAnimationStart` | N/A              | Called when animation starts. |
-| `onAnimationEnd`   | N/A              | Called when animation ends.   |
+| Name               | Default          | Description                                |
+| ------------------ | ---------------- | ------------------------------------------ |
+| `count`            | 200              | Number of confetti pieces.                 |
+| `autoplay`         | true             | Play animation on mount.                   |
+| `autoStartDelay`   | 0                | Delay (ms) before autoplay.                |
+| `infinite`         | false            | Loop the animation.                        |
+| `gravity`          | 1.0              | Gravity strength.                          |
+| `colors`           | Built-in palette | Array of color strings.                    |
+| `flakeStyle`       | 'glossy'         | `'solid'` or `'glossy'`.                   |
+| `fadeOutOnEnd`     | false            | Fade pieces as they exit.                  |
+| `image`            | N/A              | Default Skia image texture for all flakes. |
+| `svg`              | N/A              | Default Skia SVG texture for all flakes.   |
+| `onAnimationStart` | N/A              | Called when animation starts.              |
+| `onAnimationEnd`   | N/A              | Called when animation ends.                |
 
 <details>
 <summary>Advanced props — these work well out of the box, but you can tweak them for full customizability.</summary>
@@ -281,6 +296,8 @@ Same as `<Confetti />` except:
 | `colors`           | Built-in palette      | Array of color strings.                     |
 | `flakeStyle`       | 'glossy'              | `'solid'` or `'glossy'`.                    |
 | `fadeOutOnEnd`     | false                 | Fade pieces as they exit.                   |
+| `image`            | N/A                   | Default Skia image texture for all flakes.  |
+| `svg`              | N/A                   | Default Skia SVG texture for all flakes.    |
 | `onAnimationStart` | N/A                   | Called when animation starts.               |
 | `onAnimationEnd`   | N/A                   | Called when animation ends.                 |
 
@@ -313,6 +330,8 @@ Same as `<Confetti />` except:
 | `colors`           | Built-in palette | Default colors for all origins.              |
 | `flakeStyle`       | 'glossy'         | Default `'solid'` or `'glossy'` for origins. |
 | `fadeOutOnEnd`     | false            | Fade pieces as they exit.                    |
+| `image`            | N/A              | Default Skia image texture for all flakes.   |
+| `svg`              | N/A              | Default Skia SVG texture for all flakes.     |
 | `onAnimationStart` | N/A              | Called when animation starts.                |
 | `onAnimationEnd`   | N/A              | Called when animation ends.                  |
 
@@ -359,15 +378,16 @@ Same as `<Confetti />` except:
 
 Define flake sizes as children of any confetti component (or origin).
 
-| Name         | Default | Description                                          |
-| ------------ | ------- | ---------------------------------------------------- |
-| `size`       | -       | Sets both width and height.                          |
-| `width`      | -       | Flake width (use instead of `size` for non-square).  |
-| `height`     | -       | Flake height (use instead of `size` for non-square). |
-| `radius`     | 0       | Corner radius.                                       |
-| `flakeStyle` | N/A     | Override the parent's `flakeStyle`.                  |
-| `image`      | N/A     | Skia image texture for this flake.                   |
-| `svg`        | N/A     | Skia SVG texture for this flake.                     |
+| Name         | Default | Description                                                     |
+| ------------ | ------- | --------------------------------------------------------------- |
+| `size`       | -       | Sets both width and height.                                     |
+| `width`      | -       | Flake width (use instead of `size` for non-square).             |
+| `height`     | -       | Flake height (use instead of `size` for non-square).            |
+| `radius`     | 0       | Corner radius.                                                  |
+| `flakeStyle` | N/A     | Override the parent's `flakeStyle`.                             |
+| `image`      | N/A     | Skia image texture (overrides parent `image`/`svg`).            |
+| `svg`        | N/A     | Skia SVG texture (overrides parent `image`/`svg`).              |
+| `colors`     | N/A     | Color palette for this flake group (overrides parent `colors`). |
 
 ## Migrating from v1
 

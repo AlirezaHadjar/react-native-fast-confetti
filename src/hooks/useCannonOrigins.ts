@@ -20,8 +20,12 @@ import {
   DEFAULT_CANNON_CONFETTI_DEPTH,
   DEFAULT_CANNON_ORIGIN_COUNT,
 } from '../constants';
-import { parseFlakeChildren } from './useConfettiFlakes';
-import type { SizeVariation } from './useConfettiFlakes';
+import { parseFlakeChildren, buildAtlasColors } from './useConfettiFlakes';
+import type {
+  SizeVariation,
+  ColorRange,
+  TextureInfo,
+} from './useConfettiFlakes';
 
 type UseCannonOriginsParams = {
   children: React.ReactNode;
@@ -33,6 +37,7 @@ type UseCannonOriginsParams = {
   rootFlakeStyle?: FlakeStyle;
   containerWidth: number;
   containerHeight: number;
+  parentTexture?: TextureInfo;
 };
 
 type UseCannonOriginsResult = {
@@ -40,8 +45,9 @@ type UseCannonOriginsResult = {
   cannonConfigs: CannonConfig[];
   allColors: string[];
   sizeVariations: SizeVariation[];
-  sizeColorOverrides: (number | null)[];
-  hasAnyTexture: boolean;
+  colorOverrides: (ColorRange | null)[];
+  sizeIsTextured: boolean[];
+  parentColorCount: number;
   totalCount: number;
 };
 
@@ -55,6 +61,7 @@ export const useCannonOrigins = ({
   rootFlakeStyle,
   containerWidth,
   containerHeight,
+  parentTexture,
 }: UseCannonOriginsParams): UseCannonOriginsResult => {
   const { targetChildren: originChildren } = pickChildren<CannonOriginProps>(
     children,
@@ -88,10 +95,12 @@ export const useCannonOrigins = ({
     const origins = originChildren ?? [];
     const positions: Position[] = [];
     const configs: CannonConfig[] = [];
-    const colorsAccum: string[] = [];
-    const sizesAccum: SizeVariation[] = [];
-    const sizeColorOverrides: (number | null)[] = [];
-    let count = 0;
+    const allSizes: SizeVariation[] = [];
+    const allColorOverrides: (ColorRange | null)[] = [];
+    const allSizeIsTextured: boolean[] = [];
+    const allColorsAccum: string[] = [];
+    let totalCount = 0;
+    let globalParentColorCount = 0;
 
     for (const origin of origins) {
       const props = origin.props;
@@ -99,7 +108,6 @@ export const useCannonOrigins = ({
         resolveNamedPosition(props.position, containerWidth, containerHeight)
       );
 
-      // Resolve target: origin.target → rootTarget → center-top default
       const resolvedTarget =
         props.target != null
           ? resolveNamedPosition(props.target, containerWidth, containerHeight)
@@ -107,38 +115,54 @@ export const useCannonOrigins = ({
             ? resolveNamedPosition(rootTarget, containerWidth, containerHeight)
             : { x: containerWidth / 2, y: 0 };
 
-      // Extract Flake children from this Origin
       const { targetChildren: flakeChildren } = pickChildren<FlakeProps>(
         props.children,
         Flake
       );
 
       const originFlakeStyle = props.flakeStyle ?? rootFlakeStyle ?? 'glossy';
-      const originSizes = parseFlakeChildren(flakeChildren, originFlakeStyle);
-
-      // Resolution chain: origin prop → root prop → constant default
+      const originSizes = parseFlakeChildren(
+        flakeChildren,
+        originFlakeStyle,
+        parentTexture
+      );
       const originColors = props.colors ?? rootColors ?? DEFAULT_COLORS;
       const originCount = props.count ?? DEFAULT_CANNON_ORIGIN_COUNT;
 
-      const colorStart = colorsAccum.length;
-      // Only add colors if this origin has non-textured flakes
-      const hasNonTextured = originSizes.some((s) => !s.texture);
-      if (hasNonTextured) {
-        colorsAccum.push(...originColors);
-      }
+      // Build atlas colors for this origin's flakes
+      const {
+        allColors: originAtlasColors,
+        colorOverrides: originColorOverrides,
+        sizeIsTextured: originSizeIsTextured,
+        parentColorCount: originParentColorCount,
+      } = buildAtlasColors(originSizes, originColors);
 
-      const sizeStart = sizesAccum.length;
-      for (const size of originSizes) {
-        sizesAccum.push(size);
-        if (size.texture) {
-          // Textured size gets a dedicated color row
-          sizeColorOverrides.push(colorsAccum.length);
-          colorsAccum.push('#000');
+      // Offset all color ranges to account for previously accumulated colors
+      const colorOffset = allColorsAccum.length;
+      const sizeStart = allSizes.length;
+
+      for (let i = 0; i < originSizes.length; i++) {
+        allSizes.push(originSizes[i]!);
+        allSizeIsTextured.push(originSizeIsTextured[i] ?? false);
+        const override = originColorOverrides[i];
+        if (override) {
+          allColorOverrides.push({
+            start: override.start + colorOffset,
+            count: override.count,
+          });
         } else {
-          sizeColorOverrides.push(null);
+          // Default colors: offset the parent color range
+          allColorOverrides.push(
+            originParentColorCount > 0
+              ? { start: colorOffset, count: originParentColorCount }
+              : null
+          );
         }
       }
 
+      allColorsAccum.push(...originAtlasColors);
+
+      // For cannon config: use the full origin color range
       configs.push({
         spread: props.spread ?? DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE,
         speed: props.initialSpeed ?? DEFAULT_CANNON_CONFETTI_INITIAL_SPEED,
@@ -147,8 +171,8 @@ export const useCannonOrigins = ({
           props.speedVariation ??
           rootSpeedVariation ??
           DEFAULT_CANNON_CONFETTI_SPEED_VARIATION,
-        colorStart: hasNonTextured ? colorStart : 0,
-        colorCount: hasNonTextured ? originColors.length : 1,
+        colorStart: colorOffset,
+        colorCount: originAtlasColors.length,
         sizeStart,
         sizeCount: originSizes.length,
         rotation: props.rotation ?? rootRotation,
@@ -156,24 +180,26 @@ export const useCannonOrigins = ({
         target: resolvedTarget,
       });
 
-      count += originCount;
+      if (originParentColorCount > 0 && globalParentColorCount === 0) {
+        globalParentColorCount = originParentColorCount;
+      }
+
+      totalCount += originCount;
     }
 
-    // Ensure at least one color exists (for fully-textured setups)
-    if (colorsAccum.length === 0) {
-      colorsAccum.push('#000');
+    if (allColorsAccum.length === 0) {
+      allColorsAccum.push('#000');
     }
-
-    const hasAnyTexture = sizesAccum.some((s) => s.texture !== undefined);
 
     return {
       cannonsPositions: positions,
       cannonConfigs: configs,
-      allColors: colorsAccum,
-      sizeVariations: sizesAccum,
-      sizeColorOverrides,
-      hasAnyTexture,
-      totalCount: count,
+      allColors: allColorsAccum,
+      sizeVariations: allSizes,
+      colorOverrides: allColorOverrides,
+      sizeIsTextured: allSizeIsTextured,
+      parentColorCount: globalParentColorCount,
+      totalCount,
     };
   }, [
     originChildren,
@@ -185,5 +211,6 @@ export const useCannonOrigins = ({
     rootSpeedVariation,
     rootTarget,
     rootFlakeStyle,
+    parentTexture,
   ]);
 };

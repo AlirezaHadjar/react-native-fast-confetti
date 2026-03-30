@@ -29,6 +29,7 @@ import type {
 } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useConfettiFlakes } from './hooks/useConfettiFlakes';
+import { useTextureProps } from './hooks/useTextureProps';
 import { useContainerDimensions } from './hooks/useContainerDimensions';
 import { useAnimationLifecycle } from './hooks/useAnimationLifecycle';
 import { ConfettiCanvas } from './ConfettiCanvas';
@@ -57,18 +58,22 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       flakeStyle = 'glossy',
       initialScale = 0.3,
       flipIntensity = 0.85,
+      ...textureRootProps
     },
     ref
   ) => {
     const { containerWidth, containerHeight } =
       useContainerDimensions(containerStyle);
 
+    const parentTexture = useTextureProps(textureRootProps);
+
     // --- Parse children + build atlas via hook ---
-    const { allColors, sizeVariations, sizeColorOverrides } =
+    const { allColors, sizeVariations, colorOverrides, sizeIsTextured, parentColorCount } =
       useConfettiFlakes({
         children,
         rootColors,
         rootFlakeStyle: flakeStyle,
+        parentTexture,
       });
 
     // --- Compute grid layout for spawn positions ---
@@ -125,19 +130,19 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       sizeVariations,
       colors: allColors,
       boxes,
-      sizeColorOverrides,
+      sizeColorOverrides: colorOverrides,
     });
 
-    const colorsVariations = allColors.length;
     const sizeVariationsCount = sizeVariations.length;
 
     const refreshBoxes = useCallback(() => {
       'worklet';
       const result = generateFallingBoxesArray({
         count,
-        colorsVariations,
         sizeVariations: sizeVariationsCount,
-        sizeColorOverrides,
+        sizeColorOverrides: colorOverrides,
+        parentColorCount,
+        sizeIsTextured,
         containerWidth,
         containerHeight,
         verticalSpacing,
@@ -158,9 +163,10 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       trajectories.set(result.trajectories);
     }, [
       count,
-      colorsVariations,
       sizeVariationsCount,
-      sizeColorOverrides,
+      colorOverrides,
+      parentColorCount,
+      sizeIsTextured,
       boxes,
       trajectories,
       containerWidth,

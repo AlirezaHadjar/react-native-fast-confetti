@@ -106,44 +106,52 @@ v1:
 <Confetti type="svg" flakeSvg={svg} />
 ```
 
-v2:
+v2 (parent-level — applies to all flakes):
 
 ```tsx
 <Confetti image={image}>
   <Confetti.Flake size={50} />
 </Confetti>
+```
 
-<Confetti svg={svg}>
-  <Confetti.Flake size={30} />
+v2 (flake-level — per flake, overrides parent):
+
+```tsx
+<Confetti>
+  <Confetti.Flake size={50} image={image} />
+  <Confetti.Flake size={30} svg={svg} />
+  <Confetti.Flake width={8} height={14} />
 </Confetti>
 ```
 
 ## Removed props
 
-| v1 prop                            | v2 equivalent                                          |
-| ---------------------------------- | ------------------------------------------------------ |
-| `isInfinite`                       | `infinite`                                             |
-| `flakeSize`                        | `<*.Flake width={w} height={h} />` children            |
-| `sizeVariation`                    | Use multiple `<*.Flake>` children with different sizes |
-| `radiusRange`                      | Set `radius` on individual `<*.Flake>` children        |
-| `fallDuration`                     | Computed automatically from `gravity`                  |
-| `blastDuration`                    | `sprayDuration` on `CannonConfetti`                    |
-| `blastRadius`                      | `spread` + `initialSpeed` on `PIConfetti`              |
-| `cannonsPositions`                 | `<CannonConfetti.Origin position={...}>` children      |
-| `randomSpeed`                      | `speedVariation` (on PIConfetti / CannonConfetti)      |
-| `randomOffset`                     | Removed (handled by physics)                           |
-| `easing` / `fallEasing`            | Removed (physics-based timing)                         |
-| `type` / `flakeImage` / `flakeSvg` | `image` or `svg` prop directly                         |
+| v1 prop                            | v2 equivalent                                                 |
+| ---------------------------------- | ------------------------------------------------------------- |
+| `isInfinite`                       | `infinite`                                                    |
+| `flakeSize`                        | `<*.Flake width={w} height={h} />` children                  |
+| `sizeVariation`                    | Use multiple `<*.Flake>` children with different sizes        |
+| `radiusRange`                      | Set `radius` on individual `<*.Flake>` children               |
+| `fallDuration`                     | Computed automatically from `gravity`                         |
+| `blastDuration`                    | `sprayDuration` on `CannonConfetti`                           |
+| `blastRadius`                      | `spread` + `initialSpeed` on `PIConfetti`                     |
+| `cannonsPositions`                 | `<CannonConfetti.Origin position={...}>` children             |
+| `randomSpeed`                      | `speedVariation` (on PIConfetti / CannonConfetti)             |
+| `randomOffset`                     | Removed (handled by physics)                                  |
+| `easing` / `fallEasing`            | Removed (physics-based timing)                                |
+| `type` / `flakeImage` / `flakeSvg` | `image` or `svg` on `<*.Flake>` children                     |
+| `width` / `height`                 | Set via `containerStyle` (numeric values used for physics)    |
 
 ## New v2 props
 
-| Prop            | Components                       | Description                                                                                           |
-| --------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `gravity`       | All                              | Gravity constant (normalized to container height). Replaces `fallDuration`.                           |
-| `flutter`       | `Confetti`, `ContinuousConfetti` | Controls how much confetti tumble affects trajectory (horizontal drift and vertical bobbing).         |
-| `drift`         | `Confetti`, `ContinuousConfetti` | Controls horizontal displacement (0 = straight down, 1 = full physics).                               |
-| `depth`         | All                              | Per-piece depth scale range to simulate 3D perspective.                                               |
-| `tumbleClamp`   | All                              | Minimum scale when a piece is edge-on during tumble. Use higher values (e.g. 0.9) for image textures. |
-| `initialScale`  | All                              | The scale particles start at before animating to full size.                                           |
-| `flakeStyle`    | All                              | Visual style of default flakes: `'solid'` or `'glossy'` (adds a gradient highlight).                  |
-| `sprayDuration` | `PIConfetti`, `CannonConfetti`   | Duration in milliseconds over which confetti pieces are staggered at launch.                          |
+| Prop             | Components                       | Description                                                                                     |
+| ---------------- | -------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `gravity`        | All                              | Gravity constant (normalized to container height). Replaces `fallDuration`.                     |
+| `wobble`         | `Confetti`, `ContinuousConfetti` | Controls how much confetti tumble affects trajectory (horizontal drift and vertical bobbing).    |
+| `drift`          | `Confetti`, `ContinuousConfetti` | Controls horizontal displacement (0 = straight down, 1 = full physics).                         |
+| `depth`          | All                              | Per-piece depth scale range to simulate 3D perspective.                                         |
+| `flipIntensity`  | All                              | How dramatically pieces flip during tumble (0-1). Lower values keep pieces flatter.             |
+| `initialScale`   | All                              | The scale particles start at before animating to full size.                                     |
+| `flakeStyle`     | All                              | Visual style of default flakes: `'solid'` or `'glossy'` (adds a gradient highlight).            |
+| `sprayDuration`  | `PIConfetti`, `CannonConfetti`   | Duration in milliseconds over which confetti pieces are staggered at launch.                    |
+| `drag`           | `PIConfetti`, `CannonConfetti`   | Air resistance. Number or `{ horizontal, vertical }` for separate axes.                         |

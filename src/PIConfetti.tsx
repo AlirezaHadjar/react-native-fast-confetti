@@ -27,6 +27,7 @@ import type {
 } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useConfettiFlakes } from './hooks/useConfettiFlakes';
+import { useTextureProps } from './hooks/useTextureProps';
 import { useAnimationLifecycle } from './hooks/useAnimationLifecycle';
 import { useContainerDimensions } from './hooks/useContainerDimensions';
 import { ConfettiCanvas } from './ConfettiCanvas';
@@ -71,22 +72,26 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       onAnimationEnd,
       onAnimationStart,
       containerStyle,
+      ...textureRootProps
     },
     ref
   ) => {
     const { containerWidth, containerHeight } =
       useContainerDimensions(containerStyle);
 
+    const parentTexture = useTextureProps(textureRootProps);
+
     // --- Resolve drag into horizontal / vertical ---
     const hDrag = typeof dragProp === 'number' ? dragProp : dragProp.horizontal;
     const vDrag = typeof dragProp === 'number' ? dragProp : dragProp.vertical;
 
     // --- Parse children for flake sizes ---
-    const { allColors, sizeVariations, sizeColorOverrides } = useConfettiFlakes(
+    const { allColors, sizeVariations, colorOverrides, sizeIsTextured, parentColorCount } = useConfettiFlakes(
       {
         children,
         rootColors,
         rootFlakeStyle: flakeStyle,
+        parentTexture,
       }
     );
 
@@ -116,15 +121,15 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
 
     const dynamicBlastPosition = useSharedValue<Position | null>(null);
 
-    const colorsVariations = allColors.length;
     const sizeVariationsCount = sizeVariations.length;
 
     const boxes = useSharedValue(
       generatePIBoxesArray({
         count,
-        colorsVariations,
         sizeVariations: sizeVariationsCount,
-        sizeColorOverrides,
+        sizeColorOverrides: colorOverrides,
+        parentColorCount,
+        sizeIsTextured,
         spread,
         rotation,
         speedVariation,
@@ -137,9 +142,10 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       'worklet';
       const newBoxes = generatePIBoxesArray({
         count,
-        colorsVariations,
         sizeVariations: sizeVariationsCount,
-        sizeColorOverrides,
+        sizeColorOverrides: colorOverrides,
+        parentColorCount,
+        sizeIsTextured,
         spread,
         rotation,
         speedVariation,
@@ -149,9 +155,10 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       boxes.set(newBoxes);
     }, [
       count,
-      colorsVariations,
       sizeVariationsCount,
-      sizeColorOverrides,
+      colorOverrides,
+      parentColorCount,
+      sizeIsTextured,
       spread,
       rotation,
       speedVariation,
@@ -175,7 +182,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       sizeVariations,
       colors: allColors,
       boxes,
-      sizeColorOverrides,
+      sizeColorOverrides: colorOverrides,
     });
 
     const workletRestart = useCallback(

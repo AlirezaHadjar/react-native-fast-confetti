@@ -9,31 +9,21 @@ export type TextureInfo =
   | { type: 'image'; content: SkImage }
   | { type: 'svg'; content: SkSVG };
 
+export type ColorRange = { start: number; count: number };
+
 export type SizeVariation = {
   width: number;
   height: number;
   radius: number;
   flakeStyle: FlakeStyle;
   texture?: TextureInfo;
-};
-
-type UseConfettiFlakesParams = {
-  children?: React.ReactNode;
-  rootColors?: string[];
-  rootFlakeStyle?: FlakeStyle;
-};
-
-type UseConfettiFlakesResult = {
-  allColors: string[];
-  sizeVariations: SizeVariation[];
-  /** For each sizeIndex, the locked colorIndex if textured, or null for random color. */
-  sizeColorOverrides: (number | null)[];
-  hasAnyTexture: boolean;
+  colors?: string[];
 };
 
 export function parseFlakeChildren(
   flakeChildren: React.ReactElement<FlakeProps>[] | undefined,
-  defaultFlakeStyle: FlakeStyle
+  defaultFlakeStyle: FlakeStyle,
+  parentTexture?: TextureInfo
 ): SizeVariation[] {
   if (flakeChildren && flakeChildren.length > 0) {
     return flakeChildren.map((f) => {
@@ -49,6 +39,8 @@ export function parseFlakeChildren(
         texture = { type: 'image', content: fProps.image };
       } else if ('svg' in fProps && fProps.svg != null) {
         texture = { type: 'svg', content: fProps.svg };
+      } else if (parentTexture) {
+        texture = parentTexture;
       }
 
       return {
@@ -57,6 +49,7 @@ export function parseFlakeChildren(
         radius: fProps.radius ?? 0,
         flakeStyle: resolvedStyle,
         texture,
+        colors: fProps.colors,
       };
     });
   }
@@ -65,13 +58,71 @@ export function parseFlakeChildren(
     height: s.height,
     radius: s.radius ?? 0,
     flakeStyle: defaultFlakeStyle,
+    texture: parentTexture,
   }));
 }
+
+export function buildAtlasColors(
+  sizes: SizeVariation[],
+  parentColors: string[]
+): {
+  allColors: string[];
+  colorOverrides: (ColorRange | null)[];
+  sizeIsTextured: boolean[];
+  parentColorCount: number;
+} {
+  const colorOverrides: (ColorRange | null)[] = new Array(sizes.length);
+  const sizeIsTextured: boolean[] = new Array(sizes.length);
+
+  const needsParentColors = sizes.some(
+    (s) => !s.texture && !s.colors
+  );
+  const allColors: string[] = needsParentColors ? [...parentColors] : [];
+  const parentColorCount = needsParentColors ? parentColors.length : 0;
+
+  for (let i = 0; i < sizes.length; i++) {
+    const size = sizes[i];
+    if (size?.texture) {
+      sizeIsTextured[i] = true;
+      colorOverrides[i] = { start: allColors.length, count: 1 };
+      allColors.push('#000');
+    } else if (size?.colors && size.colors.length > 0) {
+      sizeIsTextured[i] = false;
+      colorOverrides[i] = { start: allColors.length, count: size.colors.length };
+      allColors.push(...size.colors);
+    } else {
+      sizeIsTextured[i] = false;
+      colorOverrides[i] = null;
+    }
+  }
+
+  if (allColors.length === 0) {
+    allColors.push('#000');
+  }
+
+  return { allColors, colorOverrides, sizeIsTextured, parentColorCount };
+}
+
+type UseConfettiFlakesParams = {
+  children?: React.ReactNode;
+  rootColors?: string[];
+  rootFlakeStyle?: FlakeStyle;
+  parentTexture?: TextureInfo;
+};
+
+type UseConfettiFlakesResult = {
+  allColors: string[];
+  sizeVariations: SizeVariation[];
+  colorOverrides: (ColorRange | null)[];
+  sizeIsTextured: boolean[];
+  parentColorCount: number;
+};
 
 export const useConfettiFlakes = ({
   children,
   rootColors,
   rootFlakeStyle,
+  parentTexture,
 }: UseConfettiFlakesParams): UseConfettiFlakesResult => {
   const { targetChildren: flakeChildren } = pickChildren<FlakeProps>(
     children,
@@ -81,43 +132,16 @@ export const useConfettiFlakes = ({
   return useMemo(() => {
     const flakeStyle = rootFlakeStyle ?? 'glossy';
     const userColors = rootColors ?? DEFAULT_COLORS;
-    const sizes = parseFlakeChildren(flakeChildren, flakeStyle);
-
-    // Build colors array: user colors for non-textured flakes,
-    // plus one '#000' placeholder per unique textured size variant.
-    const hasAnyTexture = sizes.some((s) => s.texture !== undefined);
-
-    let allColors: string[];
-    const sizeColorOverrides: (number | null)[] = new Array(sizes.length);
-
-    if (!hasAnyTexture) {
-      // No textures at all — standard behavior
-      allColors = userColors;
-      sizeColorOverrides.fill(null);
-    } else {
-      // Check if there are any non-textured flakes that need user colors
-      const hasNonTextured = sizes.some((s) => !s.texture);
-      allColors = hasNonTextured ? [...userColors] : [];
-      for (let i = 0; i < sizes.length; i++) {
-        const size = sizes[i];
-        if (size?.texture) {
-          sizeColorOverrides[i] = allColors.length;
-          allColors.push('#000');
-        } else {
-          sizeColorOverrides[i] = null;
-        }
-      }
-      // Ensure at least one color exists
-      if (allColors.length === 0) {
-        allColors.push('#000');
-      }
-    }
+    const sizes = parseFlakeChildren(flakeChildren, flakeStyle, parentTexture);
+    const { allColors, colorOverrides, sizeIsTextured, parentColorCount } =
+      buildAtlasColors(sizes, userColors);
 
     return {
       allColors,
       sizeVariations: sizes,
-      sizeColorOverrides,
-      hasAnyTexture,
+      colorOverrides,
+      sizeIsTextured,
+      parentColorCount,
     };
-  }, [flakeChildren, rootColors, rootFlakeStyle]);
+  }, [flakeChildren, rootColors, rootFlakeStyle, parentTexture]);
 };

@@ -29,6 +29,7 @@ import type {
 } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useCannonOrigins } from './hooks/useCannonOrigins';
+import { useTextureProps } from './hooks/useTextureProps';
 import { useAnimationLifecycle } from './hooks/useAnimationLifecycle';
 import { useContainerDimensions } from './hooks/useContainerDimensions';
 import { ConfettiCanvas } from './ConfettiCanvas';
@@ -59,11 +60,14 @@ const CannonConfettiInner = forwardRef<
       initialScale = 0.3,
       flipIntensity = 0.85,
       flakeStyle = 'glossy',
+      ...textureRootProps
     },
     ref
   ) => {
     const { containerWidth, containerHeight } =
       useContainerDimensions(containerStyle);
+
+    const parentTexture = useTextureProps(textureRootProps);
 
     // --- Resolve drag into horizontal / vertical ---
     const hDrag = typeof dragProp === 'number' ? dragProp : dragProp.horizontal;
@@ -75,7 +79,9 @@ const CannonConfettiInner = forwardRef<
       cannonConfigs,
       allColors,
       sizeVariations,
-      sizeColorOverrides,
+      colorOverrides,
+      sizeIsTextured,
+      parentColorCount,
       totalCount,
     } = useCannonOrigins({
       children,
@@ -87,6 +93,7 @@ const CannonConfettiInner = forwardRef<
       rootFlakeStyle: flakeStyle,
       containerWidth,
       containerHeight,
+      parentTexture,
     });
 
     // --- Auto-compute duration from physics ---
@@ -112,7 +119,9 @@ const CannonConfettiInner = forwardRef<
         cannonsPositions,
         containerHeight,
         launchDelayMax,
-        sizeColorOverrides,
+        sizeColorOverrides: colorOverrides,
+        parentColorCount,
+        sizeIsTextured,
       })
     );
 
@@ -120,7 +129,7 @@ const CannonConfettiInner = forwardRef<
       sizeVariations,
       colors: allColors,
       boxes,
-      sizeColorOverrides,
+      sizeColorOverrides: colorOverrides,
     });
 
     const refreshBoxes = useCallback(() => {
@@ -133,7 +142,9 @@ const CannonConfettiInner = forwardRef<
         cannonsPositions: currentPositions,
         containerHeight,
         launchDelayMax,
-        sizeColorOverrides,
+        sizeColorOverrides: colorOverrides,
+        parentColorCount,
+        sizeIsTextured,
       });
       boxes.set(newBoxes);
     }, [
@@ -144,7 +155,9 @@ const CannonConfettiInner = forwardRef<
       cannonsPositions,
       containerHeight,
       launchDelayMax,
-      sizeColorOverrides,
+      colorOverrides,
+      parentColorCount,
+      sizeIsTextured,
     ]);
 
     const { progress, running, opacity, pause, reset, resume, runAnimation } =

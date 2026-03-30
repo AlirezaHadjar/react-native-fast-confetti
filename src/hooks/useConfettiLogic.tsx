@@ -11,7 +11,7 @@ import {
   ImageSVG,
   Image,
 } from '@shopify/react-native-skia';
-import type { SizeVariation } from './useConfettiFlakes';
+import type { SizeVariation, ColorRange } from './useConfettiFlakes';
 
 function renderAtlasCell(
   color: string,
@@ -20,12 +20,13 @@ function renderAtlasCell(
   sizeIndex: number,
   cellX: number,
   cellY: number,
-  sizeColorOverrides: (number | null)[]
+  sizeColorOverrides: (ColorRange | null)[]
 ): React.ReactNode {
   const key = `${colorIndex}-${sizeIndex}`;
 
   // If this size has a texture AND this is its dedicated color row, render texture
-  if (size.texture && sizeColorOverrides[sizeIndex] === colorIndex) {
+  const range = sizeColorOverrides[sizeIndex];
+  if (size.texture && range && range.count === 1 && range.start === colorIndex) {
     if (size.texture.type === 'svg') {
       return (
         <ImageSVG
@@ -118,7 +119,7 @@ export const useConfettiLogic = <T extends MinimalBox>({
   colors: string[];
   boxes: SharedValue<T[]>;
   sizeVariations: SizeVariation[];
-  sizeColorOverrides: (number | null)[];
+  sizeColorOverrides: (ColorRange | null)[];
 }) => {
   const maxWidth = Math.max(...sizeVariations.map((size) => size.width));
   const maxHeight = Math.max(...sizeVariations.map((size) => size.height));

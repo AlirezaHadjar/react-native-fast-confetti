@@ -16,6 +16,7 @@ import {
 } from './constants';
 import { integrateTrajectory } from './physics';
 import type { FallingBox, NamedPosition, Position, Range, Rotation } from './types';
+import type { ColorRange } from './hooks/useConfettiFlakes';
 
 export const getRandomBoolean = () => {
   'worklet';
@@ -38,9 +39,10 @@ export const resolveRange = (
 
 export const generatePIBoxesArray = ({
   count,
-  colorsVariations,
   sizeVariations,
   sizeColorOverrides,
+  parentColorCount,
+  sizeIsTextured,
   spread,
   rotation,
   speedVariation,
@@ -48,9 +50,10 @@ export const generatePIBoxesArray = ({
   launchDelayMax,
 }: {
   count: number;
-  colorsVariations: number;
   sizeVariations: number;
-  sizeColorOverrides: (number | null)[];
+  sizeColorOverrides: (ColorRange | null)[];
+  parentColorCount: number;
+  sizeIsTextured: boolean[];
   spread: number;
   rotation?: Rotation;
   speedVariation?: Range;
@@ -83,7 +86,7 @@ export const generatePIBoxesArray = ({
       baseAngle + ((((i * 137.5) % 360) * Math.PI) / 180 - Math.PI) * (halfSpread / Math.PI);
 
     const sizeIndex = Math.round(getRandomValue(0, sizeVariations - 1));
-    const colorOverride = sizeColorOverrides[sizeIndex];
+    const range = sizeColorOverrides[sizeIndex];
     return {
       angle: goldenAngle,
       cosAngle: Math.cos(goldenAngle),
@@ -96,10 +99,12 @@ export const generatePIBoxesArray = ({
         x: getRandomValue(xRotationRange.min, xRotationRange.max),
         z: getRandomValue(zRotationRange.min, zRotationRange.max),
       },
-      colorIndex: colorOverride ?? Math.round(getRandomValue(0, colorsVariations - 1)),
+      colorIndex: range
+        ? range.start + Math.round(getRandomValue(0, range.count - 1))
+        : Math.round(getRandomValue(0, parentColorCount - 1)),
       sizeIndex,
       initialRotation: getRandomValue(0.1 * Math.PI, Math.PI),
-      isTextured: colorOverride !== null && colorOverride !== undefined,
+      isTextured: sizeIsTextured[sizeIndex] ?? false,
     };
   });
 };
@@ -244,12 +249,16 @@ export const generateCannonBoxesArray = ({
   containerHeight,
   launchDelayMax,
   sizeColorOverrides,
+  parentColorCount,
+  sizeIsTextured,
 }: {
   cannonConfigs: CannonConfig[];
   cannonsPositions: Position[];
   containerHeight: number;
   launchDelayMax: number;
-  sizeColorOverrides: (number | null)[];
+  sizeColorOverrides: (ColorRange | null)[];
+  parentColorCount: number;
+  sizeIsTextured: boolean[];
 }) => {
   'worklet';
 
@@ -301,7 +310,7 @@ export const generateCannonBoxesArray = ({
           config.sizeStart + config.sizeCount - 1
         )
       );
-      const colorOverride = sizeColorOverrides[sizeIndex];
+      const range = sizeColorOverrides[sizeIndex];
       const angleOffset = getRandomValue(-halfSpread, halfSpread);
       const angle = baseAngle + angleOffset;
       const speedMultiplier = getRandomValue(speedRange.min, speedRange.max);
@@ -318,15 +327,12 @@ export const generateCannonBoxesArray = ({
           x: getRandomValue(xRotationRange.min, xRotationRange.max),
           z: getRandomValue(zRotationRange.min, zRotationRange.max),
         },
-        colorIndex: colorOverride ?? Math.round(
-          getRandomValue(
-            config.colorStart,
-            config.colorStart + config.colorCount - 1
-          )
-        ),
+        colorIndex: range
+          ? range.start + Math.round(getRandomValue(0, range.count - 1))
+          : Math.round(getRandomValue(0, parentColorCount - 1)),
         sizeIndex,
         initialRotation: getRandomValue(0.1 * Math.PI, Math.PI),
-        isTextured: colorOverride !== null && colorOverride !== undefined,
+        isTextured: sizeIsTextured[sizeIndex] ?? false,
       });
     }
   }
@@ -397,9 +403,10 @@ const calculateGridSpawnPosition = (
 
 export const generateFallingBoxesArray = ({
   count,
-  colorsVariations,
   sizeVariations,
   sizeColorOverrides,
+  parentColorCount,
+  sizeIsTextured,
   containerWidth,
   containerHeight,
   verticalSpacing,
@@ -417,9 +424,10 @@ export const generateFallingBoxesArray = ({
   continuous,
 }: {
   count: number;
-  colorsVariations: number;
   sizeVariations: number;
-  sizeColorOverrides: (number | null)[];
+  sizeColorOverrides: (ColorRange | null)[];
+  parentColorCount: number;
+  sizeIsTextured: boolean[];
   containerWidth: number;
   containerHeight: number;
   verticalSpacing: number;
@@ -525,18 +533,20 @@ export const generateFallingBoxesArray = ({
     );
 
     const sizeIndex = Math.round(getRandomValue(0, sizeVariations - 1));
-    const colorOverride = sizeColorOverrides[sizeIndex];
+    const range = sizeColorOverrides[sizeIndex];
     boxes[i] = {
       spawnX,
       spawnY,
       depthScale,
       clockwise,
-      colorIndex: colorOverride ?? Math.round(getRandomValue(0, colorsVariations - 1)),
+      colorIndex: range
+        ? range.start + Math.round(getRandomValue(0, range.count - 1))
+        : Math.round(getRandomValue(0, parentColorCount - 1)),
       sizeIndex,
       spinPhase: getRandomValue(0, 2 * Math.PI),
       spinRate,
       phaseOffset: (continuous ? phaseOffsets[i] : 0) ?? 0,
-      isTextured: colorOverride !== null && colorOverride !== undefined,
+      isTextured: sizeIsTextured[sizeIndex] ?? false,
     };
   }
 

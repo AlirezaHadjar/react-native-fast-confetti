@@ -4,6 +4,7 @@ import { Flake } from './FlakeComponent';
 import type {
   ConfettiMethods,
   ContinuousConfettiProps,
+  InternalConfettiProps,
 } from './types';
 
 const ContinuousConfettiInner = forwardRef<
@@ -11,7 +12,7 @@ const ContinuousConfettiInner = forwardRef<
   ContinuousConfettiProps
 >(({ verticalSpacing = 200, ...props }, ref) => (
   <InternalConfetti
-    {...props}
+    {...(props as InternalConfettiProps)}
     ref={ref}
     verticalSpacing={verticalSpacing}
     infinite

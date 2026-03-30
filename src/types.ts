@@ -144,7 +144,7 @@ type ConfettiBaseProps = {
   flipIntensity?: number;
 };
 
-export type ConfettiProps = ConfettiBaseProps;
+export type ConfettiProps = ConfettiBaseProps & FlakeTexture;
 
 export type InternalConfettiProps = ConfettiProps & {
   /** When true, uses per-piece phase offsets for a seamless continuous stream. */
@@ -265,7 +265,7 @@ type PIConfettiBaseProps = {
   containerStyle?: StyleProp<ViewStyle>;
 };
 
-export type PIConfettiProps = PIConfettiBaseProps;
+export type PIConfettiProps = PIConfettiBaseProps & FlakeTexture;
 
 export type ContinuousConfettiProps = StrictOmit<
   ConfettiProps,
@@ -409,6 +409,11 @@ type FlakeBase = {
    * @default inherits from origin or root
    */
   flakeStyle?: FlakeStyle;
+  /**
+   * @description Custom color palette for this flake group.
+   * Overrides the parent-level colors for confetti pieces using this flake variant.
+   */
+  colors?: string[];
 };
 
 type FlakeTexture =
@@ -548,7 +553,7 @@ type CannonConfettiBaseProps = {
   flipIntensity?: number;
 };
 
-export type CannonConfettiProps = CannonConfettiBaseProps;
+export type CannonConfettiProps = CannonConfettiBaseProps & FlakeTexture;
 
 export type CannonConfettiMethods = BaseConfettiMethods & {
   /**
