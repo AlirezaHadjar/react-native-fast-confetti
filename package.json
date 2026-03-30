@@ -22,6 +22,7 @@
   ],
   "scripts": {
     "example": "yarn workspace react-native-fast-confetti-example",
+    "kitchen-sink": "yarn workspace react-native-fast-confetti-kitchen-sink",
     "test": "jest",
     "typecheck": "tsc",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
@@ -84,13 +85,15 @@
     "react-native-worklets": "*"
   },
   "workspaces": [
-    "example"
+    "example",
+    "kitchen-sink"
   ],
   "packageManager": "bun@1.2.19",
   "jest": {
     "preset": "react-native",
     "modulePathIgnorePatterns": [
       "<rootDir>/example/node_modules",
+      "<rootDir>/kitchen-sink/node_modules",
       "<rootDir>/lib/"
     ]
   },
