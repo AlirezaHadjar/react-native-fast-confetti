@@ -332,7 +332,10 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
     const transforms = useRSXformBuffer(count, (val, i) => {
       'worklet';
       const piece = boxes.get()[i];
-      if (!piece) return;
+      if (!piece || !running.get()) {
+        val.set(0, 0, -10000, -10000);
+        return;
+      }
 
       const currentBlastPosition =
         dynamicBlastPosition.get() || defaultBlastPosition;
