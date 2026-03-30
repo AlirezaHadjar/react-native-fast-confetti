@@ -31,6 +31,43 @@ type UseConfettiFlakesResult = {
   hasAnyTexture: boolean;
 };
 
+export function parseFlakeChildren(
+  flakeChildren: React.ReactElement<FlakeProps>[] | undefined,
+  defaultFlakeStyle: FlakeStyle
+): SizeVariation[] {
+  if (flakeChildren && flakeChildren.length > 0) {
+    return flakeChildren.map((f) => {
+      const fProps = f.props;
+      const resolvedStyle = fProps.flakeStyle ?? defaultFlakeStyle;
+      const w =
+        'size' in fProps && fProps.size != null ? fProps.size : fProps.width;
+      const h =
+        'size' in fProps && fProps.size != null ? fProps.size : fProps.height;
+
+      let texture: TextureInfo | undefined;
+      if ('image' in fProps && fProps.image != null) {
+        texture = { type: 'image', content: fProps.image };
+      } else if ('svg' in fProps && fProps.svg != null) {
+        texture = { type: 'svg', content: fProps.svg };
+      }
+
+      return {
+        width: w,
+        height: h,
+        radius: fProps.radius ?? 0,
+        flakeStyle: resolvedStyle,
+        texture,
+      };
+    });
+  }
+  return DEFAULT_FLAKE_SIZE.map((s) => ({
+    width: s.width,
+    height: s.height,
+    radius: s.radius ?? 0,
+    flakeStyle: defaultFlakeStyle,
+  }));
+}
+
 export const useConfettiFlakes = ({
   children,
   rootColors,
@@ -44,41 +81,7 @@ export const useConfettiFlakes = ({
   return useMemo(() => {
     const flakeStyle = rootFlakeStyle ?? 'glossy';
     const userColors = rootColors ?? DEFAULT_COLORS;
-
-    // Parse Flake children into size variations with texture info
-    let sizes: SizeVariation[];
-    if (flakeChildren && flakeChildren.length > 0) {
-      sizes = flakeChildren.map((f) => {
-        const fProps = f.props;
-        const resolvedStyle = fProps.flakeStyle ?? flakeStyle;
-        const w =
-          'size' in fProps && fProps.size != null ? fProps.size : fProps.width;
-        const h =
-          'size' in fProps && fProps.size != null ? fProps.size : fProps.height;
-
-        let texture: TextureInfo | undefined;
-        if ('image' in fProps && fProps.image != null) {
-          texture = { type: 'image', content: fProps.image };
-        } else if ('svg' in fProps && fProps.svg != null) {
-          texture = { type: 'svg', content: fProps.svg };
-        }
-
-        return {
-          width: w,
-          height: h,
-          radius: fProps.radius ?? 0,
-          flakeStyle: resolvedStyle,
-          texture,
-        };
-      });
-    } else {
-      sizes = DEFAULT_FLAKE_SIZE.map((s) => ({
-        width: s.width,
-        height: s.height,
-        radius: s.radius ?? 0,
-        flakeStyle: flakeStyle,
-      }));
-    }
+    const sizes = parseFlakeChildren(flakeChildren, flakeStyle);
 
     // Build colors array: user colors for non-textured flakes,
     // plus one '#000' placeholder per unique textured size variant.
@@ -96,7 +99,8 @@ export const useConfettiFlakes = ({
       // Mixed or all-textured: user colors + texture placeholder rows
       allColors = [...userColors];
       for (let i = 0; i < sizes.length; i++) {
-        if (sizes[i]!.texture) {
+        const size = sizes[i];
+        if (size?.texture) {
           // Each textured size gets a dedicated color row
           sizeColorOverrides[i] = allColors.length;
           allColors.push('#000');

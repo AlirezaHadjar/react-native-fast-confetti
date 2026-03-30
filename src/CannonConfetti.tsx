@@ -1,16 +1,10 @@
-import { useRSXformBuffer, Canvas, Atlas } from '@shopify/react-native-skia';
+import { useRSXformBuffer } from '@shopify/react-native-skia';
 import { useCallback, useEffect, useImperativeHandle, forwardRef } from 'react';
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import {
-  cancelAnimation,
   Extrapolation,
   interpolate,
   runOnUI,
-  useDerivedValue,
   useSharedValue,
-  withTiming,
-  withDelay,
-  Easing,
 } from 'react-native-reanimated';
 import {
   generateCannonBoxesArray,
@@ -35,7 +29,9 @@ import type {
 } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useCannonOrigins } from './hooks/useCannonOrigins';
-import { useAnimationCallbacks } from './hooks/useAnimationCallbacks';
+import { useAnimationLifecycle } from './hooks/useAnimationLifecycle';
+import { useContainerDimensions } from './hooks/useContainerDimensions';
+import { ConfettiCanvas } from './ConfettiCanvas';
 import { Origin, Flake } from './CannonConfettiComponents';
 
 const CannonConfettiInner = forwardRef<
@@ -66,15 +62,8 @@ const CannonConfettiInner = forwardRef<
     },
     ref
   ) => {
-    const { width: DEFAULT_SCREEN_WIDTH, height: DEFAULT_SCREEN_HEIGHT } =
-      useWindowDimensions();
-    const flatStyle = StyleSheet.flatten(containerStyle);
-    const containerWidth =
-      (typeof flatStyle?.width === 'number' ? flatStyle.width : null) ??
-      DEFAULT_SCREEN_WIDTH;
-    const containerHeight =
-      (typeof flatStyle?.height === 'number' ? flatStyle.height : null) ??
-      DEFAULT_SCREEN_HEIGHT;
+    const { containerWidth, containerHeight } =
+      useContainerDimensions(containerStyle);
 
     // --- Resolve drag into horizontal / vertical ---
     const hDrag = typeof dragProp === 'number' ? dragProp : dragProp.horizontal;
@@ -117,14 +106,6 @@ const CannonConfettiInner = forwardRef<
     const dynamicCannonsPositions = useSharedValue<Position[] | null>(null);
     const dynamicCannonConfigs = useSharedValue<CannonConfig[] | null>(null);
 
-    const progress = useSharedValue(0);
-    const running = useSharedValue(false);
-
-    const opacity = useDerivedValue(() => {
-      if (!fadeOutOnEnd) return 1;
-      return interpolate(progress.get(), [0.8, 1], [1, 0], Extrapolation.CLAMP);
-    }, [fadeOutOnEnd]);
-
     const boxes = useSharedValue(
       generateCannonBoxesArray({
         cannonConfigs,
@@ -140,18 +121,6 @@ const CannonConfettiInner = forwardRef<
       sizeColorOverrides,
     });
 
-    const pause = () => {
-      'worklet';
-      running.set(false);
-      cancelAnimation(progress);
-    };
-
-    const reset = () => {
-      'worklet';
-      pause();
-      progress.set(0);
-    };
-
     const refreshBoxes = useCallback(() => {
       'worklet';
       const currentConfigs = dynamicCannonConfigs.get() || cannonConfigs;
@@ -163,10 +132,15 @@ const CannonConfettiInner = forwardRef<
       boxes.set(newBoxes);
     }, [cannonConfigs, boxes, dynamicCannonConfigs, launchDelayMax, sizeColorOverrides]);
 
-    const { UIOnStart, UIOnEnd } = useAnimationCallbacks(
-      onAnimationStart,
-      onAnimationEnd
-    );
+    const { progress, running, opacity, pause, reset, resume, runAnimation } =
+      useAnimationLifecycle({
+        duration,
+        infinite,
+        fadeOutOnEnd,
+        onAnimationStart,
+        onAnimationEnd,
+        onCycleEnd: refreshBoxes,
+      });
 
     const workletRestart = useCallback(
       (
@@ -175,58 +149,16 @@ const CannonConfettiInner = forwardRef<
         delay: number = 0
       ) => {
         'worklet';
-
         dynamicCannonsPositions.set(resolvedPositions);
         dynamicCannonConfigs.set(resolvedConfigs);
         refreshBoxes();
-        progress.set(0);
-        running.set(true);
-        UIOnStart();
-
-        function repeatAnimation() {
-          'worklet';
-          UIOnEnd();
-          refreshBoxes();
-          if (infinite) {
-            cancelAnimation(progress);
-            progress.set(0);
-            progress.set(
-              withTiming(1, { duration, easing: Easing.linear }, (finished) => {
-                'worklet';
-                if (!finished || !infinite) return;
-                repeatAnimation();
-              })
-            );
-          }
-        }
-
-        const animation = withTiming(
-          1,
-          { duration, easing: Easing.linear },
-          (finished) => {
-            'worklet';
-            if (!finished || !infinite) {
-              if (finished) UIOnEnd();
-              return;
-            }
-            repeatAnimation();
-          }
-        );
-
-        progress.set(delay > 0 ? withDelay(delay, animation) : animation);
+        runAnimation(delay);
       },
-      [
-        dynamicCannonsPositions,
-        dynamicCannonConfigs,
-        refreshBoxes,
-        progress,
-        running,
-        UIOnStart,
-        UIOnEnd,
-        infinite,
-        duration,
-      ]
+      [dynamicCannonsPositions, dynamicCannonConfigs, refreshBoxes, runAnimation]
     );
+
+    const colorCount = allColors.length;
+    const sizeCount = sizeVariations.length;
 
     const jsRestart = useCallback(
       (options: CannonConfettiRestartOptions = {}) => {
@@ -236,14 +168,11 @@ const CannonConfettiInner = forwardRef<
           resolvedPositions = options.origins.map((o) =>
             resolveNamedPosition(o, containerWidth, containerHeight)
           );
-          // For dynamically-provided origins, distribute totalCount evenly
-          // and reuse the original allColors/allSizes from the last children parse
           const perOriginCount = Math.max(
             1,
             Math.floor(totalCount / resolvedPositions.length)
           );
 
-          // Resolve the default target for origins that don't have an explicit one
           const defaultTarget: Position =
             rootTarget != null
               ? resolveNamedPosition(
@@ -269,9 +198,9 @@ const CannonConfettiInner = forwardRef<
               count: perOriginCount,
               speedVariation: { ...DEFAULT_CANNON_CONFETTI_SPEED_VARIATION },
               colorStart: 0,
-              colorCount: allColors.length,
+              colorCount,
               sizeStart: 0,
-              sizeCount: sizeVariations.length,
+              sizeCount,
               target,
             };
           });
@@ -283,51 +212,11 @@ const CannonConfettiInner = forwardRef<
         containerWidth,
         containerHeight,
         totalCount,
-        allColors.length,
-        sizeVariations.length,
+        colorCount,
+        sizeCount,
         rootTarget,
       ]
     );
-
-    const resume = () => {
-      'worklet';
-      if (running.get()) return;
-      running.set(true);
-
-      const remaining = duration * (1 - progress.get());
-
-      function repeatAnimation() {
-        'worklet';
-        UIOnEnd();
-        refreshBoxes();
-        if (infinite) {
-          cancelAnimation(progress);
-          progress.set(0);
-          progress.set(
-            withTiming(1, { duration, easing: Easing.linear }, (finished) => {
-              'worklet';
-              if (!finished || !infinite) return;
-              repeatAnimation();
-            })
-          );
-        }
-      }
-
-      progress.set(
-        withTiming(
-          1,
-          { duration: remaining, easing: Easing.linear },
-          (finished) => {
-            'worklet';
-            if (!finished || !infinite) {
-              if (finished) UIOnEnd();
-              return;
-            }
-            repeatAnimation();
-          }
-        )
-      );
-    };
 
     useImperativeHandle(ref, () => ({
       pause: runOnUI(pause),
@@ -357,11 +246,14 @@ const CannonConfettiInner = forwardRef<
       }
 
       const currentCannons = dynamicCannonsPositions.get() || cannonsPositions;
-      const cannon = currentCannons[piece.cannonIndex % currentCannons.length]!;
+      const cannon = currentCannons[piece.cannonIndex % currentCannons.length];
+      if (!cannon) {
+        val.set(0, 0, -10000, -10000);
+        return;
+      }
       const cannonX = cannon.x;
       const cannonY = cannon.y;
 
-      // Base angle points from cannon toward the piece's baked target
       const baseAngle = Math.atan2(
         piece.targetY - cannonY,
         piece.targetX - cannonX
@@ -378,7 +270,6 @@ const CannonConfettiInner = forwardRef<
 
       const p = progress.get();
 
-      // Current time based on progress, accounting for launch delay
       const effectiveProgress = interpolate(
         p,
         [piece.launchDelay, 1],
@@ -387,8 +278,6 @@ const CannonConfettiInner = forwardRef<
       );
       const t = effectiveProgress * totalTime;
 
-      // Physics: polynomial decay for horizontal (gentler than exponential),
-      // exponential decay + gravity for vertical
       const normalizedT = Math.min(t / totalTime, 1);
       const hDecayFactor = 1 - Math.pow(1 - normalizedT, hDrag + 1);
       const vExpDecay = 1 - Math.exp(-vDrag * t);
@@ -399,7 +288,6 @@ const CannonConfettiInner = forwardRef<
         (scaledGravity / safeVDrag) * t +
         ((vy - scaledGravity / safeVDrag) / safeVDrag) * vExpDecay;
 
-      // Rotation
       const rotationDirection = piece.clockwise ? 1 : -1;
       const rz =
         piece.initialRotation +
@@ -418,7 +306,6 @@ const CannonConfettiInner = forwardRef<
           Extrapolation.CLAMP
         );
 
-      // Scale: appearance animation at launch + oscillation
       const minFlipScale = 1 - flipIntensity;
       const oscillatingScale = Math.max(Math.abs(Math.cos(rx)), minFlipScale);
       const appearScale = interpolate(
@@ -429,7 +316,11 @@ const CannonConfettiInner = forwardRef<
       );
       const scale = appearScale * oscillatingScale * piece.depthScale;
 
-      const size = sizeVariations[piece.sizeIndex]!;
+      const size = sizeVariations[piece.sizeIndex];
+      if (!size) {
+        val.set(0, 0, -10000, -10000);
+        return;
+      }
       const px = size.width / 2;
       const py = size.height / 2;
 
@@ -440,16 +331,13 @@ const CannonConfettiInner = forwardRef<
     });
 
     return (
-      <View pointerEvents="none" style={[styles.container, containerStyle]}>
-        <Canvas style={styles.canvasContainer}>
-          <Atlas
-            image={texture}
-            sprites={sprites}
-            transforms={transforms}
-            opacity={opacity}
-          />
-        </Canvas>
-      </View>
+      <ConfettiCanvas
+        containerStyle={containerStyle}
+        texture={texture}
+        sprites={sprites}
+        transforms={transforms}
+        opacity={opacity}
+      />
     );
   }
 );
@@ -465,16 +353,3 @@ CannonConfetti.Origin = Origin;
 CannonConfetti.Flake = Flake;
 
 export { CannonConfetti };
-
-const styles = StyleSheet.create({
-  container: {
-    height: '100%',
-    width: '100%',
-    position: 'absolute',
-    zIndex: 1,
-  },
-  canvasContainer: {
-    width: '100%',
-    height: '100%',
-  },
-});

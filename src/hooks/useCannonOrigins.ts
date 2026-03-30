@@ -14,14 +14,14 @@ import { pickChildren } from '../children';
 import { Origin, Flake } from '../CannonConfettiComponents';
 import {
   DEFAULT_COLORS,
-  DEFAULT_FLAKE_SIZE,
   DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE,
   DEFAULT_CANNON_CONFETTI_INITIAL_SPEED,
   DEFAULT_CANNON_CONFETTI_SPEED_VARIATION,
   DEFAULT_CANNON_CONFETTI_DEPTH,
   DEFAULT_CANNON_ORIGIN_COUNT,
 } from '../constants';
-import type { SizeVariation, TextureInfo } from './useConfettiFlakes';
+import { parseFlakeChildren } from './useConfettiFlakes';
+import type { SizeVariation } from './useConfettiFlakes';
 
 type UseCannonOriginsParams = {
   children: React.ReactNode;
@@ -113,43 +113,8 @@ export const useCannonOrigins = ({
         Flake
       );
 
-      // Build flake sizes for this origin with texture info
       const originFlakeStyle = props.flakeStyle ?? rootFlakeStyle ?? 'glossy';
-      let originSizes: SizeVariation[];
-      if (flakeChildren && flakeChildren.length > 0) {
-        originSizes = flakeChildren.map((f) => {
-          const fProps = f.props;
-          const resolvedStyle = fProps.flakeStyle ?? originFlakeStyle;
-          const w =
-            'size' in fProps && fProps.size != null ? fProps.size : fProps.width;
-          const h =
-            'size' in fProps && fProps.size != null
-              ? fProps.size
-              : fProps.height;
-
-          let texture: TextureInfo | undefined;
-          if ('image' in fProps && fProps.image != null) {
-            texture = { type: 'image', content: fProps.image };
-          } else if ('svg' in fProps && fProps.svg != null) {
-            texture = { type: 'svg', content: fProps.svg };
-          }
-
-          return {
-            width: w,
-            height: h,
-            radius: fProps.radius ?? 0,
-            flakeStyle: resolvedStyle,
-            texture,
-          };
-        });
-      } else {
-        originSizes = DEFAULT_FLAKE_SIZE.map((s) => ({
-          width: s.width,
-          height: s.height,
-          radius: s.radius ?? 0,
-          flakeStyle: originFlakeStyle,
-        }));
-      }
+      const originSizes = parseFlakeChildren(flakeChildren, originFlakeStyle);
 
       // Resolution chain: origin prop → root prop → constant default
       const originColors = props.colors ?? rootColors ?? DEFAULT_COLORS;

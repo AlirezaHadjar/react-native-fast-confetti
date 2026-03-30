@@ -17,15 +17,14 @@ export function flattenChildren(
   depth: number = 0,
   keys: (string | number)[] = []
 ): FlatChild[] {
-  return Children.toArray(children).reduce(
-    (acc: FlatChild[], node: any, nodeIndex) => {
-      if (node.type === React.Fragment) {
-        acc.push.apply(
-          acc,
-          flattenChildren(
+  return Children.toArray(children).reduce<FlatChild[]>(
+    (acc, node, nodeIndex) => {
+      if (isValidElement<{ children?: ReactNode }>(node) && node.type === React.Fragment) {
+        acc.push(
+          ...flattenChildren(
             node.props.children,
             depth + 1,
-            keys.concat(node.key || nodeIndex)
+            keys.concat(node.key ?? nodeIndex)
           )
         );
       } else {
@@ -45,17 +44,19 @@ export function flattenChildren(
   );
 }
 
-export const pickChildren = <Props = any>(
+export const pickChildren = <Props,>(
   _children: ReactNode | undefined,
   targetChild: React.ElementType
-) => {
+): {
+  targetChildren: ReactElement<Props>[] | undefined;
+  withoutTargetChildren: (ReactElement | string | number | null)[] | undefined;
+} => {
   const children = flattenChildren(_children);
   const target: ReactElement<Props>[] = [];
   const withoutTargetChildren = Children.map(children, (item) => {
     if (!isValidElement(item)) return item;
     if (isInstanceOfComponent(item, targetChild)) {
-      // @ts-expect-error - cloneElement type mismatch with generic Props
-      target.push(cloneElement(item));
+      target.push(item as ReactElement<Props>);
       return null;
     }
     return item;
@@ -69,15 +70,22 @@ export const pickChildren = <Props = any>(
   };
 };
 
-export const isInstanceOfComponent = <Props,>(
+export const isInstanceOfComponent = (
   element: ReactElement | undefined,
-  targetElement: React.ComponentType<Props> | React.ElementType<Props>
-): element is NonNullable<ReactElement<Props>> => {
-  const matches =
-    (element as any)?.type === targetElement ||
-    (typeof (element as any)?.type == 'function' &&
-      (element as any)?.type?.displayName ===
-        (targetElement as any).displayName);
-
-  return matches;
+  targetElement: React.ElementType
+): boolean => {
+  if (!element) return false;
+  if (element.type === targetElement) return true;
+  if (
+    typeof element.type === 'function' &&
+    typeof targetElement === 'function' &&
+    'displayName' in element.type &&
+    'displayName' in targetElement
+  ) {
+    return (
+      (element.type as { displayName?: string }).displayName ===
+      (targetElement as { displayName?: string }).displayName
+    );
+  }
+  return false;
 };

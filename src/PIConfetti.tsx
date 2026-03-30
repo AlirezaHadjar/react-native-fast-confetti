@@ -1,22 +1,10 @@
-import { useRSXformBuffer, Canvas, Atlas } from '@shopify/react-native-skia';
+import { useRSXformBuffer } from '@shopify/react-native-skia';
+import { useCallback, useEffect, useImperativeHandle, forwardRef } from 'react';
 import {
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  forwardRef,
-  useMemo,
-} from 'react';
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
-import {
-  cancelAnimation,
   Extrapolation,
   interpolate,
   runOnUI,
-  useDerivedValue,
   useSharedValue,
-  withTiming,
-  withDelay,
-  Easing,
 } from 'react-native-reanimated';
 import {
   generatePIBoxesArray,
@@ -39,8 +27,24 @@ import type {
 } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useConfettiFlakes } from './hooks/useConfettiFlakes';
-import { useAnimationCallbacks } from './hooks/useAnimationCallbacks';
+import { useAnimationLifecycle } from './hooks/useAnimationLifecycle';
+import { useContainerDimensions } from './hooks/useContainerDimensions';
+import { ConfettiCanvas } from './ConfettiCanvas';
 import { Flake } from './FlakeComponent';
+
+function resolveBlastPosition(
+  blastPosition: PIConfettiProps['blastPosition'],
+  containerWidth: number,
+  containerHeight: number
+): Position {
+  if (blastPosition == null) {
+    return { x: containerWidth / 2, y: containerHeight / 2 };
+  }
+  if (typeof blastPosition === 'object') {
+    return blastPosition;
+  }
+  return resolveNamedPosition(blastPosition, containerWidth, containerHeight);
+}
 
 const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
   (
@@ -70,15 +74,8 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
     },
     ref
   ) => {
-    const { width: DEFAULT_SCREEN_WIDTH, height: DEFAULT_SCREEN_HEIGHT } =
-      useWindowDimensions();
-    const flatStyle = StyleSheet.flatten(containerStyle);
-    const containerWidth =
-      (typeof flatStyle?.width === 'number' ? flatStyle.width : null) ??
-      DEFAULT_SCREEN_WIDTH;
-    const containerHeight =
-      (typeof flatStyle?.height === 'number' ? flatStyle.height : null) ??
-      DEFAULT_SCREEN_HEIGHT;
+    const { containerWidth, containerHeight } =
+      useContainerDimensions(containerStyle);
 
     // --- Resolve drag into horizontal / vertical ---
     const hDrag = typeof dragProp === 'number' ? dragProp : dragProp.horizontal;
@@ -93,20 +90,11 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       }
     );
 
-    // --- Resolve blast position ---
-    const defaultBlastPosition = useMemo(() => {
-      if (_blastPosition == null) {
-        return { x: containerWidth / 2, y: 150 };
-      }
-      if (typeof _blastPosition === 'object') {
-        return _blastPosition;
-      }
-      return resolveNamedPosition(
-        _blastPosition,
-        containerWidth,
-        containerHeight
-      );
-    }, [_blastPosition, containerWidth, containerHeight]);
+    const defaultBlastPosition = resolveBlastPosition(
+      _blastPosition,
+      containerWidth,
+      containerHeight
+    );
 
     // --- Auto-compute duration from physics ---
     const duration = estimatePIDuration({
@@ -127,24 +115,15 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         : DEFAULT_PI_CONFETTI_LAUNCH_DELAY_MAX;
 
     const dynamicBlastPosition = useSharedValue<Position | null>(null);
-    const progress = useSharedValue(0);
-    const running = useSharedValue(false);
 
-    const opacity = useDerivedValue(() => {
-      if (!fadeOutOnEnd) return 1;
-      return interpolate(
-        progress.get(),
-        [0.5, 0.9],
-        [1, 0],
-        Extrapolation.CLAMP
-      );
-    }, [fadeOutOnEnd]);
+    const colorsVariations = allColors.length;
+    const sizeVariationsCount = sizeVariations.length;
 
     const boxes = useSharedValue(
       generatePIBoxesArray({
         count,
-        colorsVariations: allColors.length,
-        sizeVariations: sizeVariations.length,
+        colorsVariations,
+        sizeVariations: sizeVariationsCount,
         sizeColorOverrides,
         spread,
         rotation,
@@ -154,31 +133,12 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       })
     );
 
-    const { texture, sprites } = useConfettiLogic({
-      sizeVariations,
-      colors: allColors,
-      boxes,
-      sizeColorOverrides,
-    });
-
-    const pause = () => {
-      'worklet';
-      running.set(false);
-      cancelAnimation(progress);
-    };
-
-    const reset = () => {
-      'worklet';
-      pause();
-      progress.set(0);
-    };
-
     const refreshBoxes = useCallback(() => {
       'worklet';
       const newBoxes = generatePIBoxesArray({
         count,
-        colorsVariations: allColors.length,
-        sizeVariations: sizeVariations.length,
+        colorsVariations,
+        sizeVariations: sizeVariationsCount,
         sizeColorOverrides,
         spread,
         rotation,
@@ -189,8 +149,8 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       boxes.set(newBoxes);
     }, [
       count,
-      allColors.length,
-      sizeVariations.length,
+      colorsVariations,
+      sizeVariationsCount,
       sizeColorOverrides,
       spread,
       rotation,
@@ -200,63 +160,32 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       boxes,
     ]);
 
-    const { UIOnStart, UIOnEnd } = useAnimationCallbacks(
-      onAnimationStart,
-      onAnimationEnd
-    );
+    const { progress, running, opacity, pause, reset, resume, runAnimation } =
+      useAnimationLifecycle({
+        duration,
+        infinite,
+        fadeOutOnEnd,
+        onAnimationStart,
+        onAnimationEnd,
+        fadeRange: [0.5, 0.9],
+        onCycleEnd: refreshBoxes,
+      });
+
+    const { texture, sprites } = useConfettiLogic({
+      sizeVariations,
+      colors: allColors,
+      boxes,
+      sizeColorOverrides,
+    });
 
     const workletRestart = useCallback(
       (resolvedPosition: Position | null, delay: number = 0) => {
         'worklet';
-
         dynamicBlastPosition.set(resolvedPosition);
         refreshBoxes();
-        progress.set(0);
-        running.set(true);
-        UIOnStart();
-
-        function repeatAnimation() {
-          'worklet';
-          UIOnEnd();
-          refreshBoxes();
-          if (infinite) {
-            cancelAnimation(progress);
-            progress.set(0);
-            progress.set(
-              withTiming(1, { duration, easing: Easing.linear }, (finished) => {
-                'worklet';
-                if (!finished || !infinite) return;
-                repeatAnimation();
-              })
-            );
-          }
-        }
-
-        const animation = withTiming(
-          1,
-          { duration, easing: Easing.linear },
-          (finished) => {
-            'worklet';
-            if (!finished || !infinite) {
-              if (finished) UIOnEnd();
-              return;
-            }
-            repeatAnimation();
-          }
-        );
-
-        progress.set(delay > 0 ? withDelay(delay, animation) : animation);
+        runAnimation(delay);
       },
-      [
-        dynamicBlastPosition,
-        refreshBoxes,
-        progress,
-        running,
-        UIOnStart,
-        UIOnEnd,
-        infinite,
-        duration,
-      ]
+      [dynamicBlastPosition, refreshBoxes, runAnimation]
     );
 
     const jsRestart = useCallback(
@@ -277,46 +206,6 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       [workletRestart, containerWidth, containerHeight]
     );
 
-    const resume = () => {
-      'worklet';
-      if (running.get()) return;
-      running.set(true);
-
-      const remaining = duration * (1 - progress.get());
-
-      function repeatAnimation() {
-        'worklet';
-        UIOnEnd();
-        refreshBoxes();
-        if (infinite) {
-          cancelAnimation(progress);
-          progress.set(0);
-          progress.set(
-            withTiming(1, { duration, easing: Easing.linear }, (finished) => {
-              'worklet';
-              if (!finished || !infinite) return;
-              repeatAnimation();
-            })
-          );
-        }
-      }
-
-      progress.set(
-        withTiming(
-          1,
-          { duration: remaining, easing: Easing.linear },
-          (finished) => {
-            'worklet';
-            if (!finished || !infinite) {
-              if (finished) UIOnEnd();
-              return;
-            }
-            repeatAnimation();
-          }
-        )
-      );
-    };
-
     useImperativeHandle(ref, () => ({
       pause: runOnUI(pause),
       reset: runOnUI(reset),
@@ -326,7 +215,8 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
 
     useEffect(() => {
       runOnUI(() => {
-        if (autoplay && !running.get()) workletRestart(null, autoStartDelay);
+        if (autoplay && !running.get())
+          workletRestart(null, autoStartDelay);
       })();
     }, [autoplay, autoStartDelay, workletRestart, running]);
 
@@ -408,7 +298,11 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       );
       const scale = appearScale * oscillatingScale * piece.depthScale;
 
-      const size = sizeVariations[piece.sizeIndex]!;
+      const size = sizeVariations[piece.sizeIndex];
+      if (!size) {
+        val.set(0, 0, -10000, -10000);
+        return;
+      }
       const px = size.width / 2;
       const py = size.height / 2;
 
@@ -419,16 +313,13 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
     });
 
     return (
-      <View pointerEvents="none" style={[styles.container, containerStyle]}>
-        <Canvas style={styles.canvasContainer}>
-          <Atlas
-            image={texture}
-            sprites={sprites}
-            transforms={transforms}
-            opacity={opacity}
-          />
-        </Canvas>
-      </View>
+      <ConfettiCanvas
+        containerStyle={containerStyle}
+        texture={texture}
+        sprites={sprites}
+        transforms={transforms}
+        opacity={opacity}
+      />
     );
   }
 );
@@ -442,16 +333,3 @@ const PIConfetti = PIConfettiInner as typeof PIConfettiInner & {
 PIConfetti.Flake = Flake;
 
 export { PIConfetti };
-
-const styles = StyleSheet.create({
-  container: {
-    height: '100%',
-    width: '100%',
-    position: 'absolute',
-    zIndex: 1,
-  },
-  canvasContainer: {
-    width: '100%',
-    height: '100%',
-  },
-});

@@ -164,37 +164,28 @@ export const estimatePIDuration = ({
 
 const EDGE_OFFSET = 30;
 
+const POSITION_RESOLVERS: Record<
+  NamedPosition,
+  (w: number, h: number, o: number) => Position
+> = {
+  'bottom-left': (_w, h, o) => ({ x: -o, y: h + o }),
+  'bottom-right': (w, h, o) => ({ x: w + o, y: h + o }),
+  'bottom-center': (w, h, o) => ({ x: w / 2, y: h + o }),
+  'top-left': (_w, _h, o) => ({ x: -o, y: -o }),
+  'top-right': (w, _h, o) => ({ x: w + o, y: -o }),
+  'top-center': (w, _h, o) => ({ x: w / 2, y: -o }),
+  'center-left': (_w, h, o) => ({ x: -o, y: h / 2 }),
+  'center-right': (w, h, o) => ({ x: w + o, y: h / 2 }),
+  center: (w, h) => ({ x: w / 2, y: h / 2 }),
+};
+
 export const resolveNamedPosition = (
   position: NamedPosition | Position,
   containerWidth: number,
   containerHeight: number
 ): Position => {
   if (typeof position === 'object') return position;
-
-  switch (position) {
-    case 'bottom-left':
-      return { x: -EDGE_OFFSET, y: containerHeight + EDGE_OFFSET };
-    case 'bottom-right':
-      return { x: containerWidth + EDGE_OFFSET, y: containerHeight + EDGE_OFFSET };
-    case 'bottom-center':
-      return { x: containerWidth / 2, y: containerHeight + EDGE_OFFSET };
-    case 'top-left':
-      return { x: -EDGE_OFFSET, y: -EDGE_OFFSET };
-    case 'top-right':
-      return { x: containerWidth + EDGE_OFFSET, y: -EDGE_OFFSET };
-    case 'top-center':
-      return { x: containerWidth / 2, y: -EDGE_OFFSET };
-    case 'center-left':
-      return { x: -EDGE_OFFSET, y: containerHeight / 2 };
-    case 'center-right':
-      return { x: containerWidth + EDGE_OFFSET, y: containerHeight / 2 };
-    case 'center':
-      return { x: containerWidth / 2, y: containerHeight / 2 };
-    default: {
-      const _exhaustive: never = position;
-      return _exhaustive;
-    }
-  }
+  return POSITION_RESOLVERS[position](containerWidth, containerHeight, EDGE_OFFSET);
 };
 
 export type CannonConfig = {
@@ -274,7 +265,8 @@ export const generateCannonBoxesArray = ({
   }[] = [];
 
   for (let cannonIndex = 0; cannonIndex < cannonConfigs.length; cannonIndex++) {
-    const config = cannonConfigs[cannonIndex]!;
+    const config = cannonConfigs[cannonIndex];
+    if (!config) continue;
     const halfSpread = config.spread / 2;
 
     const rotation = config.rotation ?? DEFAULT_CANNON_CONFETTI_ROTATION;
@@ -357,6 +349,42 @@ export const estimateFallingDuration = ({
   return Math.ceil(timeSec * 1000 * wobbleMargin);
 };
 
+const generatePhaseOffsets = (count: number): number[] => {
+  'worklet';
+  const offsets = new Array(count);
+  for (let i = 0; i < count; i++) {
+    offsets[i] = (i + Math.random()) / count;
+  }
+  for (let i = count - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = offsets[i] ?? 0;
+    offsets[i] = offsets[j] ?? 0;
+    offsets[j] = tmp;
+  }
+  return offsets;
+};
+
+const calculateGridSpawnPosition = (
+  i: number,
+  columnsNum: number,
+  rowsNum: number,
+  count: number,
+  containerWidth: number,
+  maxFlakeWidth: number,
+  columnWidth: number,
+): number => {
+  'worklet';
+  const rowIndex = Math.floor(i / columnsNum);
+  const isLastRow = rowIndex === rowsNum - 1;
+  if (isLastRow) {
+    const itemsInLastRow = count - (rowsNum - 1) * columnsNum;
+    const lastRowSpacing = (containerWidth - itemsInLastRow * maxFlakeWidth) / (itemsInLastRow + 1);
+    const positionInLastRow = i - (rowsNum - 1) * columnsNum;
+    return lastRowSpacing + positionInLastRow * (maxFlakeWidth + lastRowSpacing);
+  }
+  return (i % columnsNum) * columnWidth;
+};
+
 export const generateFallingBoxesArray = ({
   count,
   colorsVariations,
@@ -427,37 +455,14 @@ export const generateFallingBoxesArray = ({
   // Pre-compute stratified phase offsets and shuffle (Fisher-Yates) to
   // break the correlation between grid index and temporal phase.
   // Without this, sequential grid positions get sequential offsets → diagonal banding.
-  const phaseOffsets: number[] = new Array(count);
-  if (continuous) {
-    for (let i = 0; i < count; i++) {
-      phaseOffsets[i] = (i + Math.random()) / count;
-    }
-    for (let i = count - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      const tmp = phaseOffsets[i]!;
-      phaseOffsets[i] = phaseOffsets[j]!;
-      phaseOffsets[j] = tmp;
-    }
-  }
+  const phaseOffsets = continuous ? generatePhaseOffsets(count) : [];
 
   for (let i = 0; i < count; i++) {
     // Grid position (same layout logic as before)
     const rowIndex = Math.floor(i / columnsNum);
-    const isLastRow = rowIndex === rowsNum - 1;
-
-    let spawnX: number;
-    if (isLastRow) {
-      const itemsInLastRow = count - (rowsNum - 1) * columnsNum;
-      const lastRowSpacing =
-        (containerWidth - itemsInLastRow * maxFlakeWidth) /
-        (itemsInLastRow + 1);
-      const positionInLastRow = i - (rowsNum - 1) * columnsNum;
-      spawnX =
-        lastRowSpacing +
-        positionInLastRow * (maxFlakeWidth + lastRowSpacing);
-    } else {
-      spawnX = (i % columnsNum) * columnWidth;
-    }
+    const spawnX = calculateGridSpawnPosition(
+      i, columnsNum, rowsNum, count, containerWidth, maxFlakeWidth, columnWidth
+    );
 
     const yJitter = getRandomValue(-verticalSpacing / 2, verticalSpacing / 2);
     const spawnY = rowIndex * rowHeight + verticalOffset + yJitter;
@@ -520,7 +525,7 @@ export const generateFallingBoxesArray = ({
       sizeIndex,
       spinPhase: getRandomValue(0, 2 * Math.PI),
       spinRate,
-      phaseOffset: continuous ? phaseOffsets[i]! : 0,
+      phaseOffset: (continuous ? phaseOffsets[i] : 0) ?? 0,
       isTextured: colorOverride !== null && colorOverride !== undefined,
     };
   }
