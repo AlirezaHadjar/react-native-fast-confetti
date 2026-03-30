@@ -279,7 +279,7 @@ type ConfettiBaseProps = {
   verticalSpacing?: number;
   /**
    * @description The visual style of the default confetti flakes.
-   * @default 'solid'
+   * @default 'glossy'
    */
   flakeStyle?: FlakeStyle;
   /**
@@ -393,7 +393,7 @@ type PIConfettiBaseProps = {
   depth?: Range;
   /**
    * @description The visual style of the default confetti flakes.
-   * @default 'solid'
+   * @default 'glossy'
    */
   flakeStyle?: FlakeStyle;
   /**
@@ -709,7 +709,7 @@ type CannonConfettiBaseProps = {
    * @description The visual style of the default confetti flakes.
    * 'solid' renders flat solid-colored flakes. 'glossy' adds a semi-transparent white highlight.
    * Only affects default flakes (no-op when `image` or `svg` textures are used).
-   * @default 'solid'
+   * @default 'glossy'
    */
   flakeStyle?: FlakeStyle;
 };

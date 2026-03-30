@@ -128,7 +128,7 @@ export const useCannonOrigins = ({
           pickChildren<FlakeProps>(props.children, Flake);
 
         // Build flake sizes for this origin (NO min-size padding)
-        const originFlakeStyle = props.flakeStyle ?? rootFlakeStyle ?? 'solid';
+        const originFlakeStyle = props.flakeStyle ?? rootFlakeStyle ?? 'glossy';
         let originSizes: (FlakeSize & { flakeStyle: FlakeStyle })[];
         if (flakeChildren && flakeChildren.length > 0) {
           originSizes = flakeChildren.map((f) => {

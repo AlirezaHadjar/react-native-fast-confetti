@@ -62,7 +62,7 @@ const CannonConfettiInner = forwardRef<
       target: rootTarget,
       sprayDuration = 300,
       initialScale = 0.3,
-      flakeStyle = 'solid',
+      flakeStyle = 'glossy',
       ...textureRootProps
     },
     ref

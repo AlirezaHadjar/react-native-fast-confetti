@@ -33,7 +33,7 @@ export const useConfettiFlakes = ({
   );
 
   const { allColors, allSizes } = useMemo(() => {
-    const flakeStyle = rootFlakeStyle ?? 'solid';
+    const flakeStyle = rootFlakeStyle ?? 'glossy';
 
     let sizes: (FlakeSize & { flakeStyle: FlakeStyle })[];
     if (flakeChildren && flakeChildren.length > 0) {
@@ -49,8 +49,8 @@ export const useConfettiFlakes = ({
           };
         }
         return {
-          width: (fProps as { width: number }).width,
-          height: (fProps as { height: number }).height,
+          width: fProps.width,
+          height: fProps.height,
           radius: fProps.radius,
           flakeStyle: resolvedStyle,
         };

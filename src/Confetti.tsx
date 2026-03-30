@@ -60,7 +60,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       rotation,
       depth,
       verticalSpacing = DEFAULT_VERTICAL_SPACING,
-      flakeStyle = 'solid',
+      flakeStyle = 'glossy',
       initialScale = 0.3,
       tumbleClamp = 0.15,
       ...textureRootProps

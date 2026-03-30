@@ -59,7 +59,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       fadeOutOnEnd = false,
       rotation,
       depth,
-      flakeStyle = 'solid',
+      flakeStyle = 'glossy',
       initialScale = 0.3,
       sprayDuration,
       onAnimationEnd,

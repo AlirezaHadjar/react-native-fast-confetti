@@ -220,7 +220,7 @@ Available named positions: `top-left`, `top-center`, `top-right`, `center-left`,
 | `infinite`         | false            | Loop the animation.           |
 | `gravity`          | 1.0              | Gravity strength.             |
 | `colors`           | Built-in palette | Array of color strings.       |
-| `flakeStyle`       | 'solid'          | `'solid'` or `'glossy'`.      |
+| `flakeStyle`       | 'glossy'          | `'solid'` or `'glossy'`.      |
 | `fadeOutOnEnd`     | false            | Fade pieces as they exit.     |
 | `image`            | N/A              | Skia image texture.           |
 | `svg`              | N/A              | Skia SVG texture.             |
@@ -263,7 +263,7 @@ Same as `<Confetti />` except:
 | `initialSpeed`     | 1                     | Launch speed.                               |
 | `gravity`          | 3.0                   | Gravity strength.                           |
 | `colors`           | Built-in palette      | Array of color strings.                     |
-| `flakeStyle`       | 'solid'               | `'solid'` or `'glossy'`.                    |
+| `flakeStyle`       | 'glossy'               | `'solid'` or `'glossy'`.                    |
 | `fadeOutOnEnd`     | false                 | Fade pieces as they exit.                   |
 | `image`            | N/A                   | Skia image texture.                         |
 | `svg`              | N/A                   | Skia SVG texture.                           |
@@ -297,7 +297,7 @@ Same as `<Confetti />` except:
 | `gravity`          | 3.0              | Gravity strength.                            |
 | `target`           | N/A              | Default aim point for all origins.           |
 | `colors`           | Built-in palette | Default colors for all origins.              |
-| `flakeStyle`       | 'solid'          | Default `'solid'` or `'glossy'` for origins. |
+| `flakeStyle`       | 'glossy'          | Default `'solid'` or `'glossy'` for origins. |
 | `fadeOutOnEnd`     | false            | Fade pieces as they exit.                    |
 | `image`            | N/A              | Skia image texture.                          |
 | `svg`              | N/A              | Skia SVG texture.                            |
@@ -496,7 +496,7 @@ Available named positions: `top-left`, `top-center`, `top-right`, `center-left`,
 | `infinite`         | false            | Loop the animation.           |
 | `gravity`          | 1.0              | Gravity strength.             |
 | `colors`           | Built-in palette | Array of color strings.       |
-| `flakeStyle`       | 'solid'          | `'solid'` or `'glossy'`.      |
+| `flakeStyle`       | 'glossy'          | `'solid'` or `'glossy'`.      |
 | `fadeOutOnEnd`     | false            | Fade pieces as they exit.     |
 | `image`            | N/A              | Skia image texture.           |
 | `svg`              | N/A              | Skia SVG texture.             |
@@ -539,7 +539,7 @@ Same as `<Confetti />` except:
 | `initialSpeed`     | 1                     | Launch speed.                               |
 | `gravity`          | 3.0                   | Gravity strength.                           |
 | `colors`           | Built-in palette      | Array of color strings.                     |
-| `flakeStyle`       | 'solid'               | `'solid'` or `'glossy'`.                    |
+| `flakeStyle`       | 'glossy'               | `'solid'` or `'glossy'`.                    |
 | `fadeOutOnEnd`     | false                 | Fade pieces as they exit.                   |
 | `image`            | N/A                   | Skia image texture.                         |
 | `svg`              | N/A                   | Skia SVG texture.                           |
@@ -573,7 +573,7 @@ Same as `<Confetti />` except:
 | `gravity`          | 3.0              | Gravity strength.                            |
 | `target`           | N/A              | Default aim point for all origins.           |
 | `colors`           | Built-in palette | Default colors for all origins.              |
-| `flakeStyle`       | 'solid'          | Default `'solid'` or `'glossy'` for origins. |
+| `flakeStyle`       | 'glossy'          | Default `'solid'` or `'glossy'` for origins. |
 | `fadeOutOnEnd`     | false            | Fade pieces as they exit.                    |
 | `image`            | N/A              | Skia image texture.                          |
 | `svg`              | N/A              | Skia SVG texture.                            |
