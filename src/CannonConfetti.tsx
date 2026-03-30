@@ -126,7 +126,8 @@ const CannonConfettiInner = forwardRef<
     const refreshBoxes = useCallback(() => {
       'worklet';
       const currentConfigs = dynamicCannonConfigs.get() || cannonConfigs;
-      const currentPositions = dynamicCannonsPositions.get() || cannonsPositions;
+      const currentPositions =
+        dynamicCannonsPositions.get() || cannonsPositions;
       const newBoxes = generateCannonBoxesArray({
         cannonConfigs: currentConfigs,
         cannonsPositions: currentPositions,
@@ -135,7 +136,16 @@ const CannonConfettiInner = forwardRef<
         sizeColorOverrides,
       });
       boxes.set(newBoxes);
-    }, [cannonConfigs, boxes, dynamicCannonConfigs, launchDelayMax, sizeColorOverrides]);
+    }, [
+      cannonConfigs,
+      boxes,
+      dynamicCannonConfigs,
+      dynamicCannonsPositions,
+      cannonsPositions,
+      containerHeight,
+      launchDelayMax,
+      sizeColorOverrides,
+    ]);
 
     const { progress, running, opacity, pause, reset, resume, runAnimation } =
       useAnimationLifecycle({
@@ -159,7 +169,12 @@ const CannonConfettiInner = forwardRef<
         refreshBoxes();
         runAnimation(delay);
       },
-      [dynamicCannonsPositions, dynamicCannonConfigs, refreshBoxes, runAnimation]
+      [
+        dynamicCannonsPositions,
+        dynamicCannonConfigs,
+        refreshBoxes,
+        runAnimation,
+      ]
     );
 
     const colorCount = allColors.length;
