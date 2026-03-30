@@ -86,6 +86,8 @@ export const generatePIBoxesArray = ({
     const colorOverride = sizeColorOverrides[sizeIndex];
     return {
       angle: goldenAngle,
+      cosAngle: Math.cos(goldenAngle),
+      sinAngle: Math.sin(goldenAngle),
       speedMultiplier: getRandomValue(speedRange.min, speedRange.max),
       launchDelay: getRandomValue(0, launchDelayMax),
       depthScale: getRandomValue(depthRange.min, depthRange.max),
@@ -238,10 +240,14 @@ export const estimateCannonDuration = ({
 
 export const generateCannonBoxesArray = ({
   cannonConfigs,
+  cannonsPositions,
+  containerHeight,
   launchDelayMax,
   sizeColorOverrides,
 }: {
   cannonConfigs: CannonConfig[];
+  cannonsPositions: Position[];
+  containerHeight: number;
   launchDelayMax: number;
   sizeColorOverrides: (number | null)[];
 }) => {
@@ -249,9 +255,8 @@ export const generateCannonBoxesArray = ({
 
   const result: {
     cannonIndex: number;
-    angleOffset: number;
-    speedMultiplier: number;
-    cannonSpeed: number;
+    vx: number;
+    vy: number;
     launchDelay: number;
     depthScale: number;
     clockwise: boolean;
@@ -259,8 +264,6 @@ export const generateCannonBoxesArray = ({
     colorIndex: number;
     sizeIndex: number;
     initialRotation: number;
-    targetX: number;
-    targetY: number;
     isTextured: boolean;
   }[] = [];
 
@@ -286,6 +289,11 @@ export const generateCannonBoxesArray = ({
     );
     const depthRange = resolveRange(depth, DEFAULT_CANNON_CONFETTI_DEPTH);
 
+    const cannonPos = cannonsPositions[cannonIndex];
+    const baseAngle = cannonPos
+      ? Math.atan2(config.target.y - cannonPos.y, config.target.x - cannonPos.x)
+      : 0;
+
     for (let j = 0; j < config.count; j++) {
       const sizeIndex = Math.round(
         getRandomValue(
@@ -294,13 +302,17 @@ export const generateCannonBoxesArray = ({
         )
       );
       const colorOverride = sizeColorOverrides[sizeIndex];
+      const angleOffset = getRandomValue(-halfSpread, halfSpread);
+      const angle = baseAngle + angleOffset;
+      const speedMultiplier = getRandomValue(speedRange.min, speedRange.max);
+      const depthScale = getRandomValue(depthRange.min, depthRange.max);
+      const speed = config.speed * containerHeight * speedMultiplier * depthScale;
       result.push({
         cannonIndex,
-        angleOffset: getRandomValue(-halfSpread, halfSpread),
-        speedMultiplier: getRandomValue(speedRange.min, speedRange.max),
-        cannonSpeed: config.speed,
+        vx: speed * Math.cos(angle),
+        vy: speed * Math.sin(angle),
         launchDelay: getRandomValue(0, launchDelayMax),
-        depthScale: getRandomValue(depthRange.min, depthRange.max),
+        depthScale,
         clockwise: getRandomBoolean(),
         maxRotation: {
           x: getRandomValue(xRotationRange.min, xRotationRange.max),
@@ -314,8 +326,6 @@ export const generateCannonBoxesArray = ({
         ),
         sizeIndex,
         initialRotation: getRandomValue(0.1 * Math.PI, Math.PI),
-        targetX: config.target.x,
-        targetY: config.target.y,
         isTextured: colorOverride !== null && colorOverride !== undefined,
       });
     }

@@ -86,27 +86,30 @@ export const useConfettiFlakes = ({
     // Build colors array: user colors for non-textured flakes,
     // plus one '#000' placeholder per unique textured size variant.
     const hasAnyTexture = sizes.some((s) => s.texture !== undefined);
-    const allNonTextured = sizes.every((s) => s.texture === undefined);
 
     let allColors: string[];
     const sizeColorOverrides: (number | null)[] = new Array(sizes.length);
 
-    if (allNonTextured) {
+    if (!hasAnyTexture) {
       // No textures at all — standard behavior
       allColors = userColors;
       sizeColorOverrides.fill(null);
     } else {
-      // Mixed or all-textured: user colors + texture placeholder rows
-      allColors = [...userColors];
+      // Check if there are any non-textured flakes that need user colors
+      const hasNonTextured = sizes.some((s) => !s.texture);
+      allColors = hasNonTextured ? [...userColors] : [];
       for (let i = 0; i < sizes.length; i++) {
         const size = sizes[i];
         if (size?.texture) {
-          // Each textured size gets a dedicated color row
           sizeColorOverrides[i] = allColors.length;
           allColors.push('#000');
         } else {
           sizeColorOverrides[i] = null;
         }
+      }
+      // Ensure at least one color exists
+      if (allColors.length === 0) {
+        allColors.push('#000');
       }
     }
 

@@ -243,8 +243,8 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         containerHeight *
         piece.speedMultiplier *
         piece.depthScale;
-      const vx = speed * Math.cos(piece.angle);
-      const vy = speed * Math.sin(piece.angle);
+      const vx = speed * piece.cosAngle;
+      const vy = speed * piece.sinAngle;
 
       const p = progress.get();
 
@@ -271,21 +271,9 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       // Rotation
       const rotationDirection = piece.clockwise ? 1 : -1;
       const rz =
-        piece.initialRotation +
-        interpolate(
-          p,
-          [0, 1],
-          [0, rotationDirection * piece.maxRotation.z],
-          Extrapolation.CLAMP
-        );
+        piece.initialRotation + p * rotationDirection * piece.maxRotation.z;
       const rx =
-        piece.initialRotation +
-        interpolate(
-          p,
-          [0, 1],
-          [0, rotationDirection * piece.maxRotation.x],
-          Extrapolation.CLAMP
-        );
+        piece.initialRotation + p * rotationDirection * piece.maxRotation.x;
 
       // Scale: appearance animation at launch + oscillation
       const minFlipScale = 1 - flipIntensity;

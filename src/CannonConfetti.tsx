@@ -109,6 +109,8 @@ const CannonConfettiInner = forwardRef<
     const boxes = useSharedValue(
       generateCannonBoxesArray({
         cannonConfigs,
+        cannonsPositions,
+        containerHeight,
         launchDelayMax,
         sizeColorOverrides,
       })
@@ -124,8 +126,11 @@ const CannonConfettiInner = forwardRef<
     const refreshBoxes = useCallback(() => {
       'worklet';
       const currentConfigs = dynamicCannonConfigs.get() || cannonConfigs;
+      const currentPositions = dynamicCannonsPositions.get() || cannonsPositions;
       const newBoxes = generateCannonBoxesArray({
         cannonConfigs: currentConfigs,
+        cannonsPositions: currentPositions,
+        containerHeight,
         launchDelayMax,
         sizeColorOverrides,
       });
@@ -254,19 +259,7 @@ const CannonConfettiInner = forwardRef<
       const cannonX = cannon.x;
       const cannonY = cannon.y;
 
-      const baseAngle = Math.atan2(
-        piece.targetY - cannonY,
-        piece.targetX - cannonX
-      );
-
-      const angle = baseAngle + piece.angleOffset;
-      const speed =
-        piece.cannonSpeed *
-        containerHeight *
-        piece.speedMultiplier *
-        piece.depthScale;
-      const vx = speed * Math.cos(angle);
-      const vy = speed * Math.sin(angle);
+      const { vx, vy } = piece;
 
       const p = progress.get();
 
@@ -290,21 +283,9 @@ const CannonConfettiInner = forwardRef<
 
       const rotationDirection = piece.clockwise ? 1 : -1;
       const rz =
-        piece.initialRotation +
-        interpolate(
-          p,
-          [0, 1],
-          [0, rotationDirection * piece.maxRotation.z],
-          Extrapolation.CLAMP
-        );
+        piece.initialRotation + p * rotationDirection * piece.maxRotation.z;
       const rx =
-        piece.initialRotation +
-        interpolate(
-          p,
-          [0, 1],
-          [0, rotationDirection * piece.maxRotation.x],
-          Extrapolation.CLAMP
-        );
+        piece.initialRotation + p * rotationDirection * piece.maxRotation.x;
 
       const minFlipScale = 1 - flipIntensity;
       const oscillatingScale = Math.max(Math.abs(Math.cos(rx)), minFlipScale);

@@ -91,7 +91,7 @@ function renderAtlasCell(
 }
 
 function lightenColor(color: string, amount: number): Float32Array {
-  const c = Array.from(Skia.Color(color));
+  const c = Skia.Color(color);
   const r = c[0] ?? 0;
   const g = c[1] ?? 0;
   const b = c[2] ?? 0;

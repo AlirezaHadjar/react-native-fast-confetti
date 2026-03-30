@@ -15,7 +15,8 @@ export const verticalSpacingOptions: DropdownOption<number>[] = [
   { label: 'V. Dense', value: 5 },
   { label: 'Dense', value: 20 },
   { label: 'Normal', value: 50 },
-  { label: 'V. Loose', value: 100 },
+  { label: 'Loose', value: 100 },
+  { label: 'V. Loose', value: 200 },
 ];
 
 export type ScreenConfig = {
