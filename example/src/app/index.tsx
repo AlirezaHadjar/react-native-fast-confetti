@@ -70,15 +70,18 @@ const modes = [
     render: () => (
       <PIConfetti
         autoplay
-        count={100}
-        blastPosition="center"
         flakeStyle="glossy"
         gravity={6}
         infinite
-        initialSpeed={4}
         containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
       >
-        {previewFlakes(PIConfetti.Flake)}
+        <PIConfetti.Origin
+          blastPosition="center"
+          count={100}
+          initialSpeed={4}
+        >
+          {previewFlakes(PIConfetti.Flake)}
+        </PIConfetti.Origin>
       </PIConfetti>
     ),
   },

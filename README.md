@@ -85,7 +85,7 @@ import { ContinuousConfetti } from 'react-native-fast-confetti';
 
 ### `<PIConfetti />`
 
-Confetti bursts outward from a point, then drifts down.
+Confetti bursts outward from one or more points, then drifts down.
 
 <table width="100%">
   <tr>
@@ -96,8 +96,10 @@ Confetti bursts outward from a point, then drifts down.
       <pre lang="tsx">
 import { PIConfetti } from 'react-native-fast-confetti';
 
-&lt;PIConfetti autoplay blastPosition="center"&gt;
+&lt;PIConfetti autoplay&gt;
+&lt;PIConfetti.Origin blastPosition="center" count={200}&gt;
 &lt;PIConfetti.Flake size={12} /&gt;
+&lt;/PIConfetti.Origin&gt;
 &lt;/PIConfetti&gt;;
 
 </pre>
@@ -165,7 +167,7 @@ ref.current?.reset();
 `restart` accepts an optional options object:
 
 - **Confetti / ContinuousConfetti**: no options
-- **PIConfetti**: `{ blastPosition }` to override the blast position
+- **PIConfetti**: `{ blastPositions }` to override origin blast positions
 - **CannonConfetti**: `{ origins }` to override origin positions/targets
 
 ## Custom Textures
@@ -284,22 +286,19 @@ Same as `<Confetti />` except:
 
 ### `<PIConfetti />` Props
 
-| Name               | Default               | Description                                 |
-| ------------------ | --------------------- | ------------------------------------------- |
-| `count`            | 200                   | Number of confetti pieces.                  |
-| `autoplay`         | true                  | Play animation on mount.                    |
-| `autoStartDelay`   | 0                     | Delay (ms) before autoplay.                 |
-| `infinite`         | false                 | Loop the animation.                         |
-| `blastPosition`    | { x: center, y: 150 } | Burst origin. Named position or `{ x, y }`. |
-| `initialSpeed`     | 1                     | Launch speed.                               |
-| `gravity`          | 3.0                   | Gravity strength.                           |
-| `colors`           | Built-in palette      | Array of color strings.                     |
-| `flakeStyle`       | 'glossy'              | `'solid'` or `'glossy'`.                    |
-| `fadeOutOnEnd`     | false                 | Fade pieces as they exit.                   |
-| `image`            | N/A                   | Default Skia image texture for all flakes.  |
-| `svg`              | N/A                   | Default Skia SVG texture for all flakes.    |
-| `onAnimationStart` | N/A                   | Called when animation starts.               |
-| `onAnimationEnd`   | N/A                   | Called when animation ends.                 |
+| Name               | Default          | Description                                  |
+| ------------------ | ---------------- | -------------------------------------------- |
+| `autoplay`         | true             | Play animation on mount.                     |
+| `autoStartDelay`   | 0                | Delay (ms) before autoplay.                  |
+| `infinite`         | false            | Loop the animation.                          |
+| `gravity`          | 3.0              | Gravity strength.                            |
+| `colors`           | Built-in palette | Default colors for all origins.              |
+| `flakeStyle`       | 'glossy'         | Default `'solid'` or `'glossy'` for origins. |
+| `fadeOutOnEnd`     | false            | Fade pieces as they exit.                    |
+| `image`            | N/A              | Default Skia image texture for all flakes.   |
+| `svg`              | N/A              | Default Skia SVG texture for all flakes.     |
+| `onAnimationStart` | N/A              | Called when animation starts.                |
+| `onAnimationEnd`   | N/A              | Called when animation ends.                  |
 
 <details>
 <summary>Advanced props — these work well out of the box, but you can tweak them for full customizability.</summary>
@@ -307,14 +306,35 @@ Same as `<Confetti />` except:
 | Name             | Default                | Description                                                     |
 | ---------------- | ---------------------- | --------------------------------------------------------------- |
 | `drag`           | 3.0                    | Air resistance. Number or `{ horizontal, vertical }`.           |
-| `spread`         | 2\*PI                  | Launch cone width (radians).                                    |
 | `sprayDuration`  | N/A                    | Stagger pieces over N ms.                                       |
-| `speedVariation` | { min: 0.0, max: 1.0 } | Per-piece speed multiplier range.                               |
+| `speedVariation` | { min: 0.0, max: 1.0 } | Default speed variation for origins.                            |
 | `flipIntensity`  | 0.85                   | How dramatically pieces flip (0-1). Lower = flatter.            |
-| `rotation`       | N/A                    | Rotation range config.                                          |
-| `depth`          | { min: 1, max: 1.1 }   | 3D perspective scale range.                                     |
+| `rotation`       | N/A                    | Default rotation config for origins.                            |
+| `depth`          | { min: 1, max: 1.1 }   | Default depth range for origins.                                |
 | `initialScale`   | 0.3                    | Scale at spawn before growing.                                  |
 | `containerStyle` | N/A                    | Style for the container. Numeric width/height used for physics. |
+
+</details>
+
+### `<PIConfetti.Origin />` Props
+
+| Name                        | Default | Description                                                         |
+| --------------------------- | ------- | ------------------------------------------------------------------- |
+| `blastPosition` (required)  | -       | Where the burst originates. Named position or `{ x, y }`.          |
+| `count`                     | 100     | Number of pieces from this origin.                                  |
+| `initialSpeed`              | 1       | Launch speed.                                                       |
+| `spread`                    | 2\*PI   | Launch cone width (radians).                                        |
+
+<details>
+<summary>Advanced props — these work well out of the box, but you can tweak them for full customizability.</summary>
+
+| Name             | Default                | Description                                  |
+| ---------------- | ---------------------- | -------------------------------------------- |
+| `speedVariation` | { min: 0.0, max: 1.0 } | Per-piece speed multiplier range.            |
+| `colors`         | N/A                    | Colors for this origin (overrides root).     |
+| `flakeStyle`     | N/A                    | Style for this origin (overrides root).      |
+| `rotation`       | N/A                    | Rotation for this origin (overrides root).   |
+| `depth`          | { min: 1, max: 1.1 }   | Depth for this origin (overrides root).      |
 
 </details>
 

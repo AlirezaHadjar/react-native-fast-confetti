@@ -12,11 +12,8 @@ import {
   estimatePIDuration,
 } from './utils';
 import {
-  DEFAULT_BOXES_COUNT,
   DEFAULT_PI_CONFETTI_GRAVITY,
   DEFAULT_PI_CONFETTI_DRAG,
-  DEFAULT_PI_CONFETTI_INITIAL_SPEED,
-  DEFAULT_PI_CONFETTI_SPREAD,
   DEFAULT_PI_CONFETTI_LAUNCH_DELAY_MAX,
 } from './constants';
 import type {
@@ -26,45 +23,27 @@ import type {
   Position,
 } from './types';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
-import { useConfettiFlakes } from './hooks/useConfettiFlakes';
+import { usePIOrigins } from './hooks/usePIOrigins';
 import { useTextureProps } from './hooks/useTextureProps';
 import { useAnimationLifecycle } from './hooks/useAnimationLifecycle';
 import { useContainerDimensions } from './hooks/useContainerDimensions';
 import { ConfettiCanvas } from './ConfettiCanvas';
-import { Flake } from './FlakeComponent';
-
-function resolveBlastPosition(
-  blastPosition: PIConfettiProps['blastPosition'],
-  containerWidth: number,
-  containerHeight: number
-): Position {
-  if (blastPosition == null) {
-    return { x: containerWidth / 2, y: containerHeight / 2 };
-  }
-  if (typeof blastPosition === 'object') {
-    return blastPosition;
-  }
-  return resolveNamedPosition(blastPosition, containerWidth, containerHeight);
-}
+import { Origin, Flake } from './PIConfettiComponents';
 
 const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
   (
     {
       children,
-      count = DEFAULT_BOXES_COUNT,
       colors: rootColors,
       gravity = DEFAULT_PI_CONFETTI_GRAVITY,
       drag: dragProp = DEFAULT_PI_CONFETTI_DRAG,
-      initialSpeed = DEFAULT_PI_CONFETTI_INITIAL_SPEED,
-      spread = DEFAULT_PI_CONFETTI_SPREAD,
-      speedVariation,
-      blastPosition: _blastPosition,
       autoplay = true,
       infinite = false,
       fadeOutOnEnd = false,
       autoStartDelay = 0,
-      rotation,
-      depth,
+      rotation: rootRotation,
+      depth: rootDepth,
+      speedVariation: rootSpeedVariation,
       flakeStyle = 'glossy',
       initialScale = 0.3,
       flipIntensity = 0.85,
@@ -85,32 +64,38 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
     const hDrag = typeof dragProp === 'number' ? dragProp : dragProp.horizontal;
     const vDrag = typeof dragProp === 'number' ? dragProp : dragProp.vertical;
 
-    // --- Parse children for flake sizes ---
-    const { allColors, sizeVariations, colorOverrides, sizeIsTextured, parentColorCount } = useConfettiFlakes(
-      {
-        children,
-        rootColors,
-        rootFlakeStyle: flakeStyle,
-        parentTexture,
-      }
-    );
-
-    const defaultBlastPosition = resolveBlastPosition(
-      _blastPosition,
+    // --- Parse children + build atlas via hook ---
+    const {
+      blastPositions,
+      originDelays,
+      piConfigs,
+      allColors,
+      sizeVariations,
+      colorOverrides,
+      sizeIsTextured,
+      parentColorCount,
+      totalCount,
+    } = usePIOrigins({
+      children,
+      rootColors,
+      rootRotation,
+      rootDepth,
+      rootSpeedVariation,
+      rootFlakeStyle: flakeStyle,
       containerWidth,
-      containerHeight
-    );
+      containerHeight,
+      parentTexture,
+    });
 
     // --- Auto-compute duration from physics ---
-    const duration = estimatePIDuration({
-      initialSpeed,
+    const { flightDuration, totalDuration: duration } = estimatePIDuration({
+      piConfigs,
+      blastPositions,
+      originDelays,
       gravity,
       vDrag,
-      depth,
-      speedVariation,
       sprayDurationMs: sprayDuration,
       containerHeight,
-      blastY: defaultBlastPosition.y,
     });
 
     // --- Compute launch delay max from sprayDuration ---
@@ -119,52 +104,50 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         ? Math.min(sprayDuration / duration, 1)
         : DEFAULT_PI_CONFETTI_LAUNCH_DELAY_MAX;
 
-    const dynamicBlastPosition = useSharedValue<Position | null>(null);
-
-    const sizeVariationsCount = sizeVariations.length;
+    const dynamicBlastPositions = useSharedValue<Position[] | null>(null);
+    const dynamicOriginDelays = useSharedValue<number[] | null>(null);
 
     const boxes = useSharedValue(
       generatePIBoxesArray({
-        count,
-        sizeVariations: sizeVariationsCount,
+        piConfigs,
+        originDelays,
+        containerHeight,
+        launchDelayMax,
         sizeColorOverrides: colorOverrides,
         parentColorCount,
         sizeIsTextured,
-        spread,
-        rotation,
-        speedVariation,
-        depth,
-        launchDelayMax,
       })
     );
+
+    const { texture, sprites } = useConfettiLogic({
+      sizeVariations,
+      colors: allColors,
+      boxes,
+      sizeColorOverrides: colorOverrides,
+    });
 
     const refreshBoxes = useCallback(() => {
       'worklet';
       const newBoxes = generatePIBoxesArray({
-        count,
-        sizeVariations: sizeVariationsCount,
+        piConfigs,
+        originDelays: dynamicOriginDelays.get() || originDelays,
+        containerHeight,
+        launchDelayMax,
         sizeColorOverrides: colorOverrides,
         parentColorCount,
         sizeIsTextured,
-        spread,
-        rotation,
-        speedVariation,
-        depth,
-        launchDelayMax,
       });
       boxes.set(newBoxes);
     }, [
-      count,
-      sizeVariationsCount,
+      piConfigs,
+      originDelays,
+      dynamicOriginDelays,
+      boxes,
+      containerHeight,
+      launchDelayMax,
       colorOverrides,
       parentColorCount,
       sizeIsTextured,
-      spread,
-      rotation,
-      speedVariation,
-      depth,
-      launchDelayMax,
-      boxes,
     ]);
 
     const { progress, running, opacity, pause, reset, resume, runAnimation } =
@@ -178,37 +161,32 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         onCycleEnd: refreshBoxes,
       });
 
-    const { texture, sprites } = useConfettiLogic({
-      sizeVariations,
-      colors: allColors,
-      boxes,
-      sizeColorOverrides: colorOverrides,
-    });
-
     const workletRestart = useCallback(
-      (resolvedPosition: Position | null, delay: number = 0) => {
+      (
+        resolvedPositions: Position[] | null,
+        resolvedDelays: number[] | null,
+        delay: number = 0
+      ) => {
         'worklet';
-        dynamicBlastPosition.set(resolvedPosition);
+        dynamicBlastPositions.set(resolvedPositions);
+        dynamicOriginDelays.set(resolvedDelays);
         refreshBoxes();
         runAnimation(delay);
       },
-      [dynamicBlastPosition, refreshBoxes, runAnimation]
+      [dynamicBlastPositions, dynamicOriginDelays, refreshBoxes, runAnimation]
     );
 
     const jsRestart = useCallback(
       (options: PIConfettiRestartOptions = {}) => {
-        let resolvedPosition: Position | null = null;
-        if (options.blastPosition != null) {
-          resolvedPosition =
-            typeof options.blastPosition === 'object'
-              ? options.blastPosition
-              : resolveNamedPosition(
-                  options.blastPosition,
-                  containerWidth,
-                  containerHeight
-                );
+        let resolvedPositions: Position[] | null = null;
+        let resolvedDelays: number[] | null = null;
+        if (options.origins) {
+          resolvedPositions = options.origins.map((o) =>
+            resolveNamedPosition(o.blastPosition, containerWidth, containerHeight)
+          );
+          resolvedDelays = options.origins.map((o) => o.delay ?? 0);
         }
-        runOnUI(workletRestart)(resolvedPosition);
+        runOnUI(workletRestart)(resolvedPositions, resolvedDelays);
       },
       [workletRestart, containerWidth, containerHeight]
     );
@@ -223,16 +201,14 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
     useEffect(() => {
       runOnUI(() => {
         if (autoplay && !running.get())
-          workletRestart(null, autoStartDelay);
+          workletRestart(null, null, autoStartDelay);
       })();
     }, [autoplay, autoStartDelay, workletRestart, running]);
 
-    // Physics constants scaled to container height
     const scaledGravity = gravity * containerHeight;
-    // Duration in seconds for physics equations
-    const totalTime = duration / 1000;
+    const flightTimeSec = flightDuration / 1000;
 
-    const transforms = useRSXformBuffer(count, (val, i) => {
+    const transforms = useRSXformBuffer(totalCount, (val, i) => {
       'worklet';
       const piece = boxes.get()[i];
       if (!piece || !running.get()) {
@@ -240,29 +216,42 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         return;
       }
 
-      const currentBlastPosition =
-        dynamicBlastPosition.get() || defaultBlastPosition;
-      const blastX = currentBlastPosition.x;
-      const blastY = currentBlastPosition.y;
+      const currentPositions =
+        dynamicBlastPositions.get() || blastPositions;
+      const blast =
+        currentPositions[piece.originIndex % currentPositions.length];
+      if (!blast) {
+        val.set(0, 0, -10000, -10000);
+        return;
+      }
+      const blastX = blast.x;
+      const blastY = blast.y;
 
-      const speed =
-        initialSpeed *
-        containerHeight *
-        piece.speedMultiplier *
-        piece.depthScale;
-      const vx = speed * piece.cosAngle;
-      const vy = speed * piece.sinAngle;
+      const { vx, vy } = piece;
 
       const p = progress.get();
 
-      // Current time based on progress, accounting for launch delay
+      // Convert global progress to local flight progress for this piece:
+      // 1. Compute elapsed ms from global progress
+      // 2. Subtract this origin's delay to get local elapsed ms
+      // 3. Map to [0, 1] over the flight duration (not total duration)
+      // This ensures all origins have identical physics regardless of delay.
+      const elapsedMs = p * duration;
+      const localMs = elapsedMs - piece.originDelay;
+      if (localMs <= 0) {
+        val.set(0, 0, -10000, -10000);
+        return;
+      }
+      const localProgress = Math.min(localMs / flightDuration, 1);
+
+      // Apply spray stagger within the local flight progress
       const effectiveProgress = interpolate(
-        p,
+        localProgress,
         [piece.launchDelay, 1],
         [0, 1],
         Extrapolation.CLAMP
       );
-      const t = effectiveProgress * totalTime;
+      const t = effectiveProgress * flightTimeSec;
 
       // Physics: separate drag for horizontal and vertical axes
       const safeHDrag = Math.max(hDrag, 0.001);
@@ -278,9 +267,11 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       // Rotation
       const rotationDirection = piece.clockwise ? 1 : -1;
       const rz =
-        piece.initialRotation + p * rotationDirection * piece.maxRotation.z;
+        piece.initialRotation +
+        localProgress * rotationDirection * piece.maxRotation.z;
       const rx =
-        piece.initialRotation + p * rotationDirection * piece.maxRotation.x;
+        piece.initialRotation +
+        localProgress * rotationDirection * piece.maxRotation.x;
 
       // Scale: appearance animation at launch + oscillation
       const minFlipScale = 1 - flipIntensity;
@@ -322,9 +313,11 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
 PIConfettiInner.displayName = 'PIConfetti';
 
 const PIConfetti = PIConfettiInner as typeof PIConfettiInner & {
+  Origin: typeof Origin;
   Flake: typeof Flake;
 };
 
+PIConfetti.Origin = Origin;
 PIConfetti.Flake = Flake;
 
 export { PIConfetti };

@@ -72,8 +72,23 @@ v1:
 v2:
 
 ```tsx
-<PIConfetti count={200} blastPosition={{ x: 200, y: 150 }}>
-  <PIConfetti.Flake width={8} height={16} />
+<PIConfetti>
+  <PIConfetti.Origin blastPosition={{ x: 200, y: 150 }} count={200}>
+    <PIConfetti.Flake width={8} height={16} />
+  </PIConfetti.Origin>
+</PIConfetti>
+```
+
+v2 with multiple blast positions:
+
+```tsx
+<PIConfetti>
+  <PIConfetti.Origin blastPosition="center" count={100}>
+    <PIConfetti.Flake size={12} />
+  </PIConfetti.Origin>
+  <PIConfetti.Origin blastPosition="bottom-left" count={100}>
+    <PIConfetti.Flake size={12} />
+  </PIConfetti.Origin>
 </PIConfetti>
 ```
 

@@ -53,14 +53,17 @@ export default function PIScreen() {
         />
       </View>
 
-      <PIConfetti
-        key={confettiKey}
-        ref={piConfettiRef}
-        count={500}
-        blastPosition={{ x: width / 2, y: 450 }}
-        rotation={rotation}
-      >
-        {renderFlakes()}
+      <PIConfetti key={confettiKey} ref={piConfettiRef} rotation={rotation}>
+        <PIConfetti.Origin blastPosition={{ x: width / 2, y: 450 }} count={500}>
+          {renderFlakes()}
+        </PIConfetti.Origin>
+        <PIConfetti.Origin
+          blastPosition={{ x: width / 2, y: 150 }}
+          count={500}
+          delay={300}
+        >
+          {renderFlakes()}
+        </PIConfetti.Origin>
       </PIConfetti>
 
       <ConfettiControls

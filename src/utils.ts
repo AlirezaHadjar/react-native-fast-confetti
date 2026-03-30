@@ -37,136 +37,197 @@ export const resolveRange = (
   return range ?? defaultRange;
 };
 
+type BoxBase = {
+  vx: number;
+  vy: number;
+  launchDelay: number;
+  depthScale: number;
+  clockwise: boolean;
+  maxRotation: { x: number; z: number };
+  colorIndex: number;
+  sizeIndex: number;
+  initialRotation: number;
+  isTextured: boolean;
+};
+
+type OriginConfigBase = {
+  spread: number;
+  count: number;
+  speedVariation: Required<Range>;
+  colorStart: number;
+  colorCount: number;
+  sizeStart: number;
+  sizeCount: number;
+  rotation?: Rotation;
+  depth?: Range;
+};
+
+export type PIConfig = OriginConfigBase & {
+  initialSpeed: number;
+};
+
 export const generatePIBoxesArray = ({
-  count,
-  sizeVariations,
+  piConfigs,
+  originDelays,
+  containerHeight,
+  launchDelayMax,
   sizeColorOverrides,
   parentColorCount,
   sizeIsTextured,
-  spread,
-  rotation,
-  speedVariation,
-  depth,
-  launchDelayMax,
 }: {
-  count: number;
-  sizeVariations: number;
+  piConfigs: PIConfig[];
+  originDelays: number[];
+  containerHeight: number;
+  launchDelayMax: number;
   sizeColorOverrides: (ColorRange | null)[];
   parentColorCount: number;
   sizeIsTextured: boolean[];
-  spread: number;
-  rotation?: Rotation;
-  speedVariation?: Range;
-  depth?: Range;
-  launchDelayMax: number;
 }) => {
   'worklet';
 
-  const xRotationRange = resolveRange(
-    rotation?.x,
-    DEFAULT_PI_CONFETTI_ROTATION.x
-  );
-  const zRotationRange = resolveRange(
-    rotation?.z,
-    DEFAULT_PI_CONFETTI_ROTATION.z
-  );
-  const speedRange = resolveRange(
-    speedVariation,
-    DEFAULT_PI_CONFETTI_SPEED_VARIATION
-  );
-  const depthRange = resolveRange(depth, DEFAULT_PI_CONFETTI_DEPTH);
+  const result: (BoxBase & {
+    originIndex: number;
+    originDelay: number;
+    speedMultiplier: number;
+  })[] = [];
 
-  const halfSpread = spread / 2;
-  // Center the spread around "upward" (-PI/2)
-  const baseAngle = -Math.PI / 2;
+  for (
+    let originIndex = 0;
+    originIndex < piConfigs.length;
+    originIndex++
+  ) {
+    const config = piConfigs[originIndex];
+    if (!config) continue;
 
-  return new Array(count).fill(0).map((_, i) => {
-    // Golden angle distribution mapped to spread range
-    const goldenAngle =
-      baseAngle + ((((i * 137.5) % 360) * Math.PI) / 180 - Math.PI) * (halfSpread / Math.PI);
+    const rotation = config.rotation ?? DEFAULT_PI_CONFETTI_ROTATION;
+    const depth = config.depth ?? DEFAULT_PI_CONFETTI_DEPTH;
 
-    const sizeIndex = Math.round(getRandomValue(0, sizeVariations - 1));
-    const range = sizeColorOverrides[sizeIndex];
-    return {
-      angle: goldenAngle,
-      cosAngle: Math.cos(goldenAngle),
-      sinAngle: Math.sin(goldenAngle),
-      speedMultiplier: getRandomValue(speedRange.min, speedRange.max),
-      launchDelay: getRandomValue(0, launchDelayMax),
-      depthScale: getRandomValue(depthRange.min, depthRange.max),
-      clockwise: getRandomBoolean(),
-      maxRotation: {
-        x: getRandomValue(xRotationRange.min, xRotationRange.max),
-        z: getRandomValue(zRotationRange.min, zRotationRange.max),
-      },
-      colorIndex: range
-        ? range.start + Math.round(getRandomValue(0, range.count - 1))
-        : Math.round(getRandomValue(0, parentColorCount - 1)),
-      sizeIndex,
-      initialRotation: getRandomValue(0.1 * Math.PI, Math.PI),
-      isTextured: sizeIsTextured[sizeIndex] ?? false,
-    };
-  });
+    const xRotationRange = resolveRange(
+      rotation.x,
+      DEFAULT_PI_CONFETTI_ROTATION.x
+    );
+    const zRotationRange = resolveRange(
+      rotation.z,
+      DEFAULT_PI_CONFETTI_ROTATION.z
+    );
+    const speedRange = resolveRange(
+      config.speedVariation,
+      DEFAULT_PI_CONFETTI_SPEED_VARIATION
+    );
+    const depthRange = resolveRange(depth, DEFAULT_PI_CONFETTI_DEPTH);
+
+    const halfSpread = config.spread / 2;
+    // Center the spread around "upward" (-PI/2)
+    const baseAngle = -Math.PI / 2;
+
+    for (let j = 0; j < config.count; j++) {
+      // Golden angle distribution mapped to spread range
+      const goldenAngle =
+        baseAngle +
+        ((((j * 137.5) % 360) * Math.PI) / 180 - Math.PI) *
+          (halfSpread / Math.PI);
+
+      const sizeIndex = Math.round(
+        getRandomValue(
+          config.sizeStart,
+          config.sizeStart + config.sizeCount - 1
+        )
+      );
+      const range = sizeColorOverrides[sizeIndex];
+      const speedMultiplier = getRandomValue(speedRange.min, speedRange.max);
+      const depthScale = getRandomValue(depthRange.min, depthRange.max);
+      const speed =
+        config.initialSpeed * containerHeight * speedMultiplier * depthScale;
+
+      result.push({
+        originIndex,
+        originDelay: originDelays[originIndex] ?? 0,
+        vx: speed * Math.cos(goldenAngle),
+        vy: speed * Math.sin(goldenAngle),
+        speedMultiplier,
+        launchDelay: getRandomValue(0, launchDelayMax),
+        depthScale,
+        clockwise: getRandomBoolean(),
+        maxRotation: {
+          x: getRandomValue(xRotationRange.min, xRotationRange.max),
+          z: getRandomValue(zRotationRange.min, zRotationRange.max),
+        },
+        colorIndex: range
+          ? range.start + Math.round(getRandomValue(0, range.count - 1))
+          : Math.round(getRandomValue(0, parentColorCount - 1)),
+        sizeIndex,
+        initialRotation: getRandomValue(0.1 * Math.PI, Math.PI),
+        isTextured: sizeIsTextured[sizeIndex] ?? false,
+      });
+    }
+  }
+
+  return result;
 };
 
 export const estimatePIDuration = ({
-  initialSpeed,
+  piConfigs,
+  blastPositions,
+  originDelays,
   gravity,
   vDrag,
-  depth,
-  speedVariation,
   sprayDurationMs,
   containerHeight,
-  blastY,
 }: {
-  initialSpeed: number;
+  piConfigs: PIConfig[];
+  blastPositions: Position[];
+  originDelays: number[];
   gravity: number;
   vDrag: number;
-  depth?: Range;
-  speedVariation?: Range;
   sprayDurationMs?: number;
   containerHeight: number;
-  blastY: number;
-}): number => {
-  // Terminal velocity under drag: v_term = g/drag (in normalized units)
-  // Time for the slowest piece (launched straight up at max speed) to:
-  //   1. Decelerate to zero  2. Fall back to launch height  3. Continue falling to screen bottom
+}): { flightDuration: number; totalDuration: number } => {
   const safeDrag = Math.max(vDrag, 0.001);
   const scaledGravity = Math.max(gravity * containerHeight, 0.001);
   const terminalVelocity = scaledGravity / safeDrag;
 
-  // Worst-case: piece launched straight up at max speed
-  const depthMax = depth?.max ?? DEFAULT_PI_CONFETTI_DEPTH.max;
-  const maxSpeedVar =
-    speedVariation?.max ?? DEFAULT_PI_CONFETTI_SPEED_VARIATION.max;
-  const maxSpeed = initialSpeed * maxSpeedVar * depthMax * containerHeight;
+  let maxFlightTimeSec = 0;
 
-  // Time to reach apex (velocity = 0) for upward launch: v(t) = (vy - g/drag) * e^(-drag*t) + g/drag = 0
-  // For upward launch, vy is negative (upward), so time to apex:
-  const vy = -maxSpeed; // upward
-  const apexTime = Math.log(1 - vy * safeDrag / scaledGravity) / safeDrag;
+  for (let i = 0; i < piConfigs.length; i++) {
+    const config = piConfigs[i];
+    if (!config) continue;
+    const blastY = blastPositions[i]?.y ?? containerHeight / 2;
 
-  // Height at apex: y(t) = blastY + (g/drag)*t + ((vy - g/drag)/drag) * (1 - e^(-drag*t))
-  const expAtApex = 1 - Math.exp(-safeDrag * apexTime);
-  const apexY =
-    blastY +
-    (scaledGravity / safeDrag) * apexTime +
-    ((vy - scaledGravity / safeDrag) / safeDrag) * expAtApex;
+    const depthMax = config.depth?.max ?? DEFAULT_PI_CONFETTI_DEPTH.max;
+    const maxSpeedVar = config.speedVariation?.max ?? DEFAULT_PI_CONFETTI_SPEED_VARIATION.max;
+    const maxSpeed = config.initialSpeed * maxSpeedVar * depthMax * containerHeight;
 
-  // Remaining fall distance from apex to bottom of screen
-  const remainingFall = containerHeight - apexY;
+    const vy = -maxSpeed;
+    const apexTime = Math.log(1 - vy * safeDrag / scaledGravity) / safeDrag;
 
-  // Time to fall remaining distance at ~terminal velocity (conservative)
-  const fallTime = remainingFall > 0 ? remainingFall / terminalVelocity : 0;
+    const expAtApex = 1 - Math.exp(-safeDrag * apexTime);
+    const apexY =
+      blastY +
+      (scaledGravity / safeDrag) * apexTime +
+      ((vy - scaledGravity / safeDrag) / safeDrag) * expAtApex;
 
-  const totalTimeSec = (apexTime + fallTime) * 1.2; // 20% safety margin
+    const remainingFall = containerHeight - apexY;
+    const fallTime = remainingFall > 0 ? remainingFall / terminalVelocity : 0;
 
-  if (sprayDurationMs !== undefined) {
-    return Math.ceil(totalTimeSec * 1000 + sprayDurationMs);
+    const totalTimeSec = (apexTime + fallTime) * 1.2;
+    if (totalTimeSec > maxFlightTimeSec) {
+      maxFlightTimeSec = totalTimeSec;
+    }
   }
-  return Math.ceil(
-    (totalTimeSec * 1000) / (1 - DEFAULT_PI_CONFETTI_LAUNCH_DELAY_MAX)
-  );
+
+  let flightDuration: number;
+  if (sprayDurationMs !== undefined) {
+    flightDuration = Math.ceil(maxFlightTimeSec * 1000 + sprayDurationMs);
+  } else {
+    flightDuration = Math.ceil(
+      (maxFlightTimeSec * 1000) / (1 - DEFAULT_PI_CONFETTI_LAUNCH_DELAY_MAX)
+    );
+  }
+
+  const maxOriginDelay = originDelays.reduce((max, d) => Math.max(max, d), 0);
+  const totalDuration = flightDuration + maxOriginDelay;
+
+  return { flightDuration, totalDuration };
 };
 
 const EDGE_OFFSET = 30;
@@ -195,17 +256,8 @@ export const resolveNamedPosition = (
   return POSITION_RESOLVERS[position](containerWidth, containerHeight, EDGE_OFFSET);
 };
 
-export type CannonConfig = {
-  spread: number;
+export type CannonConfig = OriginConfigBase & {
   speed: number;
-  count: number;
-  speedVariation: Required<Range>;
-  colorStart: number;
-  colorCount: number;
-  sizeStart: number;
-  sizeCount: number;
-  rotation?: Rotation;
-  depth?: Range;
   target: Position;
 };
 
@@ -262,19 +314,9 @@ export const generateCannonBoxesArray = ({
 }) => {
   'worklet';
 
-  const result: {
+  const result: (BoxBase & {
     cannonIndex: number;
-    vx: number;
-    vy: number;
-    launchDelay: number;
-    depthScale: number;
-    clockwise: boolean;
-    maxRotation: { x: number; z: number };
-    colorIndex: number;
-    sizeIndex: number;
-    initialRotation: number;
-    isTextured: boolean;
-  }[] = [];
+  })[] = [];
 
   for (let cannonIndex = 0; cannonIndex < cannonConfigs.length; cannonIndex++) {
     const config = cannonConfigs[cannonIndex];

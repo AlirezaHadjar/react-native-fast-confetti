@@ -151,20 +151,70 @@ export type InternalConfettiProps = ConfettiProps & {
   continuous?: boolean;
 };
 
-type PIConfettiBaseProps = {
+type OriginPropsBase = {
   /**
-   * @description Flake size variants defined as children (<PIConfetti.Flake>).
-   */
-  children?: React.ReactNode;
-  /**
-   * @description Number of confetti pieces to render.
-   * @default 200
+   * @description Number of confetti pieces from this origin.
+   * @default 100
    */
   count?: number;
   /**
-   * @description The array of confetti flake colors.
+   * @description Launch cone width in radians. Full circle = 2 * Math.PI.
+   * @default 2 * Math.PI
+   */
+  spread?: number;
+  /**
+   * @description Base launch speed (normalized to container height).
+   * @default 1
+   */
+  initialSpeed?: number;
+  /**
+   * @description Per-piece speed multiplier range.
+   * @default { min: 0.0, max: 1.0 }
+   */
+  speedVariation?: Range;
+  /**
+   * @description The array of confetti flake colors for this origin.
    */
   colors?: string[];
+  /**
+   * @description The rotation configuration for confetti flakes from this origin.
+   */
+  rotation?: Rotation;
+  /**
+   * @description Per-piece depth scale range to simulate 3D perspective.
+   * @default { min: 1, max: 1.1 }
+   */
+  depth?: Range;
+  /**
+   * @description The visual style of default confetti flakes for this origin.
+   * @default inherits from root
+   */
+  flakeStyle?: FlakeStyle;
+  /**
+   * @description Flake size variants defined as children.
+   */
+  children?: React.ReactNode;
+};
+
+export type PIOriginProps = OriginPropsBase & {
+  /**
+   * @description The position from which confetti flakes should blast.
+   * Can be a named position string or an explicit {x, y} coordinate.
+   */
+  blastPosition: NamedPosition | Position;
+  /**
+   * @description Delay in milliseconds before this origin starts firing.
+   * Applied on top of the root `autoStartDelay`.
+   * @default 0
+   */
+  delay?: number;
+};
+
+type BurstConfettiBaseProps = {
+  /**
+   * @description Must contain at least one Origin child.
+   */
+  children: React.ReactNode;
   /**
    * @description Gravity constant (normalized to container height).
    * @default 3.0
@@ -176,27 +226,6 @@ type PIConfettiBaseProps = {
    * @default 3.0
    */
   drag?: Drag;
-  /**
-   * @description Base launch speed (normalized to container height).
-   * @default 1
-   */
-  initialSpeed?: number;
-  /**
-   * @description Launch cone width in radians. Full circle = 2 * Math.PI.
-   * @default 2 * Math.PI
-   */
-  spread?: number;
-  /**
-   * @description Per-piece speed multiplier range.
-   * @default { min: 0.0, max: 1.0 }
-   */
-  speedVariation?: Range;
-  /**
-   * @description The position from which confetti flakes should blast.
-   * Can be a named position string or an explicit {x, y} coordinate.
-   * @default { x: containerWidth / 2, y: 150 }
-   */
-  blastPosition?: NamedPosition | Position;
   /**
    * @description Whether the animation should play on mount.
    * @default true
@@ -218,38 +247,6 @@ type PIConfettiBaseProps = {
    */
   autoStartDelay?: number;
   /**
-   * @description The rotation configuration for confetti flakes.
-   */
-  rotation?: Rotation;
-  /**
-   * @description Per-piece depth scale range to simulate 3D perspective.
-   * @default { min: 1, max: 1.1 }
-   */
-  depth?: Range;
-  /**
-   * @description The visual style of the default confetti flakes.
-   * @default 'glossy'
-   */
-  flakeStyle?: FlakeStyle;
-  /**
-   * @description The scale particles start at before animating to full size.
-   * @default 0.3
-   */
-  initialScale?: number;
-  /**
-   * @description Duration in milliseconds over which confetti pieces are staggered at launch.
-   * 0 means all pieces launch simultaneously (instant burst).
-   */
-  sprayDuration?: number;
-  /**
-   * @description Controls how dramatically confetti pieces flip during tumble.
-   * Higher values create more dramatic flips where pieces nearly disappear edge-on.
-   * Lower values (e.g. 0.1) keep pieces mostly flat, which works better for
-   * image textures.
-   * @default 0.85
-   */
-  flipIntensity?: number;
-  /**
    * @description A callback that is called when the animation starts.
    */
   onAnimationStart?: () => void;
@@ -263,7 +260,50 @@ type PIConfettiBaseProps = {
    * physics calculations. Falls back to screen dimensions if not provided.
    */
   containerStyle?: StyleProp<ViewStyle>;
+  /**
+   * @description Default colors for all origins. Can be overridden per-origin.
+   */
+  colors?: string[];
+  /**
+   * @description Default rotation for all origins. Can be overridden per-origin.
+   */
+  rotation?: Rotation;
+  /**
+   * @description Default depth range for all origins. Can be overridden per-origin.
+   * @default { min: 1, max: 1.1 }
+   */
+  depth?: Range;
+  /**
+   * @description Default speed variation range for all origins. Can be overridden per-origin.
+   * @default { min: 0.0, max: 1.0 }
+   */
+  speedVariation?: Range;
+  /**
+   * @description Duration in milliseconds over which confetti pieces are staggered at launch.
+   * 0 means all pieces launch simultaneously (instant burst).
+   */
+  sprayDuration?: number;
+  /**
+   * @description The scale particles start at before animating to full size.
+   * @default 0.3
+   */
+  initialScale?: number;
+  /**
+   * @description The visual style of the default confetti flakes.
+   * @default 'glossy'
+   */
+  flakeStyle?: FlakeStyle;
+  /**
+   * @description Controls how dramatically confetti pieces flip during tumble.
+   * Higher values create more dramatic flips where pieces nearly disappear edge-on.
+   * Lower values (e.g. 0.1) keep pieces mostly flat, which works better for
+   * image textures.
+   * @default 0.85
+   */
+  flipIntensity?: number;
 };
+
+type PIConfettiBaseProps = BurstConfettiBaseProps;
 
 export type PIConfettiProps = PIConfettiBaseProps & FlakeTexture;
 
@@ -274,10 +314,12 @@ export type ContinuousConfettiProps = StrictOmit<
 
 export type PIConfettiRestartOptions = {
   /**
-   * @description Optional blast position to override the prop.
-   * Accepts named positions or explicit {x, y} coordinates.
+   * @description Optional array of origins to override positions and delays.
    */
-  blastPosition?: NamedPosition | Position;
+  origins?: {
+    blastPosition: NamedPosition | Position;
+    delay?: number;
+  }[];
 };
 
 type BaseConfettiMethods = {
@@ -320,61 +362,18 @@ export type NamedPosition =
   | 'center-right'
   | 'center';
 
-export type CannonOriginProps = {
+export type CannonOriginProps = OriginPropsBase & {
   /**
    * @description The position of this cannon origin.
    * Can be a named position string or an explicit {x, y} coordinate.
    */
   position: NamedPosition | Position;
   /**
-   * @description Number of confetti pieces for this origin.
-   * @default 100
-   */
-  count?: number;
-  /**
-   * @description Launch cone width in radians.
-   * @default Math.PI / 5
-   */
-  spread?: number;
-  /**
-   * @description Base launch speed (normalized to container height).
-   * @default 2.0
-   */
-  initialSpeed?: number;
-  /**
-   * @description Per-piece speed multiplier range.
-   * @default { min: 0.8, max: 1.2 }
-   */
-  speedVariation?: Range;
-  /**
-   * @description The array of confetti flake colors.
-   */
-  colors?: string[];
-  /**
-   * @description The rotation configuration for confetti flakes.
-   */
-  rotation?: Rotation;
-  /**
-   * @description Per-piece depth scale range to simulate 3D perspective.
-   * @default { min: 1, max: 1.1 }
-   */
-  depth?: Range;
-  /**
    * @description The target position that this cannon aims at.
    * Overrides the root-level target for this specific origin.
    * @default center-top of the container
    */
   target?: NamedPosition | Position;
-  /**
-   * @description The visual style of default confetti flakes for this origin.
-   * Overrides the root-level flakeStyle. Can be overridden per-Flake.
-   * @default inherits from root
-   */
-  flakeStyle?: FlakeStyle;
-  /**
-   * @description Flake size variants defined as children.
-   */
-  children?: React.ReactNode;
 };
 
 type FlakeSizeShorthand = {
@@ -453,104 +452,12 @@ export type CannonConfettiRestartOptions = {
   targets?: (NamedPosition | Position)[];
 };
 
-type CannonConfettiBaseProps = {
-  /**
-   * @description Must contain at least one CannonConfetti.Origin child.
-   */
-  children: React.ReactNode;
-  /**
-   * @description Gravity constant (normalized to container height).
-   * @default 3.0
-   */
-  gravity?: number;
-  /**
-   * @description Air resistance coefficient. Can be a single number applied
-   * to both axes, or an object with separate `horizontal` and `vertical` values.
-   * @default 3.0
-   */
-  drag?: Drag;
-  /**
-   * @description Whether the animation should play on mount.
-   * @default true
-   */
-  autoplay?: boolean;
-  /**
-   * @description Whether the animation should play again after it ends.
-   * @default false
-   */
-  infinite?: boolean;
-  /**
-   * @description Should the confetti flakes fade out as they reach the end.
-   */
-  fadeOutOnEnd?: boolean;
-  /**
-   * @description The delay in milliseconds before the confetti animation starts
-   * automatically after mounting (only applies when `autoplay` is true).
-   * @default 0
-   */
-  autoStartDelay?: number;
-  /**
-   * @description A callback that is called when the animation starts.
-   */
-  onAnimationStart?: () => void;
-  /**
-   * @description A callback that is called when the animation ends.
-   */
-  onAnimationEnd?: () => void;
-  /**
-   * @description The style of the confetti container.
-   * Numeric `width` and `height` values in this style will be used for
-   * physics calculations. Falls back to screen dimensions if not provided.
-   */
-  containerStyle?: StyleProp<ViewStyle>;
-  /**
-   * @description Default colors for all origins. Can be overridden per-origin.
-   */
-  colors?: string[];
-  /**
-   * @description Default rotation for all origins. Can be overridden per-origin.
-   */
-  rotation?: Rotation;
-  /**
-   * @description Default depth range for all origins. Can be overridden per-origin.
-   * @default { min: 1, max: 1.1 }
-   */
-  depth?: Range;
-  /**
-   * @description Default speed variation range for all origins. Can be overridden per-origin.
-   * @default { min: 0.8, max: 1.2 }
-   */
-  speedVariation?: Range;
+type CannonConfettiBaseProps = BurstConfettiBaseProps & {
   /**
    * @description Default target position that all cannons aim at. Can be overridden per-origin.
    * @default center-top of the container
    */
   target?: NamedPosition | Position;
-  /**
-   * @description Duration in milliseconds over which confetti pieces are staggered at launch.
-   * 0 means all pieces launch simultaneously (instant burst).
-   */
-  sprayDuration?: number;
-  /**
-   * @description The scale particles start at before animating to full size (1) over the first 5% of flight.
-   * @default 0.3
-   */
-  initialScale?: number;
-  /**
-   * @description The visual style of the default confetti flakes.
-   * 'solid' renders flat solid-colored flakes. 'glossy' adds a semi-transparent white highlight.
-   * Only affects default flakes (no-op when `image` or `svg` textures are used).
-   * @default 'glossy'
-   */
-  flakeStyle?: FlakeStyle;
-  /**
-   * @description Controls how dramatically confetti pieces flip during tumble.
-   * Higher values create more dramatic flips where pieces nearly disappear edge-on.
-   * Lower values (e.g. 0.1) keep pieces mostly flat, which works better for
-   * image textures like money.
-   * @default 0.85
-   */
-  flipIntensity?: number;
 };
 
 export type CannonConfettiProps = CannonConfettiBaseProps & FlakeTexture;

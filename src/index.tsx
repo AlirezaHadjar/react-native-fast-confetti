@@ -4,6 +4,7 @@ export type {
   ContinuousConfettiProps,
   CannonConfettiProps,
   CannonOriginProps,
+  PIOriginProps,
   FlakeProps,
   ConfettiMethods,
   PIConfettiMethods,

@@ -81,6 +81,7 @@ export const DEFAULT_CANNON_CONFETTI_ROTATION: Required<Rotation> = {
   },
 };
 
+export const DEFAULT_PI_ORIGIN_COUNT = 100;
 export const DEFAULT_PI_CONFETTI_GRAVITY = 3.0;
 export const DEFAULT_PI_CONFETTI_DRAG = 3.0;
 export const DEFAULT_PI_CONFETTI_INITIAL_SPEED = 1.0;
