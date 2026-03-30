@@ -1,5 +1,6 @@
-# react-native-fast-confetti 🎊
+<img width="1536" height="1024" alt="banner" src="https://github.com/user-attachments/assets/b1ba1804-972a-41a3-b918-2bff71478f83" />
 
+# react-native-fast-confetti 🎊
 The fastest confetti animation library for React Native, powered by Skia Atlas API.
 
 > [!NOTE]
