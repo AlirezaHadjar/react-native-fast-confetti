@@ -634,58 +634,9 @@ Define flake sizes as children of any confetti component (or origin).
 
 > Use either `size` or `width`/`height`, not both.
 
-## Contributing
+## Migrating from v1
 
-See the [contributing guide](CONTRIBUTING.md) to learn how to contribute to the repository and the development workflow.
-
-## License
-
-MIT
-
----
-
-Made with [create-react-native-library](https://github.com/callstack/react-native-builder-bob)
-spawn before growing. |
-| `containerStyle` | N/A | Style for the container. |
-
-</details>
-
-### `<CannonConfetti.Origin />` Props
-
-| Name                  | Default | Description                                                |
-| --------------------- | ------- | ---------------------------------------------------------- |
-| `position` (required) | -       | Where the cannon fires from. Named position or `{ x, y }`. |
-| `count`               | 100     | Number of pieces from this origin.                         |
-| `speed`               | 2.0     | Launch speed.                                              |
-| `spread`              | PI/5    | Launch cone width (radians).                               |
-| `target`              | N/A     | Aim point (overrides root `target`).                       |
-
-<details>
-<summary>Advanced props — these work well out of the box, but you can tweak them for full customizability.</summary>
-
-| Name             | Default                | Description                                |
-| ---------------- | ---------------------- | ------------------------------------------ |
-| `speedVariation` | { min: 0.8, max: 1.2 } | Per-piece speed multiplier range.          |
-| `colors`         | N/A                    | Colors for this origin (overrides root).   |
-| `flakeStyle`     | N/A                    | Style for this origin (overrides root).    |
-| `rotation`       | N/A                    | Rotation for this origin (overrides root). |
-| `depth`          | { min: 1, max: 1.1 }   | Depth for this origin (overrides root).    |
-
-</details>
-
-### `<*.Flake />` Props
-
-Define flake sizes as children of any confetti component (or origin).
-
-| Name         | Default | Description                                          |
-| ------------ | ------- | ---------------------------------------------------- |
-| `size`       | -       | Sets both width and height.                          |
-| `width`      | -       | Flake width (use instead of `size` for non-square).  |
-| `height`     | -       | Flake height (use instead of `size` for non-square). |
-| `radius`     | 0       | Corner radius.                                       |
-| `flakeStyle` | N/A     | Override the parent's `flakeStyle`.                  |
-
-> Use either `size` or `width`/`height`, not both.
+See the [migration guide](MIGRATION_V1_V2.md) for a detailed mapping of v1 props to v2.
 
 ## Contributing
 
