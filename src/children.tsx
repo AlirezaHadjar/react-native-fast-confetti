@@ -61,7 +61,7 @@ export const pickChildren = <Props = any>(
     return item;
   });
 
-  const targetChildren = target.length >= 0 ? target : undefined;
+  const targetChildren = target.length > 0 ? target : undefined;
 
   return {
     targetChildren,

@@ -1,9 +1,7 @@
-import { Easing } from 'react-native-reanimated';
 import type {
   Rotation,
   DeepRequired,
   Range,
-  RandomOffset,
   FlakeSize,
 } from './types';
 
@@ -12,8 +10,6 @@ export const DEFAULT_BOXES_COUNT = 200;
 export const DEFAULT_FLAKE_SIZE: FlakeSize[] = [
   { width: 8, height: 16, radius: undefined },
 ];
-
-export const DEFAULT_FALL_DURATION = 8000;
 
 export const DEFAULT_COLORS = [
   '#FF5733',
@@ -27,8 +23,6 @@ export const DEFAULT_COLORS = [
   '#33A5FF',
   '#FF33A5',
 ];
-
-export const DEFAULT_AUTOSTART_DELAY = 0;
 
 export const DEFAULT_VERTICAL_SPACING = 70;
 
@@ -48,30 +42,6 @@ export const DEFAULT_CONFETTI_ROTATION: DeepRequired<Rotation> = {
     max: 20 * Math.PI,
   },
 };
-
-export const DEFAULT_CONFETTI_RANDOM_SPEED: Required<Range> = {
-  min: 0.9,
-  max: 1.3,
-};
-
-export const DEFAULT_CONFETTI_RANDOM_OFFSET: DeepRequired<RandomOffset> = {
-  x: { min: -10, max: 10 },
-  y: { min: -10, max: 10 },
-};
-
-export const CONTINUOUS_CONFETTI_RANDOM_SPEED: DeepRequired<Range> = {
-  min: 1,
-  max: 1,
-};
-
-export const CONTINUOUS_CONFETTI_RANDOM_OFFSET: DeepRequired<RandomOffset> = {
-  x: { min: -50, max: 50 },
-  y: { min: -200, max: 200 },
-};
-
-export const DEFAULT_CONFETTI_FALL_EASING = Easing.inOut(Easing.quad);
-
-export const DEFAULT_CONFETTI_BLAST_EASING = Easing.inOut(Easing.quad);
 
 export const DEFAULT_CONFETTI_GRAVITY = 1.0;
 export const DEFAULT_CONFETTI_DEPTH: Required<Range> = { min: 0.8, max: 1.0 };

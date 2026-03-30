@@ -1,11 +1,9 @@
 export type {
   ConfettiProps,
-  LegacyConfettiProps,
   PIConfettiProps,
   ContinuousConfettiProps,
   CannonConfettiProps,
   CannonOriginProps,
-  CannonFlakeProps,
   FlakeProps,
   ConfettiMethods,
   PIConfettiMethods,

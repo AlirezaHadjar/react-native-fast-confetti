@@ -1,6 +1,5 @@
 import type { SkImage, SkSVG } from '@shopify/react-native-skia';
-import type { LegacyConfettiProps } from 'react-native-fast-confetti';
-import type { TextureType, RadiusType } from '../constants/config';
+import type { TextureType } from '../constants/config';
 
 export function getNewTextureProps(
   textureType: TextureType,
@@ -14,36 +13,6 @@ export function getNewTextureProps(
       return { svg: snowFlakeSVG };
     default:
       return {};
-  }
-}
-
-export function getTextureProps(
-  textureType: TextureType,
-  moneyStackImage: SkImage,
-  snowFlakeSVG: SkSVG,
-  radiusRange: RadiusType
-): LegacyConfettiProps {
-  switch (textureType) {
-    case 'money':
-      return { type: 'image' as const, flakeImage: moneyStackImage };
-    case 'snowflake':
-      return { type: 'svg' as const, flakeSvg: snowFlakeSVG };
-    default: {
-      const range: [number, number] =
-        radiusRange === 'square' ? [0, 0] : [0, 15];
-      return { type: 'default' as const, radiusRange: range };
-    }
-  }
-}
-
-export function getFlakeSize(textureType: TextureType) {
-  switch (textureType) {
-    case 'money':
-      return [{ width: 50, height: 50 }];
-    case 'snowflake':
-      return [{ width: 10, height: 10 }];
-    default:
-      return [{ width: 15, height: 8 }];
   }
 }
 

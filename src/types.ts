@@ -1,7 +1,6 @@
 import type React from 'react';
 import type { SkImage, SkSVG } from '@shopify/react-native-skia';
 import type { StyleProp, ViewStyle } from 'react-native';
-import type { WithTimingConfig } from 'react-native-reanimated';
 
 type StrictOmit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
 
@@ -35,11 +34,6 @@ export type Rotation = {
   z?: Range;
 };
 
-export type RandomOffset = {
-  x?: Range;
-  y?: Range;
-};
-
 export type FallingBox = {
   spawnX: number;
   spawnY: number;
@@ -51,147 +45,6 @@ export type FallingBox = {
   spinRate: number;
   phaseOffset: number;
 };
-
-type BaseConfettiProps = {
-  /**
-   * @description number of confetti pieces to render.
-   * @default 200
-   */
-  count?: number;
-  /**
-   * @description the size confetti's flake.
-   */
-  flakeSize?: FlakeSize[];
-  /**
-   * @description The width of the confetti's container.
-   * @default SCREEN_WIDTH
-   */
-  width?: number;
-  /**
-   * @description The height of the confetti's container.
-   * @default SCREEN_HEIGHT
-   */
-  height?: number;
-  /**
-   * @description The duration of confetti falling down (milliseconds).
-   * @default 8000
-   */
-  fallDuration?: number;
-  /**
-   * @description Wether the animation should play on mount.
-   * @default true
-   */
-  autoplay?: boolean;
-  /**
-   * @description Wether the animation should play again after it ends.
-   * @default true
-   */
-  isInfinite?: boolean;
-  /**
-   * @description The array of confetti flakes color.
-   */
-  colors?: string[];
-  /**
-   * @description The delay in milliseconds before the confetti animation starts automatically after initialization.
-   * @default 0
-   */
-  autoStartDelay?: number;
-  /**
-   * @description Should the confetti flakes fade out as they reach the bottom.
-   */
-  fadeOutOnEnd?: boolean;
-  /**
-   * @description The approximate space between confetti flakes vertically. Lower value results in denser confetti.
-   * @default 70
-   */
-  verticalSpacing?: number;
-  /**
-   * @description A callback that is called when the falling animation starts.
-   */
-  onAnimationStart?: () => void;
-  /**
-   * @description A callback that is called when the falling animation starts.
-   */
-  onAnimationEnd?: () => void;
-  /**
-   * @description The rotation configuration for confetti flakes.
-   * Object with optional x and y properties, each containing optional min and max values.
-   * @default { x: { min: 2 * Math.PI, max: 20 * Math.PI }, y: { min: 2 * Math.PI, max: 20 * Math.PI } }
-   */
-  rotation?: Rotation;
-
-  /**
-   * @description The random speed multiplier for confetti flakes.
-   * @default { min: 0.9, max: 1.3 }
-   */
-  randomSpeed?: Range;
-
-  /**
-   * @description The random offset for confetti flakes.
-   * @default { x: { min: -50, max: 50 }, y: { min: 0, max: 150 } }
-   */
-  randomOffset?: RandomOffset;
-
-  /**
-   * @description The style of the confetti container.
-   * if you use a padding on the container, you need to set the height/width of the container to the same as the parent container.
-   */
-  containerStyle?: StyleProp<ViewStyle>;
-};
-
-type EasingProps = {
-  /**
-   * @description The easing function for the falling animation.
-   * @default Easing.inOut(Easing.quad)
-   */
-  fallEasing?: WithTimingConfig['easing'];
-  /**
-   * @description The easing function for both falling and blast animations.
-   * @default Easing.inOut(Easing.quad)
-   * @deprecated Use `fallEasing` instead. This prop will be used as fallback if fallEasing is not provided.
-   */
-  easing?: WithTimingConfig['easing'];
-};
-
-type TextureProps =
-  | {
-      /**
-       * @description Use this to render images as confetti flakes.
-       */
-      type: 'image';
-      /**
-       * @description The image to use as confetti flake.
-       */
-      flakeImage: SkImage;
-    }
-  | {
-      /**
-       * @description Use this to render custom SVGs as confetti flakes.
-       */
-      type: 'svg';
-      /**
-       * @description The SVG to use as confetti flake.
-       */
-      flakeSvg: SkSVG;
-    }
-  | {
-      /**
-       * @description Use this to render default confetti flakes.
-       */
-      type?: 'default';
-
-      /**
-       * @description The range of the radius of the confetti flakes.
-       * A tuple of [min, max] values from which a random radius will be selected for each flake.
-       * @default '[0, 0]'
-       */
-      radiusRange?: [number, number];
-    };
-
-/** @deprecated Old flat-props API. Used internally by ContinuousConfetti (to be migrated). */
-export type LegacyConfettiProps = BaseConfettiProps &
-  TextureProps &
-  EasingProps;
 
 type ConfettiBaseProps = {
   /**
@@ -240,6 +93,12 @@ type ConfettiBaseProps = {
    * @description Should the confetti flakes fade out as they reach the end.
    */
   fadeOutOnEnd?: boolean;
+  /**
+   * @description The delay in milliseconds before the confetti animation starts
+   * automatically after mounting (only applies when `autoplay` is true).
+   * @default 0
+   */
+  autoStartDelay?: number;
   /**
    * @description A callback that is called when the animation starts.
    */
@@ -383,6 +242,12 @@ type PIConfettiBaseProps = {
    */
   fadeOutOnEnd?: boolean;
   /**
+   * @description The delay in milliseconds before the confetti animation starts
+   * automatically after mounting (only applies when `autoplay` is true).
+   * @default 0
+   */
+  autoStartDelay?: number;
+  /**
    * @description The rotation configuration for confetti flakes.
    */
   rotation?: Rotation;
@@ -406,6 +271,13 @@ type PIConfettiBaseProps = {
    * 0 means all pieces launch simultaneously (instant burst).
    */
   sprayDuration?: number;
+  /**
+   * @description Minimum scale when a piece is edge-on during tumble.
+   * Lower values create a more dramatic flip effect. Higher values (e.g. 0.9)
+   * keep pieces mostly flat, which works better for image textures like money.
+   * @default 0.15
+   */
+  tumbleClamp?: number;
   /**
    * @description A callback that is called when the animation starts.
    */
@@ -604,9 +476,6 @@ type FlakeWithDimensions = {
 
 export type FlakeProps = FlakeWithSize | FlakeWithDimensions;
 
-/** @deprecated Use `FlakeProps` instead. */
-export type CannonFlakeProps = FlakeProps;
-
 export type CannonConfettiRestartOptions = {
   /**
    * @description Optional array of cannon origins to override the children origins.
@@ -650,6 +519,12 @@ type CannonConfettiBaseProps = {
    * @description Should the confetti flakes fade out as they reach the end.
    */
   fadeOutOnEnd?: boolean;
+  /**
+   * @description The delay in milliseconds before the confetti animation starts
+   * automatically after mounting (only applies when `autoplay` is true).
+   * @default 0
+   */
+  autoStartDelay?: number;
   /**
    * @description A callback that is called when the animation starts.
    */
@@ -712,6 +587,13 @@ type CannonConfettiBaseProps = {
    * @default 'glossy'
    */
   flakeStyle?: FlakeStyle;
+  /**
+   * @description Minimum scale when a piece is edge-on during tumble.
+   * Lower values create a more dramatic flip effect. Higher values (e.g. 0.9)
+   * keep pieces mostly flat, which works better for image textures like money.
+   * @default 0.15
+   */
+  tumbleClamp?: number;
 };
 
 export type CannonConfettiProps = CannonConfettiBaseProps &

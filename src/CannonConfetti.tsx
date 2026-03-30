@@ -9,6 +9,7 @@ import {
   useDerivedValue,
   useSharedValue,
   withTiming,
+  withDelay,
   Easing,
 } from 'react-native-reanimated';
 import {
@@ -50,6 +51,7 @@ const CannonConfettiInner = forwardRef<
       autoplay = true,
       infinite = false,
       fadeOutOnEnd = false,
+      autoStartDelay = 0,
       onAnimationEnd,
       onAnimationStart,
       width: _width,
@@ -62,6 +64,7 @@ const CannonConfettiInner = forwardRef<
       target: rootTarget,
       sprayDuration = 300,
       initialScale = 0.3,
+      tumbleClamp = 0.15,
       flakeStyle = 'glossy',
       ...textureRootProps
     },
@@ -168,7 +171,8 @@ const CannonConfettiInner = forwardRef<
     const workletRestart = useCallback(
       (
         resolvedPositions: Position[] | null,
-        resolvedConfigs: CannonConfig[] | null
+        resolvedConfigs: CannonConfig[] | null,
+        delay: number = 0
       ) => {
         'worklet';
 
@@ -196,16 +200,20 @@ const CannonConfettiInner = forwardRef<
           }
         }
 
-        progress.set(
-          withTiming(1, { duration, easing: Easing.linear }, (finished) => {
+        const animation = withTiming(
+          1,
+          { duration, easing: Easing.linear },
+          (finished) => {
             'worklet';
             if (!finished || !infinite) {
               if (finished) UIOnEnd();
               return;
             }
             repeatAnimation();
-          })
+          }
         );
+
+        progress.set(delay > 0 ? withDelay(delay, animation) : animation);
       },
       [
         dynamicCannonsPositions,
@@ -330,9 +338,10 @@ const CannonConfettiInner = forwardRef<
 
     useEffect(() => {
       runOnUI(() => {
-        if (autoplay && !running.get()) workletRestart(null, null);
+        if (autoplay && !running.get())
+          workletRestart(null, null, autoStartDelay);
       })();
-    }, [autoplay, workletRestart, running]);
+    }, [autoplay, autoStartDelay, workletRestart, running]);
 
     // Physics constants scaled to container height
     const scaledGravity = gravity * containerHeight;
@@ -342,7 +351,10 @@ const CannonConfettiInner = forwardRef<
     const transforms = useRSXformBuffer(totalCount, (val, i) => {
       'worklet';
       const piece = boxes.get()[i];
-      if (!piece) return;
+      if (!piece) {
+        val.set(0, 0, -10000, -10000);
+        return;
+      }
 
       const currentCannons = dynamicCannonsPositions.get() || cannonsPositions;
       const cannon = currentCannons[piece.cannonIndex % currentCannons.length]!;
@@ -380,11 +392,12 @@ const CannonConfettiInner = forwardRef<
       const normalizedT = Math.min(t / totalTime, 1);
       const hDecayFactor = 1 - Math.pow(1 - normalizedT, hDrag + 1);
       const vExpDecay = 1 - Math.exp(-vDrag * t);
+      const safeVDrag = Math.max(vDrag, 0.001);
       const tx = cannonX + ((vx * totalTime) / (hDrag + 1)) * hDecayFactor;
       const ty =
         cannonY +
-        (scaledGravity / vDrag) * t +
-        ((vy - scaledGravity / vDrag) / vDrag) * vExpDecay;
+        (scaledGravity / safeVDrag) * t +
+        ((vy - scaledGravity / safeVDrag) / safeVDrag) * vExpDecay;
 
       // Rotation
       const rotationDirection = piece.clockwise ? 1 : -1;
@@ -406,7 +419,7 @@ const CannonConfettiInner = forwardRef<
         );
 
       // Scale: appearance animation at launch + oscillation
-      const oscillatingScale = Math.abs(Math.cos(rx));
+      const oscillatingScale = Math.max(Math.abs(Math.cos(rx)), tumbleClamp);
       const appearScale = interpolate(
         effectiveProgress,
         [0, 0.05],

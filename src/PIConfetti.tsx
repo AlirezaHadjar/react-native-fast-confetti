@@ -15,6 +15,7 @@ import {
   useDerivedValue,
   useSharedValue,
   withTiming,
+  withDelay,
   Easing,
 } from 'react-native-reanimated';
 import {
@@ -57,10 +58,12 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       autoplay = true,
       infinite = false,
       fadeOutOnEnd = false,
+      autoStartDelay = 0,
       rotation,
       depth,
       flakeStyle = 'glossy',
       initialScale = 0.3,
+      tumbleClamp = 0.15,
       sprayDuration,
       onAnimationEnd,
       onAnimationStart,
@@ -193,7 +196,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
     );
 
     const workletRestart = useCallback(
-      (resolvedPosition: Position | null) => {
+      (resolvedPosition: Position | null, delay: number = 0) => {
         'worklet';
 
         dynamicBlastPosition.set(resolvedPosition);
@@ -223,20 +226,20 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
           }
         }
 
-        progress.set(
-          withTiming(
-            1,
-            { duration, easing: Easing.linear },
-            (finished) => {
-              'worklet';
-              if (!finished || !infinite) {
-                if (finished) UIOnEnd();
-                return;
-              }
-              repeatAnimation();
+        const animation = withTiming(
+          1,
+          { duration, easing: Easing.linear },
+          (finished) => {
+            'worklet';
+            if (!finished || !infinite) {
+              if (finished) UIOnEnd();
+              return;
             }
-          )
+            repeatAnimation();
+          }
         );
+
+        progress.set(delay > 0 ? withDelay(delay, animation) : animation);
       },
       [
         dynamicBlastPosition,
@@ -320,9 +323,9 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
 
     useEffect(() => {
       runOnUI(() => {
-        if (autoplay && !running.get()) workletRestart(null);
+        if (autoplay && !running.get()) workletRestart(null, autoStartDelay);
       })();
-    }, [autoplay, workletRestart, running]);
+    }, [autoplay, autoStartDelay, workletRestart, running]);
 
     // Physics constants scaled to container height
     const scaledGravity = gravity * containerHeight;
@@ -362,12 +365,13 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       const t = effectiveProgress * totalTime;
 
       // Physics: drag applied to both axes, gravity on vertical
-      const expDecay = 1 - Math.exp(-drag * t);
-      const tx = blastX + (vx / drag) * expDecay;
+      const safeDrag = Math.max(drag, 0.001);
+      const expDecay = 1 - Math.exp(-safeDrag * t);
+      const tx = blastX + (vx / safeDrag) * expDecay;
       const ty =
         blastY +
-        (scaledGravity / drag) * t +
-        ((vy - scaledGravity / drag) / drag) * expDecay;
+        (scaledGravity / safeDrag) * t +
+        ((vy - scaledGravity / safeDrag) / safeDrag) * expDecay;
 
       // Rotation
       const rotationDirection = piece.clockwise ? 1 : -1;
@@ -389,7 +393,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         );
 
       // Scale: appearance animation at launch + oscillation
-      const oscillatingScale = Math.abs(Math.cos(rx));
+      const oscillatingScale = Math.max(Math.abs(Math.cos(rx)), tumbleClamp);
       const appearScale = interpolate(
         effectiveProgress,
         [0, 0.05],

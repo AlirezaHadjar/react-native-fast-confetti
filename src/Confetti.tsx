@@ -14,6 +14,7 @@ import {
   useDerivedValue,
   useSharedValue,
   withTiming,
+  withDelay,
   Easing,
 } from 'react-native-reanimated';
 import { generateFallingBoxesArray, estimateFallingDuration } from './utils';
@@ -52,6 +53,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       infinite = false,
       continuous = false,
       fadeOutOnEnd = false,
+      autoStartDelay = 0,
       onAnimationEnd,
       onAnimationStart,
       width: _width,
@@ -200,7 +202,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
     );
 
     const restart = useCallback(
-      (_options: ConfettiRestartOptions = {}) => {
+      (_options: ConfettiRestartOptions = {}, delay: number = 0) => {
         'worklet';
 
         refreshBoxes();
@@ -226,16 +228,20 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
           }
         }
 
-        progress.set(
-          withTiming(1, { duration, easing: Easing.linear }, (finished) => {
+        const animation = withTiming(
+          1,
+          { duration, easing: Easing.linear },
+          (finished) => {
             'worklet';
             if (!finished || !infinite) {
               if (finished) UIOnEnd();
               return;
             }
             repeatAnimation();
-          })
+          }
         );
+
+        progress.set(delay > 0 ? withDelay(delay, animation) : animation);
       },
       [
         refreshBoxes,
@@ -297,15 +303,18 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
 
     useEffect(() => {
       runOnUI(() => {
-        if (autoplay && !running.get()) restart();
+        if (autoplay && !running.get()) restart({}, autoStartDelay);
       })();
-    }, [autoplay, restart, running]);
+    }, [autoplay, autoStartDelay, restart, running]);
 
     const maxIdx = TRAJECTORY_SAMPLE_COUNT;
     const transforms = useRSXformBuffer(count, (val, i) => {
       'worklet';
       const piece = boxes.get()[i];
-      if (!piece) return;
+      if (!piece) {
+        val.set(0, 0, -10000, -10000);
+        return;
+      }
 
       const globalP = progress.get();
 

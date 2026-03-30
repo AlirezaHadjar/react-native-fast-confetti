@@ -1,6 +1,6 @@
 {
   "name": "react-native-fast-confetti",
-  "version": "1.1.2",
+  "version": "2.0.0",
   "description": "The fastest confetti animation library in react native",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
@@ -91,7 +91,8 @@
     "@shopify/react-native-skia": "*",
     "react": "*",
     "react-native": "*",
-    "react-native-reanimated": "*"
+    "react-native-reanimated": "*",
+    "react-native-worklets": "*"
   },
   "workspaces": [
     "example"

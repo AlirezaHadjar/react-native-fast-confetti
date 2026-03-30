@@ -1,9 +1,5 @@
-import { type SkImage, type SkSVG } from '@shopify/react-native-skia';
 import {
-  RANDOM_INITIAL_Y_JIGGLE,
   DEFAULT_CONFETTI_ROTATION,
-  DEFAULT_CONFETTI_RANDOM_SPEED,
-  DEFAULT_CONFETTI_RANDOM_OFFSET,
   DEFAULT_CANNON_CONFETTI_ROTATION,
   DEFAULT_CANNON_CONFETTI_SPEED_VARIATION,
   DEFAULT_CANNON_CONFETTI_DEPTH,
@@ -19,8 +15,7 @@ import {
   DEFAULT_PI_CONFETTI_LAUNCH_DELAY_MAX,
 } from './constants';
 import { integrateTrajectory } from './physics';
-import { Extrapolation, interpolate } from 'react-native-reanimated';
-import type { FallingBox, NamedPosition, Position, RandomOffset, Range, Rotation } from './types';
+import type { FallingBox, NamedPosition, Position, Range, Rotation } from './types';
 
 export const getRandomBoolean = () => {
   'worklet';
@@ -33,26 +28,6 @@ export const getRandomValue = (min: number, max: number): number => {
   return Math.random() * (max - min) + min;
 };
 
-export const randomColor = (colors: string[]): string => {
-  'worklet';
-  return colors[Math.floor(Math.random() * colors.length)] as string;
-};
-
-export const randomXArray = (num: number, min: number, max: number) => {
-  'worklet';
-  return new Array(num).fill(0).map(() => getRandomValue(min, max));
-};
-
-export const generateEvenlyDistributedValues = (
-  lowerBound: number,
-  upperBound: number,
-  chunks: number
-) => {
-  'worklet';
-  const step = (upperBound - lowerBound) / (chunks - 1);
-  return Array.from({ length: chunks }, (_, i) => lowerBound + step * i);
-};
-
 export const resolveRange = (
   range?: { min?: number; max?: number },
   defaultRange?: { min: number; max: number }
@@ -61,77 +36,6 @@ export const resolveRange = (
   const finalMin = range?.min ?? defaultRange?.min ?? 0;
   const finalMax = range?.max ?? defaultRange?.max ?? 0;
   return { min: finalMin, max: finalMax };
-};
-
-export const generateBoxesArray = ({
-  colorsVariations,
-  count,
-  duration,
-  sizeVariations,
-  rotation,
-  randomSpeed,
-  randomOffset,
-}: {
-  count: number;
-  colorsVariations: number;
-  sizeVariations: number;
-  duration: number;
-  rotation?: Rotation;
-  randomSpeed?: Range;
-  randomOffset?: RandomOffset;
-}) => {
-  'worklet';
-
-  rotation = rotation ?? DEFAULT_CONFETTI_ROTATION;
-  randomSpeed = randomSpeed ?? DEFAULT_CONFETTI_RANDOM_SPEED;
-  randomOffset = randomOffset ?? DEFAULT_CONFETTI_RANDOM_OFFSET;
-
-  const xRotationRange = resolveRange(rotation.x, DEFAULT_CONFETTI_ROTATION.x);
-  const zRotationRange = resolveRange(rotation.z, DEFAULT_CONFETTI_ROTATION.z);
-  const randomSpeedRange = resolveRange(
-    randomSpeed,
-    DEFAULT_CONFETTI_RANDOM_SPEED
-  );
-  const randomXOffsetRange = resolveRange(
-    randomOffset.x,
-    DEFAULT_CONFETTI_RANDOM_OFFSET.x
-  );
-  const randomYOffsetRange = resolveRange(
-    randomOffset.y,
-    DEFAULT_CONFETTI_RANDOM_OFFSET.y
-  );
-
-  const maxRandomX = interpolate(
-    duration,
-    [0, 8000],
-    [5, 50],
-    Extrapolation.CLAMP
-  );
-
-  return new Array(count).fill(0).map(() => ({
-    clockwise: getRandomBoolean(),
-    maxRotation: {
-      x: getRandomValue(xRotationRange.min, xRotationRange.max),
-      z: getRandomValue(zRotationRange.min, zRotationRange.max),
-    },
-    colorIndex: Math.round(getRandomValue(0, colorsVariations - 1)),
-    sizeIndex: Math.round(getRandomValue(0, sizeVariations - 1)),
-    randomXs: randomXArray(5, -maxRandomX, maxRandomX), // Array of randomX values for horizontal movement
-    initialRandomY: getRandomValue(
-      -RANDOM_INITIAL_Y_JIGGLE,
-      RANDOM_INITIAL_Y_JIGGLE
-    ),
-    blastThreshold: getRandomValue(0, 0.9),
-    randomSpeed: getRandomValue(randomSpeedRange.min, randomSpeedRange.max), // Random speed multiplier
-    randomOffsetX: getRandomValue(
-      randomXOffsetRange.min,
-      randomXOffsetRange.max
-    ), // Random X offset for initial position
-    randomOffsetY: getRandomValue(
-      randomYOffsetRange.min,
-      randomYOffsetRange.max
-    ), // Random Y offset for initial position
-  }));
 };
 
 export const generatePIBoxesArray = ({
@@ -217,8 +121,9 @@ export const estimatePIDuration = ({
   // Terminal velocity under drag: v_term = g/drag (in normalized units)
   // Time for the slowest piece (launched straight up at max speed) to:
   //   1. Decelerate to zero  2. Fall back to launch height  3. Continue falling to screen bottom
-  const scaledGravity = gravity * containerHeight;
-  const terminalVelocity = scaledGravity / drag;
+  const safeDrag = Math.max(drag, 0.001);
+  const scaledGravity = Math.max(gravity * containerHeight, 0.001);
+  const terminalVelocity = scaledGravity / safeDrag;
 
   // Worst-case: piece launched straight up at max speed
   const depthMax = depth?.max ?? DEFAULT_PI_CONFETTI_DEPTH.max;
@@ -229,14 +134,14 @@ export const estimatePIDuration = ({
   // Time to reach apex (velocity = 0) for upward launch: v(t) = (vy - g/drag) * e^(-drag*t) + g/drag = 0
   // For upward launch, vy is negative (upward), so time to apex:
   const vy = -maxSpeed; // upward
-  const apexTime = Math.log(1 - vy * drag / scaledGravity) / drag;
+  const apexTime = Math.log(1 - vy * safeDrag / scaledGravity) / safeDrag;
 
   // Height at apex: y(t) = blastY + (g/drag)*t + ((vy - g/drag)/drag) * (1 - e^(-drag*t))
-  const expAtApex = 1 - Math.exp(-drag * apexTime);
+  const expAtApex = 1 - Math.exp(-safeDrag * apexTime);
   const apexY =
     blastY +
-    (scaledGravity / drag) * apexTime +
-    ((vy - scaledGravity / drag) / drag) * expAtApex;
+    (scaledGravity / safeDrag) * apexTime +
+    ((vy - scaledGravity / safeDrag) / safeDrag) * expAtApex;
 
   // Remaining fall distance from apex to bottom of screen
   const remainingFall = containerHeight - apexY;
@@ -253,14 +158,6 @@ export const estimatePIDuration = ({
     (totalTimeSec * 1000) / (1 - DEFAULT_PI_CONFETTI_LAUNCH_DELAY_MAX)
   );
 };
-
-export const createTextureProps = <T extends 'svg' | 'image'>(
-  type: T,
-  content: any
-) =>
-  ({ type, content }) as T extends 'svg'
-    ? { type: 'svg'; content: SkSVG }
-    : { type: 'image'; content: SkImage };
 
 const EDGE_OFFSET = 30;
 
@@ -290,6 +187,10 @@ export const resolveNamedPosition = (
       return { x: containerWidth + EDGE_OFFSET, y: containerHeight / 2 };
     case 'center':
       return { x: containerWidth / 2, y: containerHeight / 2 };
+    default: {
+      const _exhaustive: never = position;
+      return _exhaustive;
+    }
   }
 };
 
@@ -328,7 +229,9 @@ export const estimateCannonDuration = ({
 
   // Asymptotic time for the fastest upward particle to return to origin height
   // With 20% safety margin
-  const physicsTimeSec = (1 / drag + maxNormalizedSpeed / gravity) * 1.2;
+  const safeDrag = Math.max(drag, 0.001);
+  const safeGravity = Math.max(gravity, 0.001);
+  const physicsTimeSec = (1 / safeDrag + maxNormalizedSpeed / safeGravity) * 1.2;
 
   // Add spray stagger time (absolute ms) or default 20% overhead
   if (sprayDurationMs !== undefined) {
@@ -434,7 +337,7 @@ export const estimateFallingDuration = ({
   // Angle-averaged terminal velocity: as the piece tumbles, drag varies between
   // Cn (broadside) and Ct (edge-on). The time-averaged effective drag coefficient
   // is (Cn + Ct) * 4/(3π), giving a faster average fall than broadside-only.
-  const scaledGravity = gravity * containerHeight;
+  const scaledGravity = Math.max(gravity * containerHeight, 0.001);
   const Cn = 4.0 / scaledGravity;
   const Ct = Cn * DEFAULT_TANGENTIAL_DRAG_RATIO;
   const angleAvgDrag = (Cn + Ct) * (4 / (3 * Math.PI));
