@@ -47,6 +47,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       flakeStyle = 'glossy',
       initialScale = 0.3,
       flipIntensity = 0.85,
+      easing,
       sprayDuration,
       onAnimationEnd,
       onAnimationStart,
@@ -55,7 +56,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
     },
     ref
   ) => {
-    const { containerWidth, containerHeight } =
+    const { containerWidth, containerHeight, onContainerLayout, ready } =
       useContainerDimensions(containerStyle);
 
     const parentTexture = useTextureProps(textureRootProps);
@@ -155,6 +156,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         duration,
         infinite,
         fadeOutOnEnd,
+        easing,
         onAnimationStart,
         onAnimationEnd,
         fadeRange: [0.5, 0.9],
@@ -199,11 +201,12 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
     }));
 
     useEffect(() => {
+      if (!ready) return;
       runOnUI(() => {
         if (autoplay && !running.get())
           workletRestart(null, null, autoStartDelay);
       })();
-    }, [autoplay, autoStartDelay, workletRestart, running]);
+    }, [autoplay, autoStartDelay, workletRestart, running, ready]);
 
     const scaledGravity = gravity * containerHeight;
     const flightTimeSec = flightDuration / 1000;
@@ -304,10 +307,12 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
     return (
       <ConfettiCanvas
         containerStyle={containerStyle}
+        ready={ready}
         texture={texture}
         sprites={sprites}
         transforms={transforms}
         opacity={opacity}
+        onContainerLayout={onContainerLayout}
       />
     );
   }

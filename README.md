@@ -265,14 +265,15 @@ Available named positions: `top-left`, `top-center`, `top-right`, `center-left`,
 
 | Name              | Default                  | Description                                                     |
 | ----------------- | ------------------------ | --------------------------------------------------------------- |
-| `wobble`          | { min: 0.03, max: 0.08 } | Tumble/bobbing intensity.                                       |
-| `drift`           | 0.7                      | Horizontal drift (0-1).                                         |
-| `flipIntensity`   | 0.85                     | How dramatically pieces flip (0-1). Lower = flatter.            |
-| `rotation`        | N/A                      | Rotation range config.                                          |
-| `depth`           | { min: 0.8, max: 1.0 }   | 3D perspective scale range.                                     |
-| `initialScale`    | 0.3                      | Scale at spawn before growing.                                  |
-| `verticalSpacing` | 70                       | Space between rows. Lower = denser.                             |
-| `containerStyle`  | N/A                      | Style for the container. Numeric width/height used for physics. |
+| `wobble`          | { min: 0.03, max: 0.08 }  | Tumble/bobbing intensity.                                       |
+| `drift`           | 0.7                       | Horizontal drift (0-1).                                         |
+| `easing`          | Easing.bezier(0.4,0,1,1)  | Custom easing for the fall animation progress.                  |
+| `flipIntensity`   | 0.85                      | How dramatically pieces flip (0-1). Lower = flatter.            |
+| `rotation`        | N/A                       | Rotation range config.                                          |
+| `depth`           | { min: 0.8, max: 1.0 }    | 3D perspective scale range.                                     |
+| `initialScale`    | 0.3                       | Scale at spawn before growing.                                  |
+| `verticalSpacing` | 70                        | Space between rows. Lower = denser.                             |
+| `containerStyle`  | N/A                       | Style for the container. Supports any sizing (numeric, %, flex). |
 
 </details>
 
@@ -305,14 +306,15 @@ Same as `<Confetti />` except:
 
 | Name             | Default                | Description                                                     |
 | ---------------- | ---------------------- | --------------------------------------------------------------- |
-| `drag`           | 3.0                    | Air resistance. Number or `{ horizontal, vertical }`.           |
-| `sprayDuration`  | N/A                    | Stagger pieces over N ms.                                       |
+| `drag`           | 3.0                    | Air resistance. Number or `{ horizontal, vertical }`.            |
+| `sprayDuration`  | N/A                    | Stagger pieces over N ms.                                        |
 | `speedVariation` | { min: 0.0, max: 1.0 } | Default speed variation for origins.                            |
-| `flipIntensity`  | 0.85                   | How dramatically pieces flip (0-1). Lower = flatter.            |
-| `rotation`       | N/A                    | Default rotation config for origins.                            |
-| `depth`          | { min: 1, max: 1.1 }   | Default depth range for origins.                                |
-| `initialScale`   | 0.3                    | Scale at spawn before growing.                                  |
-| `containerStyle` | N/A                    | Style for the container. Numeric width/height used for physics. |
+| `easing`         | Easing.linear           | Custom easing for the animation progress.                       |
+| `flipIntensity`  | 0.85                   | How dramatically pieces flip (0-1). Lower = flatter.             |
+| `rotation`       | N/A                    | Default rotation config for origins.                             |
+| `depth`          | { min: 1, max: 1.1 }   | Default depth range for origins.                                 |
+| `initialScale`   | 0.3                    | Scale at spawn before growing.                                   |
+| `containerStyle` | N/A                    | Style for the container. Supports any sizing (numeric, %, flex). |
 
 </details>
 
@@ -360,14 +362,15 @@ Same as `<Confetti />` except:
 
 | Name             | Default                | Description                                                     |
 | ---------------- | ---------------------- | --------------------------------------------------------------- |
-| `drag`           | 3.0                    | Air resistance. Number or `{ horizontal, vertical }`.           |
-| `sprayDuration`  | 300                    | Stagger all cannons over N ms.                                  |
-| `speedVariation` | { min: 0.8, max: 1.2 } | Default speed variation for origins.                            |
-| `flipIntensity`  | 0.85                   | How dramatically pieces flip (0-1). Lower = flatter.            |
-| `rotation`       | N/A                    | Default rotation config for origins.                            |
-| `depth`          | { min: 1, max: 1.1 }   | Default depth range for origins.                                |
-| `initialScale`   | 0.3                    | Scale at spawn before growing.                                  |
-| `containerStyle` | N/A                    | Style for the container. Numeric width/height used for physics. |
+| `drag`           | 3.0                    | Air resistance. Number or `{ horizontal, vertical }`.            |
+| `sprayDuration`  | 300                    | Stagger all cannons over N ms.                                   |
+| `speedVariation` | { min: 0.8, max: 1.2 } | Default speed variation for origins.                             |
+| `easing`         | Easing.linear           | Custom easing for the animation progress.                        |
+| `flipIntensity`  | 0.85                   | How dramatically pieces flip (0-1). Lower = flatter.             |
+| `rotation`       | N/A                    | Default rotation config for origins.                              |
+| `depth`          | { min: 1, max: 1.1 }   | Default depth range for origins.                                  |
+| `initialScale`   | 0.3                    | Scale at spawn before growing.                                    |
+| `containerStyle` | N/A                    | Style for the container. Supports any sizing (numeric, %, flex).  |
 
 </details>
 

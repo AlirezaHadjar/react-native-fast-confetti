@@ -1,3 +1,4 @@
+import { Easing } from 'react-native-reanimated';
 import type {
   Rotation,
   Range,
@@ -50,9 +51,35 @@ export const DEFAULT_CONFETTI_WOBBLE: Required<Range> = {
 };
 
 export const DEFAULT_CONFETTI_DRIFT = 0.7;
+
+/** Gentle ease-in: slow start that transitions into steady falling. */
+export const DEFAULT_CONFETTI_FALL_EASING = Easing.bezier(0.4, 0, 1, 1);
 export const TRAJECTORY_SAMPLE_COUNT = 120;
 export const DEFAULT_TANGENTIAL_DRAG_RATIO = 0.25;
 export const DEFAULT_ROTATIONAL_DAMPING = 2.0;
+
+/**
+ * Maximum ratio of the offscreen spawn grid height to the container height.
+ * Prevents the grid from growing disproportionately large for small containers.
+ */
+export const MAX_GRID_HEIGHT_RATIO = 1.5;
+
+/**
+ * Base safety multiplier for the wobble margin in duration estimation.
+ * Accounts for the ODE's coupling term dissipating translational energy
+ * into rotation, which lowers effective terminal velocity.
+ */
+export const WOBBLE_MARGIN_BASE = 1.2;
+
+/**
+ * Per-unit wobble scaling factor for the duration margin.
+ */
+export const WOBBLE_MARGIN_PER_UNIT = 0.5;
+
+/**
+ * Fallback wobble value used when maxWobble is not provided.
+ */
+export const WOBBLE_MARGIN_FALLBACK = 1.5;
 
 export const DEFAULT_CANNON_ORIGIN_COUNT = 100;
 export const DEFAULT_CANNON_CONFETTI_GRAVITY = 3.0;

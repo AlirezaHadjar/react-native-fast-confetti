@@ -1,14 +1,14 @@
 import { useRef } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
-import { colors } from '../constants/colors';
-import { PIConfetti } from 'react-native-fast-confetti';
 import type { PIConfettiMethods } from 'react-native-fast-confetti';
-import { useConfettiAssets } from '../hooks/useConfettiAssets';
-import { useScreenConfig } from '../hooks/useScreenConfig';
-import { getTextureProps, getRotation } from '../utils/confettiConfig';
+import { PIConfetti } from 'react-native-fast-confetti';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
+import { colors } from '../constants/colors';
 import { textureOptions } from '../constants/config';
+import { useConfettiAssets } from '../hooks/useConfettiAssets';
+import { useScreenConfig } from '../hooks/useScreenConfig';
+import { getRotation, getTextureProps } from '../utils/confettiConfig';
 
 export default function PIScreen() {
   const piConfettiRef = useRef<PIConfettiMethods>(null);

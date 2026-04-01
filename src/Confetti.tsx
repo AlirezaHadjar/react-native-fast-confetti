@@ -1,9 +1,9 @@
 import { useRSXformBuffer } from '@shopify/react-native-skia';
 import {
+  forwardRef,
   useCallback,
   useEffect,
   useImperativeHandle,
-  forwardRef,
 } from 'react';
 import {
   Extrapolation,
@@ -11,29 +11,33 @@ import {
   runOnUI,
   useSharedValue,
 } from 'react-native-reanimated';
-import { generateFallingBoxesArray, estimateFallingDuration } from './utils';
+import { ConfettiCanvas } from './ConfettiCanvas';
 import {
   DEFAULT_BOXES_COUNT,
-  DEFAULT_VERTICAL_SPACING,
+  DEFAULT_CONFETTI_DRIFT,
+  DEFAULT_CONFETTI_FALL_EASING,
   DEFAULT_CONFETTI_GRAVITY,
   DEFAULT_CONFETTI_WOBBLE,
-  DEFAULT_CONFETTI_DRIFT,
-  RANDOM_INITIAL_Y_JIGGLE,
+  DEFAULT_VERTICAL_SPACING,
   TRAJECTORY_SAMPLE_COUNT,
 } from './constants';
+import { Flake } from './FlakeComponent';
+import { useAnimationLifecycle } from './hooks/useAnimationLifecycle';
+import { useConfettiFlakes } from './hooks/useConfettiFlakes';
+import { useConfettiLogic } from './hooks/useConfettiLogic';
+import { useContainerDimensions } from './hooks/useContainerDimensions';
+import { useTextureProps } from './hooks/useTextureProps';
 import type {
   ConfettiMethods,
   ConfettiProps,
-  InternalConfettiProps,
   FallingBox,
+  InternalConfettiProps,
 } from './types';
-import { useConfettiLogic } from './hooks/useConfettiLogic';
-import { useConfettiFlakes } from './hooks/useConfettiFlakes';
-import { useTextureProps } from './hooks/useTextureProps';
-import { useContainerDimensions } from './hooks/useContainerDimensions';
-import { useAnimationLifecycle } from './hooks/useAnimationLifecycle';
-import { ConfettiCanvas } from './ConfettiCanvas';
-import { Flake } from './FlakeComponent';
+import {
+  computeSpawnGrid,
+  estimateFallingDuration,
+  generateFallingBoxesArray,
+} from './utils';
 
 const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
   (
@@ -58,42 +62,42 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       flakeStyle = 'glossy',
       initialScale = 0.3,
       flipIntensity = 0.85,
+      easing = DEFAULT_CONFETTI_FALL_EASING,
       ...textureRootProps
     },
     ref
   ) => {
-    const { containerWidth, containerHeight } =
+    const { containerWidth, containerHeight, onContainerLayout, ready } =
       useContainerDimensions(containerStyle);
 
     const parentTexture = useTextureProps(textureRootProps);
 
     // --- Parse children + build atlas via hook ---
-    const { allColors, sizeVariations, colorOverrides, sizeIsTextured, parentColorCount } =
-      useConfettiFlakes({
-        children,
-        rootColors,
-        rootFlakeStyle: flakeStyle,
-        parentTexture,
-      });
+    const {
+      allColors,
+      sizeVariations,
+      colorOverrides,
+      sizeIsTextured,
+      parentColorCount,
+    } = useConfettiFlakes({
+      children,
+      rootColors,
+      rootFlakeStyle: flakeStyle,
+      parentTexture,
+    });
 
     // --- Compute grid layout for spawn positions ---
     const maxFlakeWidth = Math.max(...sizeVariations.map((f) => f.width));
     const maxFlakeHeight = Math.max(...sizeVariations.map((f) => f.height));
-    const horizontalSpacing = Math.max(
-      0,
-      containerWidth / count - maxFlakeWidth
-    );
-    const columnWidth = Math.min(maxFlakeWidth, 20) + horizontalSpacing;
-    const rowHeight = Math.min(maxFlakeHeight, 20) + verticalSpacing;
-    const columnsNum = Math.floor(containerWidth / columnWidth);
-    const rowsNum = Math.ceil(count / columnsNum);
-    const baseVerticalOffset = maxFlakeHeight * 0.5;
-    const verticalOffset =
-      -rowsNum * rowHeight +
-      verticalSpacing -
-      RANDOM_INITIAL_Y_JIGGLE -
-      baseVerticalOffset -
-      verticalSpacing / 2;
+    const { columnsNum, columnWidth, rowsNum, verticalOffset } =
+      computeSpawnGrid({
+        count,
+        maxFlakeWidth,
+        maxFlakeHeight,
+        containerWidth,
+        containerHeight,
+        verticalSpacing,
+      });
 
     // --- Auto-compute duration from physics ---
     const maxWobble = wobble?.max ?? DEFAULT_CONFETTI_WOBBLE.max;
@@ -116,6 +120,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
         duration,
         infinite,
         fadeOutOnEnd,
+        easing,
         onAnimationStart,
         onAnimationEnd,
         onCycleEnd,
@@ -150,6 +155,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
         maxFlakeHeight,
         verticalOffset,
         columnsNum,
+        columnWidth,
         rowsNum,
         rotation,
         depth,
@@ -176,6 +182,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       maxFlakeHeight,
       verticalOffset,
       columnsNum,
+      columnWidth,
       rowsNum,
       rotation,
       depth,
@@ -208,10 +215,11 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
     }));
 
     useEffect(() => {
+      if (!ready) return;
       runOnUI(() => {
         if (autoplay && !running.get()) restart(autoStartDelay);
       })();
-    }, [autoplay, autoStartDelay, restart, running]);
+    }, [autoplay, autoStartDelay, restart, running, ready]);
 
     const maxIdx = TRAJECTORY_SAMPLE_COUNT;
     const transforms = useRSXformBuffer(count, (val, i) => {
@@ -285,10 +293,12 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
     return (
       <ConfettiCanvas
         containerStyle={containerStyle}
+        ready={ready}
         texture={texture}
         sprites={sprites}
         transforms={transforms}
         opacity={opacity}
+        onContainerLayout={onContainerLayout}
       />
     );
   }

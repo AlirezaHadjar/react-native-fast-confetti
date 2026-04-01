@@ -60,11 +60,12 @@ const CannonConfettiInner = forwardRef<
       initialScale = 0.3,
       flipIntensity = 0.85,
       flakeStyle = 'glossy',
+      easing,
       ...textureRootProps
     },
     ref
   ) => {
-    const { containerWidth, containerHeight } =
+    const { containerWidth, containerHeight, onContainerLayout, ready } =
       useContainerDimensions(containerStyle);
 
     const parentTexture = useTextureProps(textureRootProps);
@@ -99,9 +100,11 @@ const CannonConfettiInner = forwardRef<
     // --- Auto-compute duration from physics ---
     const duration = estimateCannonDuration({
       cannonConfigs,
+      cannonsPositions,
       gravity,
       drag: vDrag,
       sprayDurationMs: sprayDuration,
+      containerHeight,
     });
 
     // --- Compute launch delay max from sprayDuration ---
@@ -165,6 +168,7 @@ const CannonConfettiInner = forwardRef<
         duration,
         infinite,
         fadeOutOnEnd,
+        easing,
         onAnimationStart,
         onAnimationEnd,
         onCycleEnd: refreshBoxes,
@@ -259,11 +263,12 @@ const CannonConfettiInner = forwardRef<
     }));
 
     useEffect(() => {
+      if (!ready) return;
       runOnUI(() => {
         if (autoplay && !running.get())
           workletRestart(null, null, autoStartDelay);
       })();
-    }, [autoplay, autoStartDelay, workletRestart, running]);
+    }, [autoplay, autoStartDelay, workletRestart, running, ready]);
 
     // Physics constants scaled to container height
     const scaledGravity = gravity * containerHeight;
@@ -345,10 +350,12 @@ const CannonConfettiInner = forwardRef<
     return (
       <ConfettiCanvas
         containerStyle={containerStyle}
+        ready={ready}
         texture={texture}
         sprites={sprites}
         transforms={transforms}
         opacity={opacity}
+        onContainerLayout={onContainerLayout}
       />
     );
   }

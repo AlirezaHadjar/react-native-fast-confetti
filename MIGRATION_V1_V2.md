@@ -153,9 +153,9 @@ v2 (flake-level — per flake, overrides parent):
 | `cannonsPositions`                 | `<CannonConfetti.Origin position={...}>` children             |
 | `randomSpeed`                      | `speedVariation` (on PIConfetti / CannonConfetti)             |
 | `randomOffset`                     | Removed (handled by physics)                                  |
-| `easing` / `fallEasing`            | Removed (physics-based timing)                                |
-| `type` / `flakeImage` / `flakeSvg` | `image` or `svg` on `<*.Flake>` children                     |
-| `width` / `height`                 | Set via `containerStyle` (numeric values used for physics)    |
+| `easing` / `fallEasing`            | `easing` prop (defaults to ease-in for Confetti, linear for others) |
+| `type` / `flakeImage` / `flakeSvg` | `image` or `svg` on `<*.Flake>` children                           |
+| `width` / `height`                 | Set via `containerStyle` (supports numeric, %, flex sizing)         |
 
 ## New v2 props
 
@@ -169,4 +169,5 @@ v2 (flake-level — per flake, overrides parent):
 | `initialScale`   | All                              | The scale particles start at before animating to full size.                                     |
 | `flakeStyle`     | All                              | Visual style of default flakes: `'solid'` or `'glossy'` (adds a gradient highlight).            |
 | `sprayDuration`  | `PIConfetti`, `CannonConfetti`   | Duration in milliseconds over which confetti pieces are staggered at launch.                    |
+| `easing`         | All                              | Custom easing for animation progress. Gentle ease-in for Confetti, linear for others.           |
 | `drag`           | `PIConfetti`, `CannonConfetti`   | Air resistance. Number or `{ horizontal, vertical }` for separate axes.                         |

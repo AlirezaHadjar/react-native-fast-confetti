@@ -1,13 +1,15 @@
 import { useCallback } from 'react';
 import {
   cancelAnimation,
+  Easing,
+  type EasingFunction,
+  type EasingFunctionFactory,
   Extrapolation,
   interpolate,
   useDerivedValue,
   useSharedValue,
-  withTiming,
   withDelay,
-  Easing,
+  withTiming,
 } from 'react-native-reanimated';
 import { useAnimationCallbacks } from './useAnimationCallbacks';
 
@@ -15,6 +17,7 @@ type UseAnimationLifecycleParams = {
   duration: number;
   infinite: boolean;
   fadeOutOnEnd: boolean;
+  easing?: EasingFunction | EasingFunctionFactory;
   onAnimationStart?: () => void;
   onAnimationEnd?: () => void;
   /** Opacity fade interpolation input range. @default [0.8, 1] */
@@ -27,6 +30,7 @@ export const useAnimationLifecycle = ({
   duration,
   infinite,
   fadeOutOnEnd,
+  easing: easingProp = Easing.linear,
   onAnimationStart,
   onAnimationEnd,
   fadeRange = [0.8, 1],
@@ -73,7 +77,7 @@ export const useAnimationLifecycle = ({
           cancelAnimation(progress);
           progress.set(0);
           progress.set(
-            withTiming(1, { duration, easing: Easing.linear }, (finished) => {
+            withTiming(1, { duration, easing: easingProp }, (finished) => {
               'worklet';
               if (!finished || !infinite) return;
               repeatAnimation();
@@ -84,7 +88,7 @@ export const useAnimationLifecycle = ({
 
       const animation = withTiming(
         1,
-        { duration, easing: Easing.linear },
+        { duration, easing: easingProp },
         (finished) => {
           'worklet';
           if (!finished || !infinite) {
@@ -97,7 +101,7 @@ export const useAnimationLifecycle = ({
 
       progress.set(delay > 0 ? withDelay(delay, animation) : animation);
     },
-    [progress, running, UIOnStart, UIOnEnd, onCycleEnd, infinite, duration]
+    [progress, running, UIOnStart, UIOnEnd, onCycleEnd, infinite, duration, easingProp]
   );
 
   const resume = useCallback(() => {
@@ -115,7 +119,7 @@ export const useAnimationLifecycle = ({
         cancelAnimation(progress);
         progress.set(0);
         progress.set(
-          withTiming(1, { duration, easing: Easing.linear }, (finished) => {
+          withTiming(1, { duration, easing: easingProp }, (finished) => {
             'worklet';
             if (!finished || !infinite) return;
             repeatAnimation();
@@ -127,7 +131,7 @@ export const useAnimationLifecycle = ({
     progress.set(
       withTiming(
         1,
-        { duration: remaining, easing: Easing.linear },
+        { duration: remaining, easing: easingProp },
         (finished) => {
           'worklet';
           if (!finished || !infinite) {
@@ -138,7 +142,7 @@ export const useAnimationLifecycle = ({
         }
       )
     );
-  }, [running, progress, duration, UIOnEnd, onCycleEnd, infinite]);
+  }, [running, progress, duration, UIOnEnd, onCycleEnd, infinite, easingProp]);
 
   return {
     progress,

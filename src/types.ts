@@ -1,6 +1,10 @@
-import type React from 'react';
 import type { SkImage, SkSVG } from '@shopify/react-native-skia';
+import type React from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
+import type {
+  EasingFunction,
+  EasingFunctionFactory,
+} from 'react-native-reanimated';
 
 type StrictOmit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
 
@@ -142,6 +146,10 @@ type ConfettiBaseProps = {
    * @default 0.85
    */
   flipIntensity?: number;
+  /**
+   * @description Custom easing function for the animation progress.
+   */
+  easing?: EasingFunction | EasingFunctionFactory;
 };
 
 export type ConfettiProps = ConfettiBaseProps & FlakeTexture;
@@ -301,6 +309,10 @@ type BurstConfettiBaseProps = {
    * @default 0.85
    */
   flipIntensity?: number;
+  /**
+   * @description Custom easing function for the animation progress.
+   */
+  easing?: EasingFunction | EasingFunctionFactory;
 };
 
 type PIConfettiBaseProps = BurstConfettiBaseProps;

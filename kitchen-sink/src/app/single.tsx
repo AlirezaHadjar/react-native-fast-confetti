@@ -1,14 +1,14 @@
 import { useRef } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
-import { colors } from '../constants/colors';
-import { Confetti } from 'react-native-fast-confetti';
 import type { ConfettiMethods } from 'react-native-fast-confetti';
-import { useConfettiAssets } from '../hooks/useConfettiAssets';
-import { useScreenConfig } from '../hooks/useScreenConfig';
-import { getTextureProps, getRotation } from '../utils/confettiConfig';
+import { Confetti } from 'react-native-fast-confetti';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
+import { colors } from '../constants/colors';
 import { textureOptions, verticalSpacingOptions } from '../constants/config';
+import { useConfettiAssets } from '../hooks/useConfettiAssets';
+import { useScreenConfig } from '../hooks/useScreenConfig';
+import { getRotation, getTextureProps } from '../utils/confettiConfig';
 
 export default function SingleScreen() {
   const confettiRef = useRef<ConfettiMethods>(null);
