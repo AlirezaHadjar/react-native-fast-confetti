@@ -77,7 +77,7 @@ export const useAnimationLifecycle = ({
           cancelAnimation(progress);
           progress.set(0);
           progress.set(
-            withTiming(1, { duration, easing: easingProp }, (finished) => {
+            withTiming(1, { duration, easing: Easing.linear }, (finished) => {
               'worklet';
               if (!finished || !infinite) return;
               repeatAnimation();
@@ -101,7 +101,16 @@ export const useAnimationLifecycle = ({
 
       progress.set(delay > 0 ? withDelay(delay, animation) : animation);
     },
-    [progress, running, UIOnStart, UIOnEnd, onCycleEnd, infinite, duration, easingProp]
+    [
+      progress,
+      running,
+      UIOnStart,
+      UIOnEnd,
+      onCycleEnd,
+      infinite,
+      duration,
+      easingProp,
+    ]
   );
 
   const resume = useCallback(() => {
@@ -119,7 +128,7 @@ export const useAnimationLifecycle = ({
         cancelAnimation(progress);
         progress.set(0);
         progress.set(
-          withTiming(1, { duration, easing: easingProp }, (finished) => {
+          withTiming(1, { duration, easing: Easing.linear }, (finished) => {
             'worklet';
             if (!finished || !infinite) return;
             repeatAnimation();
@@ -129,18 +138,14 @@ export const useAnimationLifecycle = ({
     }
 
     progress.set(
-      withTiming(
-        1,
-        { duration: remaining, easing: easingProp },
-        (finished) => {
-          'worklet';
-          if (!finished || !infinite) {
-            if (finished) UIOnEnd();
-            return;
-          }
-          repeatAnimation();
+      withTiming(1, { duration: remaining, easing: easingProp }, (finished) => {
+        'worklet';
+        if (!finished || !infinite) {
+          if (finished) UIOnEnd();
+          return;
         }
-      )
+        repeatAnimation();
+      })
     );
   }, [running, progress, duration, UIOnEnd, onCycleEnd, infinite, easingProp]);
 
