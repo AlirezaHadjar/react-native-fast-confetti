@@ -217,9 +217,15 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
     useEffect(() => {
       if (!ready) return;
       runOnUI(() => {
-        if (autoplay && !running.get()) restart(autoStartDelay);
+        if (!running.get()) {
+          if (autoplay) {
+            restart(autoStartDelay);
+          } else {
+            refreshBoxes();
+          }
+        }
       })();
-    }, [autoplay, autoStartDelay, restart, running, ready]);
+    }, [autoplay, autoStartDelay, restart, refreshBoxes, running, ready]);
 
     const maxIdx = TRAJECTORY_SAMPLE_COUNT;
     const transforms = useRSXformBuffer(count, (val, i) => {
