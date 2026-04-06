@@ -172,6 +172,7 @@ ref.current?.reset();
 
 ## Custom Textures
 
+
 <table width="100%">
   <tr>
     <th align="center" width="50%">Money Stack</th>
@@ -182,7 +183,7 @@ ref.current?.reset();
       <video src="https://github.com/user-attachments/assets/614244b9-7961-40be-b33e-9baaccdb959d" width="100%" autoplay loop muted></video>
     </td>
     <td align="center" width="50%">
-      <video src="https://github.com/user-attachments/assets/26e3b63c-4e80-4cf4-8400-ab168690b080" width="100%" autoplay loop muted></video>
+      <video src="https://github.com/user-attachments/assets/72dafb09-2c2e-422c-ad81-4967117844f7" width="100%" autoplay loop muted></video>
     </td>
   </tr>
 </table>
