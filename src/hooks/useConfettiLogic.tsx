@@ -23,6 +23,7 @@ export const useConfettiLogic = <T extends MinimalBox>({
   colors,
   boxes,
   textureProps,
+  count,
 }: {
   colors: Strict<ConfettiProps['colors']>;
   boxes: SharedValue<T[]>;
@@ -40,6 +41,7 @@ export const useConfettiLogic = <T extends MinimalBox>({
         type: 'svg';
         content: SkSVG;
       };
+  count?: number;
 }) => {
   const maxWidth = Math.max(...sizeVariations.map((size) => size.width));
   const maxHeight = Math.max(...sizeVariations.map((size) => size.height));
@@ -93,17 +95,28 @@ export const useConfettiLogic = <T extends MinimalBox>({
   );
 
   const sprites = useDerivedValue(() => {
-    return boxes.get().map((box) => {
-      const colorIndex = box.colorIndex;
-      const sizeIndex = box.sizeIndex;
-      const size = sizeVariations[sizeIndex]!;
-      return rect(
-        sizeIndex * maxWidth,
-        colorIndex * maxHeight,
+    const current = boxes.get();
+    const n = count ?? current.length;
+    const result = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const box = current[i];
+      if (!box) {
+        result[i] = rect(0, 0, 0, 0);
+        continue;
+      }
+      const size = sizeVariations[box.sizeIndex];
+      if (!size) {
+        result[i] = rect(0, 0, 0, 0);
+        continue;
+      }
+      result[i] = rect(
+        box.sizeIndex * maxWidth,
+        box.colorIndex * maxHeight,
         size.width,
         size.height
       );
-    });
+    }
+    return result;
   });
 
   return {

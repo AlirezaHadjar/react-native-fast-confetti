@@ -189,6 +189,7 @@ const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
       sizeVariations,
       colors,
       boxes,
+      count,
       textureProps:
         flakeProps.type === 'image' && flakeProps.flakeImage
           ? { type: 'image', content: flakeProps.flakeImage }
