@@ -15,6 +15,7 @@
     "experiments": {
       "reactCompiler": true
     },
+    "plugins": ["./plugins/withFmtConstevalFix"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "fastconfetti.example"
