@@ -98,6 +98,7 @@ const PIConfetti = forwardRef<PIConfettiMethods, PIConfettiProps>(
       sizeVariations,
       colors,
       boxes,
+      count,
       textureProps:
         flakeProps.type === 'image' && flakeProps.flakeImage
           ? { type: 'image', content: flakeProps.flakeImage }
