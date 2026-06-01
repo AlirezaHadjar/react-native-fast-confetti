@@ -27,6 +27,7 @@ The fastest confetti animation library for React Native, powered by Skia Atlas A
 
 > [!IMPORTANT]
 > This library depends on [react-native-reanimated](https://github.com/software-mansion/react-native-reanimated), [@shopify/react-native-skia](https://github.com/Shopify/react-native-skia), and [react-native-worklets](https://docs.swmansion.com/react-native-worklets). Make sure to install those first.
+> The optional GPU components also require [react-native-wgpu](https://github.com/wcandillon/react-native-webgpu).
 
 ```sh
 yarn add react-native-fast-confetti
@@ -82,6 +83,30 @@ import { ContinuousConfetti } from 'react-native-fast-confetti';
 
   </tr>
 </table>
+
+### `<GPUConfetti />`
+
+GPU-accelerated falling confetti powered by WebGPU compute and render shaders. It supports the same falling confetti API as `<Confetti />` and adds wind, motion blur, sensor-driven gravity, and procedural material modes.
+
+```tsx
+import { GPUConfetti } from 'react-native-fast-confetti/webgpu';
+
+<GPUConfetti
+  autoplay
+  infinite
+  windStrength={0.8}
+  magnusStrength={0.004}
+  motionBlurAmount={0.35}
+  textureMode={4}
+>
+  <GPUConfetti.Flake size={12} radius={6} />
+  <GPUConfetti.Flake width={8} height={14} />
+</GPUConfetti>;
+```
+
+### `<GPUContinuousConfetti />`
+
+A WebGPU-backed continuous stream. It mirrors `<ContinuousConfetti />` and accepts the same GPU-only props as `<GPUConfetti />`.
 
 ### `<PIConfetti />`
 
@@ -285,6 +310,20 @@ Same as `<Confetti />` except:
 - No `infinite` prop (always infinite)
 - No `onAnimationEnd` or `fadeOutOnEnd` props (animation never ends)
 - `verticalSpacing` defaults to `200`
+
+### GPU Props
+
+`<GPUConfetti />` accepts the same props as `<Confetti />`. `<GPUContinuousConfetti />` accepts the same props as `<ContinuousConfetti />`.
+
+| Name               | Default | Description                                                                  |
+| ------------------ | ------- | ---------------------------------------------------------------------------- |
+| `windStrength`     | 0.8     | Strength of the procedural wind field.                                       |
+| `magnusStrength`   | 0.004   | Strength of spin-driven lateral force.                                       |
+| `motionBlurAmount` | 0       | Velocity-aligned stretch amount.                                             |
+| `iridescence`      | 0.15    | Shader rim-color intensity.                                                  |
+| `textureMode`      | 0       | Procedural material: default, wood, rubber, gold, holographic, marble, neon, glass. |
+| `autoRestart`      | true    | Auto-reseed after the estimated cycle duration.                              |
+| `gravityDir`       | N/A     | Optional Reanimated shared value `[x, y, z]` for sensor-driven gravity.       |
 
 ### `<PIConfetti />` Props
 

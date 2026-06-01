@@ -12,6 +12,10 @@ module.exports = defineConfig([
       '@typescript-eslint/no-shadow': 'off',
       'react/react-in-jsx-scope': 'off',
       'curly': 'off',
+      'import/no-unresolved': [
+        'error',
+        { ignore: ['^react-native-fast-confetti/webgpu$'] },
+      ],
       'react-compiler/react-compiler': 'error',
     },
   },

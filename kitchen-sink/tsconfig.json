@@ -4,7 +4,8 @@
   "compilerOptions": {
     "lib": ["ESNext", "DOM"],
     "paths": {
-      "react-native-fast-confetti": ["../src/index"]
+      "react-native-fast-confetti": ["../src/index"],
+      "react-native-fast-confetti/webgpu": ["../src/webgpu/index"]
     }
   }
 }
