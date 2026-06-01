@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "react-native-best-practices": {
+      "source": "software-mansion-labs/skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-native-best-practices/SKILL.md",
+      "computedHash": "37bd8599a1d4a8ee8bd0e3a6f416f32c7a1f26491a8142d7acab0a9e995e4f1a"
+    },
+    "typegpu": {
+      "source": "software-mansion-labs/skills",
+      "sourceType": "github",
+      "skillPath": "skills/typegpu/SKILL.md",
+      "computedHash": "d13ead73f47b890ea3e94e6b7f85d08412a7acf41f333da1f75341b8d5ea7b4e"
+    }
+  }
+}
