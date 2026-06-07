@@ -21,9 +21,9 @@
     "!**/.*"
   ],
   "scripts": {
-    "example": "yarn workspace react-native-fast-confetti-example",
-    "kitchen-sink": "yarn workspace react-native-fast-confetti-kitchen-sink",
-    "test": "jest",
+    "example": "bun --cwd example run",
+    "kitchen-sink": "bun --cwd kitchen-sink run",
+    "test": "jest --passWithNoTests",
     "typecheck": "tsc",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "clean": "del-cli lib",

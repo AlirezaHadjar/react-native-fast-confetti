@@ -6,19 +6,19 @@ We want this community to be friendly and respectful to each other. Please follo
 
 ## Development workflow
 
-This project is a monorepo managed using [Yarn workspaces](https://yarnpkg.com/features/workspaces). It contains the following packages:
+This project is a monorepo managed using [Bun workspaces](https://bun.sh/docs/install/workspaces). It contains the following packages:
 
 - The library package in the root directory.
 - A minimal example app in the `example/` directory.
 - A full-featured kitchen-sink app in the `kitchen-sink/` directory.
 
-To get started with the project, run `yarn` in the root directory to install the required dependencies for each package:
+To get started with the project, run `bun install` in the root directory to install the required dependencies for each package:
 
 ```sh
-yarn
+bun install
 ```
 
-> Since the project relies on Yarn workspaces, you cannot use [`npm`](https://github.com/npm/cli) for development.
+> Since the project relies on Bun workspaces, you cannot use [`npm`](https://github.com/npm/cli) for development.
 
 The [example app](/example/) demonstrates basic usage of the library. The [kitchen-sink app](/kitchen-sink/) is a full-featured showcase. You need to run one of them to test any changes you make.
 
@@ -29,44 +29,44 @@ You can use various commands from the root directory to work with the project.
 To start the packager:
 
 ```sh
-yarn example start
+bun run example start
 ```
 
 To run the example app on Android:
 
 ```sh
-yarn example android
+bun run example android
 ```
 
 To run the example app on iOS:
 
 ```sh
-yarn example ios
+bun run example ios
 ```
 
 To run the example app on Web:
 
 ```sh
-yarn example web
+bun run kitchen-sink web
 ```
 
 Make sure your code passes TypeScript and ESLint. Run the following to verify:
 
 ```sh
-yarn typecheck
-yarn lint
+bun run typecheck
+bun run lint
 ```
 
 To fix formatting errors, run the following:
 
 ```sh
-yarn lint --fix
+bun run lint --fix
 ```
 
 Remember to add tests for your change if possible. Run the unit tests by:
 
 ```sh
-yarn test
+bun run test
 ```
 
 ### Commit message convention
@@ -97,23 +97,23 @@ We use [release-it](https://github.com/release-it/release-it) to make it easier 
 To publish new versions, run the following:
 
 ```sh
-yarn release
+bun run release
 ```
 
 ### Scripts
 
 The `package.json` file contains various scripts for common tasks:
 
-- `yarn`: setup project by installing dependencies.
-- `yarn typecheck`: type-check files with TypeScript.
-- `yarn lint`: lint files with ESLint.
-- `yarn test`: run unit tests with Jest.
-- `yarn example start`: start the Metro server for the example app.
-- `yarn example android`: run the example app on Android.
-- `yarn example ios`: run the example app on iOS.
-- `yarn kitchen-sink start`: start the Metro server for the kitchen-sink app.
-- `yarn kitchen-sink android`: run the kitchen-sink app on Android.
-- `yarn kitchen-sink ios`: run the kitchen-sink app on iOS.
+- `bun install`: setup project by installing dependencies.
+- `bun run typecheck`: type-check files with TypeScript.
+- `bun run lint`: lint files with ESLint.
+- `bun run test`: run unit tests with Jest.
+- `bun run example start`: start the Metro server for the example app.
+- `bun run example android`: run the example app on Android.
+- `bun run example ios`: run the example app on iOS.
+- `bun run kitchen-sink start`: start the Metro server for the kitchen-sink app.
+- `bun run kitchen-sink android`: run the kitchen-sink app on Android.
+- `bun run kitchen-sink ios`: run the kitchen-sink app on iOS.
 
 ### Sending a pull request
 
