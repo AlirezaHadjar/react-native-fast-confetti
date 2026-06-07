@@ -7,7 +7,12 @@ export function ModeCard({ item, styles }: ModeCardProps) {
 
   return (
     <Link href={`/${item.key}`} asChild>
-      <Pressable style={styles.card}>
+      <Pressable
+        accessibilityLabel={item.title}
+        accessibilityRole="button"
+        testID={`mode-card-${item.key}`}
+        style={styles.card}
+      >
         <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
           {isFocused ? item.render() : null}
         </View>

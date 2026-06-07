@@ -66,6 +66,7 @@
     "@react-native/jest-preset": "0.85.3",
     "@release-it/conventional-changelog": "^10.0.6",
     "@shopify/react-native-skia": "2.6.2",
+    "@typegpu/react": "0.11.1",
     "@types/jest": "^30.0.0",
     "@types/react": "^19.2.0",
     "@webgpu/types": "^0.1.69",
@@ -93,6 +94,7 @@
   },
   "peerDependencies": {
     "@shopify/react-native-skia": "*",
+    "@typegpu/react": "*",
     "react": "*",
     "react-native": "*",
     "react-native-reanimated": "*",
@@ -101,6 +103,9 @@
     "react-native-worklets": "*"
   },
   "peerDependenciesMeta": {
+    "@typegpu/react": {
+      "optional": true
+    },
     "typegpu": {
       "optional": true
     },

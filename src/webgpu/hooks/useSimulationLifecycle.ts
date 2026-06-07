@@ -1,11 +1,9 @@
 import { useCallback } from 'react';
-import {
-  useFrameCallback,
-  useSharedValue,
-} from 'react-native-reanimated';
+import { useFrameCallback, useSharedValue } from 'react-native-reanimated';
 
 type Params = {
   fadeOutOnEnd?: boolean;
+  enabled?: boolean;
 };
 
 /**
@@ -15,7 +13,7 @@ type Params = {
  * Callers (Confetti.tsx) decide when to end a "cycle" — typically when the
  * GPU alive-counter reports that every piece has left the viewport.
  */
-export const useSimulationLifecycle = (_: Params = {}) => {
+export const useSimulationLifecycle = ({ enabled = true }: Params = {}) => {
   const elapsed = useSharedValue(0);
   const running = useSharedValue(false);
   const cycleCount = useSharedValue(0);
@@ -24,12 +22,13 @@ export const useSimulationLifecycle = (_: Params = {}) => {
 
   useFrameCallback((fi) => {
     'worklet';
+    if (!enabled) return;
     if (!running.get()) return;
     const dtMs = fi.timeSincePreviousFrame ?? 16.7;
     // Guard against huge dt on first frame after pause/mount.
     const dt = Math.min(dtMs / 1000, 1 / 30);
     elapsed.set(elapsed.get() + dt);
-  }, true);
+  }, enabled);
 
   const pause = useCallback(() => {
     'worklet';

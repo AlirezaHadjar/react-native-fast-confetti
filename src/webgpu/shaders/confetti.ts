@@ -7,7 +7,7 @@ import {
   type TgpuRoot,
 } from 'typegpu';
 
-export const TESS = 6;
+export const TESS = 1;
 export const VERTS_PER_FLAKE = TESS * TESS * 6;
 
 export const UniformsSchema = d.struct({
@@ -382,7 +382,10 @@ export const confettiCompute = tgpu.computeFn({
     return;
   }
 
-  if (u.continuous > 0.5 && rt.pos.y > u.viewport.y + 128) {
+  if (
+    (u.continuous > 0.5 || u.infinite > 0.5) &&
+    rt.pos.y > u.viewport.y + 128
+  ) {
     rt = RuntimeSchema({
       pos: d.vec3f(spawn.pos0),
       life: d.f32(0),
@@ -406,8 +409,14 @@ export const confettiCompute = tgpu.computeFn({
   );
   const fDrag = qRot(rt.quat, fBody);
 
-  const fMagnus = magnusK * u.magnusStrength * std.cross(rt.omega, rt.vel);
-  const fWind = windField(rt.pos, u.time) * u.windStrength;
+  let fMagnus = d.vec3f(0);
+  if (u.magnusStrength > 0.001) {
+    fMagnus = magnusK * u.magnusStrength * std.cross(rt.omega, rt.vel);
+  }
+  let fWind = d.vec3f(0);
+  if (u.windStrength > 0.001) {
+    fWind = windField(rt.pos, u.time) * u.windStrength;
+  }
   const fGravity = u.gravityDir * u.gravityMag;
   const accel = fGravity + fDrag + fMagnus + fWind;
 
@@ -609,12 +618,16 @@ export const confettiFragment = tgpu.fragmentFn({
   const insideMask = 1 - std.smoothstep(-aa, aa, dist);
   const maskAlpha = std.mix(1, insideMask, radiusActive);
 
-  const texColor = std.textureSample(
-    renderLayout.$.textures,
-    renderLayout.$.sampler,
-    input.uv,
-    d.i32(input.flagsAndLayer.y)
-  );
+  let texColor = d.vec4f(1);
+  if (isTextured) {
+    texColor = std.textureSampleLevel(
+      renderLayout.$.textures,
+      renderLayout.$.sampler,
+      input.uv,
+      d.i32(input.flagsAndLayer.y),
+      0
+    );
+  }
   const paletteRgb = input.color.rgb;
   const texAlpha = std.select(d.f32(1), texColor.a, isTextured);
 

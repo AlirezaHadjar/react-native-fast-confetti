@@ -17,6 +17,12 @@ export const engineOptions: DropdownOption<EngineType>[] = [
   { label: 'WebGPU', value: 'webgpu' },
 ];
 
+export const fallingEngineOptions: DropdownOption<EngineType>[] = [
+  ...engineOptions,
+];
+
+export const isGpuEngine = (engineType: EngineType) => engineType === 'webgpu';
+
 export const verticalSpacingOptions: DropdownOption<number>[] = [
   { label: 'V. Dense', value: 5 },
   { label: 'Dense', value: 20 },

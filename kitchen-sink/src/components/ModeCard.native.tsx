@@ -20,7 +20,12 @@ export function ModeCard({ item, styles }: ModeCardProps) {
   return (
     <Link href={`/${item.key}`} asChild>
       <Link.AppleZoom>
-        <Pressable style={styles.card}>
+        <Pressable
+          accessibilityLabel={item.title}
+          accessibilityRole="button"
+          testID={`mode-card-${item.key}`}
+          style={styles.card}
+        >
           <BlurTargetView ref={blurTargetRef} style={StyleSheet.absoluteFill}>
             <View
               style={[

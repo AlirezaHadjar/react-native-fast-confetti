@@ -7,7 +7,8 @@ import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
 import {
-  engineOptions,
+  fallingEngineOptions,
+  isGpuEngine,
   textureOptions,
   verticalSpacingOptions,
 } from '../constants/config';
@@ -24,7 +25,7 @@ export default function SingleScreen() {
 
   const rotation = getRotation(config.textureType, 'single');
   const confettiKey = `single-${config.textureType}-${config.verticalSpacing}`;
-  const isGpu = config.engineType === 'webgpu';
+  const isGpu = isGpuEngine(config.engineType);
 
   const textureProps = getTextureProps(
     config.textureType,
@@ -54,7 +55,7 @@ export default function SingleScreen() {
       <View style={styles.controls}>
         <ConfigDropdown
           label="Engine:"
-          data={engineOptions}
+          data={fallingEngineOptions}
           value={config.engineType}
           onChange={(v) => updateConfig({ engineType: v })}
         />

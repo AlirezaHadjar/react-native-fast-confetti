@@ -3,10 +3,13 @@ import type { LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
 import { PixelRatio, StyleSheet, View } from 'react-native';
 import {
   Easing,
+  useFrameCallback,
+  useSharedValue,
   type EasingFunction,
   type EasingFunctionFactory,
   type SharedValue,
 } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import {
   Canvas,
   useDevice,
@@ -27,6 +30,7 @@ import {
   type ConfettiResources,
 } from './hooks/useConfettiResources';
 import {
+  UNIFORMS_BYTES,
   VERTS_PER_FLAKE,
   createConfettiPipelines,
 } from './shaders/confetti';
@@ -55,6 +59,7 @@ type Props = {
   spawns: Spawn[] | null;
   cycleDuration: number;
   elapsed: SharedValue<number>;
+  running: SharedValue<boolean>;
   cycleCount: SharedValue<number>;
   opacity: SharedValue<number>;
   drift: number;
@@ -69,11 +74,30 @@ type Props = {
   onAllOffScreen: () => void;
 };
 
-const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+type RawFrameState = {
+  device: GPUDevice;
+  context: GPUCanvasContext & { present?: () => void };
+  uniformBuffer: GPUBuffer;
+  computePipeline: GPUComputePipeline;
+  renderPipeline: GPURenderPipeline;
+  computeBindGroup: GPUBindGroup;
+  renderBindGroup: GPUBindGroup;
+  workgroupCount: number;
+  count: number;
+  focalLength: number;
+  viewportWidth: number;
+  viewportHeight: number;
+};
+
+const clamp01 = (value: number) => {
+  'worklet';
+  return Math.max(0, Math.min(1, value));
+};
 
 const resolveEasing = (
   easing: EasingFunction | EasingFunctionFactory
 ): EasingFunction => {
+  'worklet';
   if (typeof easing === 'function') return easing;
   return easing.factory();
 };
@@ -86,7 +110,7 @@ export const GPUConfettiCanvas = ({
   allColors,
   spawns,
   cycleDuration,
-  elapsed,
+  running,
   cycleCount,
   opacity,
   drift,
@@ -103,15 +127,27 @@ export const GPUConfettiCanvas = ({
   const { device } = useDevice();
   const canvasRef = useRef<CanvasRef>(null);
   const [resources, setResources] = useState<ConfettiResources | null>(null);
+  const [rawFrameState, setRawFrameState] = useState<RawFrameState | null>(
+    null
+  );
+  const uniformDataRef = useRef(
+    new Float32Array(UNIFORMS_BYTES / Float32Array.BYTES_PER_ELEMENT)
+  );
   const latestSpawnsRef = useRef<Spawn[] | null>(null);
   const latestCycleDurationRef = useRef(cycleDuration);
+  const elapsed = useSharedValue(0);
+  const lastSimSeconds = useSharedValue(0);
+  const wasRunning = useSharedValue(false);
 
   const hasSpawns = spawns !== null;
 
   useEffect(() => {
     latestSpawnsRef.current = spawns;
     latestCycleDurationRef.current = cycleDuration;
-  }, [spawns, cycleDuration]);
+    elapsed.set(0);
+    lastSimSeconds.set(0);
+    wasRunning.set(false);
+  }, [spawns, cycleDuration, elapsed, lastSimSeconds, wasRunning]);
 
   useEffect(() => {
     const currentSpawns = latestSpawnsRef.current;
@@ -155,10 +191,20 @@ export const GPUConfettiCanvas = ({
   }, []);
 
   useEffect(() => {
-    if (!device || !resources) return;
-    if (viewportWidth <= 0 || viewportHeight <= 0) return;
+    if (!device || !resources) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- WebGPU context availability controls the UI-thread frame callback closure.
+      setRawFrameState(null);
+      return;
+    }
+    if (viewportWidth <= 0 || viewportHeight <= 0) {
+      setRawFrameState(null);
+      return;
+    }
     const context = canvasRef.current?.getContext('webgpu');
-    if (!context) return;
+    if (!context) {
+      setRawFrameState(null);
+      return;
+    }
 
     const canvas = context.canvas as unknown as NativeCanvas;
     const dpr = PixelRatio.get();
@@ -177,148 +223,153 @@ export const GPUConfettiCanvas = ({
       presentationFormat
     );
 
-    let rafId: number | null = null;
-    let stopped = false;
-    const easing = resolveEasing(params.easing ?? Easing.linear);
-    const getSimulationSeconds = (rawElapsed: number) => {
-      if (continuous) return rawElapsed;
-      if (cycleDuration <= 0) return rawElapsed;
-      return easing(clamp01(rawElapsed / cycleDuration)) * cycleDuration;
-    };
-    let lastSimSeconds = getSimulationSeconds(elapsed.get());
-    let simSecondsAtLastRestart = elapsed.get();
-    const focalLength = Math.max(
-      100,
-      viewportHeight * DEFAULT_FOCAL_LENGTH_RATIO
-    );
-
-    const renderFrame = () => {
-      if (stopped) return;
-
-      const rawElapsed = elapsed.get();
-      const nowSim = getSimulationSeconds(rawElapsed);
-      let dt = nowSim - lastSimSeconds;
-      lastSimSeconds = nowSim;
-      if (dt < 0) {
-        // elapsed was reset (new cycle). Refresh baseline.
-        dt = 0;
-        simSecondsAtLastRestart = nowSim;
-      }
-      if (dt > 1 / 30) dt = 1 / 30;
-
-      const timeSec = Date.now() / 1000;
-      const gDir = params.gravityDir.get();
-      const gMag = gravityPxPerSec2;
-      const cycleProgress =
-        !continuous && cycleDuration > 0
-          ? clamp01(rawElapsed / cycleDuration)
-          : 0;
-      const fadeProgress =
-        cycleProgress <= DEFAULT_FADE_START
-          ? 0
-          : (cycleProgress - DEFAULT_FADE_START) / (1 - DEFAULT_FADE_START);
-      const fadeOpacity = fadeOutOnEnd ? 1 - clamp01(fadeProgress) : 1;
-
-      resources.uniforms.write({
-        viewport: [viewportWidth, viewportHeight],
-        focalLength,
-        opacity: opacity.get() * fadeOpacity,
-        dt,
-        time: timeSec,
-        drift,
-        initialScale,
-        windStrength: params.windStrength,
-        magnusStrength: params.magnusStrength,
-        continuous: continuous ? 1 : 0,
-        infinite: infinite ? 1 : 0,
-        progress: nowSim,
-        cycleCount: cycleCount.get(),
-        cycleDuration,
-        fadeOutOnEnd: fadeOutOnEnd ? 1 : 0,
-        fadeStart: DEFAULT_FADE_START,
-        bounceRestitution: params.bounceRestitution,
-        floorFriction: params.floorFriction,
-        motionBlurAmount: params.motionBlurAmount,
-        shadowOpacity: params.shadowOpacity,
-        iridescence: params.iridescence,
-        gravityMag: gMag,
-        textureMode: params.textureMode,
-        lightDir: DEFAULT_LIGHT_DIR,
-        minVisibleScale: Math.max(0, Math.min(1, 1 - params.flipIntensity)),
-        gravityDir: gDir,
-        _pad2: 0,
-      });
-
-      const encoder = device.createCommandEncoder();
-      if (dt > 0) {
-        const computePass = encoder.beginComputePass();
-        computePipeline
-          .with(computePass)
-          .with(resources.computeBindGroup)
-          .dispatchWorkgroups(Math.ceil(count / 64));
-        computePass.end();
-      }
-
-      const texture = context.getCurrentTexture();
-      const renderPass = encoder.beginRenderPass({
-        colorAttachments: [
-          {
-            view: texture.createView(),
-            clearValue: [0, 0, 0, 0],
-            loadOp: 'clear',
-            storeOp: 'store',
-          },
-        ],
-      });
-      renderPipeline
-        .with(renderPass)
-        .with(resources.renderBindGroup)
-        .draw(VERTS_PER_FLAKE, count);
-      renderPass.end();
-
-      device.queue.submit([encoder.finish()]);
-      context.present();
-
-      // Time-based restart: once per cycleDuration (only if caller wants it).
-      // Continuous mode recycles individual particles in the compute shader,
-      // so a whole-batch restart would create a visible interruption.
-      // Callers can disable auto-restart via `cycleDuration === 0` (e.g. when
-      // gyro is active and pieces should stay in play indefinitely).
-      if (!continuous && cycleDuration > 0) {
-        const cycleSeconds = elapsed.get() - simSecondsAtLastRestart;
-        if (cycleSeconds >= cycleDuration) {
-          simSecondsAtLastRestart = elapsed.get();
-          onAllOffScreen();
-        }
-      }
-
-      rafId = requestAnimationFrame(renderFrame);
-    };
-    rafId = requestAnimationFrame(renderFrame);
-
-    return () => {
-      stopped = true;
-      if (rafId !== null) cancelAnimationFrame(rafId);
-    };
+    elapsed.set(0);
+    lastSimSeconds.set(0);
+    wasRunning.set(false);
+    setRawFrameState({
+      device,
+      context,
+      uniformBuffer: resources.uniforms.buffer.buffer,
+      computePipeline: resources.root.unwrap(computePipeline),
+      renderPipeline: resources.root.unwrap(renderPipeline),
+      computeBindGroup: resources.root.unwrap(resources.computeBindGroup),
+      renderBindGroup: resources.root.unwrap(resources.renderBindGroup),
+      workgroupCount: Math.ceil(count / 64),
+      count,
+      focalLength: Math.max(100, viewportHeight * DEFAULT_FOCAL_LENGTH_RATIO),
+      viewportWidth,
+      viewportHeight,
+    });
   }, [
     device,
     resources,
     count,
-    drift,
-    initialScale,
-    cycleDuration,
-    continuous,
-    infinite,
-    fadeOutOnEnd,
-    gravityPxPerSec2,
     viewportWidth,
     viewportHeight,
     elapsed,
-    cycleCount,
-    opacity,
-    params,
-    onAllOffScreen,
+    lastSimSeconds,
+    wasRunning,
   ]);
+
+  useFrameCallback((frameInfo) => {
+    'worklet';
+
+    if (!rawFrameState) return;
+    if (!running.get()) {
+      wasRunning.set(false);
+      return;
+    }
+
+    const rawDt = wasRunning.get()
+      ? Math.min(
+          Math.max((frameInfo.timeSincePreviousFrame ?? 0) / 1000, 0),
+          1 / 30
+        )
+      : 0;
+    wasRunning.set(true);
+
+    const rawElapsed = elapsed.get() + rawDt;
+    elapsed.set(rawElapsed);
+
+    const easing = resolveEasing(params.easing ?? Easing.linear);
+    const nowSim =
+      continuous || infinite || cycleDuration <= 0
+        ? rawElapsed
+        : easing(clamp01(rawElapsed / cycleDuration)) * cycleDuration;
+
+    let dt = nowSim - lastSimSeconds.get();
+    lastSimSeconds.set(nowSim);
+    if (dt < 0) dt = 0;
+    if (dt > 1 / 30) dt = 1 / 30;
+
+    const gDir = params.gravityDir.get();
+    const cycleProgress =
+      !continuous && !infinite && cycleDuration > 0
+        ? clamp01(rawElapsed / cycleDuration)
+        : 0;
+    const fadeProgress =
+      cycleProgress <= DEFAULT_FADE_START
+        ? 0
+        : (cycleProgress - DEFAULT_FADE_START) / (1 - DEFAULT_FADE_START);
+    const fadeOpacity = fadeOutOnEnd ? 1 - clamp01(fadeProgress) : 1;
+    const minVisibleScale = Math.max(0, Math.min(1, 1 - params.flipIntensity));
+
+    const uniforms = uniformDataRef.current;
+    uniforms[0] = rawFrameState.viewportWidth;
+    uniforms[1] = rawFrameState.viewportHeight;
+    uniforms[2] = rawFrameState.focalLength;
+    uniforms[3] = opacity.get() * fadeOpacity;
+    uniforms[4] = dt;
+    uniforms[5] = rawElapsed;
+    uniforms[6] = drift;
+    uniforms[7] = initialScale;
+    uniforms[8] = params.windStrength;
+    uniforms[9] = params.magnusStrength;
+    uniforms[10] = continuous ? 1 : 0;
+    uniforms[11] = infinite ? 1 : 0;
+    uniforms[12] = nowSim;
+    uniforms[13] = cycleCount.get();
+    uniforms[14] = cycleDuration;
+    uniforms[15] = fadeOutOnEnd ? 1 : 0;
+    uniforms[16] = DEFAULT_FADE_START;
+    uniforms[17] = params.bounceRestitution;
+    uniforms[18] = params.floorFriction;
+    uniforms[19] = params.motionBlurAmount;
+    uniforms[20] = params.shadowOpacity;
+    uniforms[21] = params.iridescence;
+    uniforms[22] = gravityPxPerSec2;
+    uniforms[23] = params.textureMode;
+    uniforms[24] = DEFAULT_LIGHT_DIR[0];
+    uniforms[25] = DEFAULT_LIGHT_DIR[1];
+    uniforms[26] = DEFAULT_LIGHT_DIR[2];
+    uniforms[27] = minVisibleScale;
+    uniforms[28] = gDir[0];
+    uniforms[29] = gDir[1];
+    uniforms[30] = gDir[2];
+    uniforms[31] = 0;
+    rawFrameState.device.queue.writeBuffer(
+      rawFrameState.uniformBuffer,
+      0,
+      uniforms
+    );
+
+    const encoder = rawFrameState.device.createCommandEncoder();
+    if (dt > 0) {
+      const computePass = encoder.beginComputePass();
+      computePass.setPipeline(rawFrameState.computePipeline);
+      computePass.setBindGroup(0, rawFrameState.computeBindGroup);
+      computePass.dispatchWorkgroups(rawFrameState.workgroupCount);
+      computePass.end();
+    }
+
+    const renderPass = encoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: rawFrameState.context.getCurrentTexture().createView(),
+          clearValue: [0, 0, 0, 0],
+          loadOp: 'clear',
+          storeOp: 'store',
+        },
+      ],
+    });
+    renderPass.setPipeline(rawFrameState.renderPipeline);
+    renderPass.setBindGroup(0, rawFrameState.renderBindGroup);
+    renderPass.draw(VERTS_PER_FLAKE, rawFrameState.count);
+    renderPass.end();
+
+    rawFrameState.device.queue.submit([encoder.finish()]);
+    rawFrameState.context.present?.();
+
+    if (!continuous && !infinite && cycleDuration > 0) {
+      const done = rawElapsed >= cycleDuration;
+      if (done) {
+        elapsed.set(0);
+        lastSimSeconds.set(0);
+        wasRunning.set(false);
+        scheduleOnRN(onAllOffScreen);
+      }
+    }
+  });
 
   return (
     <View

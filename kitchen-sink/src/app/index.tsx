@@ -2,7 +2,11 @@ import {
   FlatList,
   StyleSheet,
   Dimensions,
+  Text,
+  View,
+  Pressable,
 } from 'react-native';
+import type { ReactNode } from 'react';
 import { colors } from '../constants/colors';
 import {
   CannonConfetti,
@@ -11,12 +15,23 @@ import {
   PIConfetti,
 } from 'react-native-fast-confetti';
 import { ModeCard } from '../components/ModeCard';
+import { ConfigDropdown } from '../components/ConfigDropdown';
+import {
+  fallingEngineOptions,
+  textureOptions,
+  verticalSpacingOptions,
+} from '../constants/config';
+import { useScreenConfig } from '../hooks/useScreenConfig';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const PADDING = 16;
 const ITEM_HEIGHT = 140;
 const ITEM_WIDTH = SCREEN_WIDTH - PADDING * 2;
+const ENABLE_HOME_CONFETTI_PREVIEWS = false;
+
+const renderHomePreview = (preview: ReactNode) =>
+  ENABLE_HOME_CONFETTI_PREVIEWS ? preview : null;
 
 const previewFlakes = (Flake: typeof Confetti.Flake) => (
   <>
@@ -32,113 +47,174 @@ const modes = [
     key: 'single',
     title: 'Single',
     description: 'One-shot confetti burst',
-    render: () => (
-      <Confetti
-        autoplay
-        count={100}
-        containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
-        verticalSpacing={50}
-        infinite
-        flakeStyle="glossy"
-        gravity={2}
-      >
-        {previewFlakes(Confetti.Flake)}
-      </Confetti>
-    ),
+    render: () =>
+      renderHomePreview(
+        <Confetti
+          autoplay
+          count={100}
+          containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
+          verticalSpacing={50}
+          infinite
+          flakeStyle="glossy"
+          gravity={2}
+        >
+          {previewFlakes(Confetti.Flake)}
+        </Confetti>
+      ),
   },
   {
     key: 'continuous',
     title: 'Continuous',
     description: 'Continuous falling confetti',
-    render: () => (
-      <ContinuousConfetti
-        autoplay
-        count={400}
-        containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
-        verticalSpacing={120}
-        flakeStyle="glossy"
-        gravity={2}
-      >
-        {previewFlakes(ContinuousConfetti.Flake)}
-      </ContinuousConfetti>
-    ),
+    render: () =>
+      renderHomePreview(
+        <ContinuousConfetti
+          autoplay
+          count={400}
+          containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
+          verticalSpacing={120}
+          flakeStyle="glossy"
+          gravity={2}
+        >
+          {previewFlakes(ContinuousConfetti.Flake)}
+        </ContinuousConfetti>
+      ),
   },
   {
     key: 'pi',
     title: 'PI',
     description: 'Physics-inspired confetti',
-    render: () => (
-      <PIConfetti
-        autoplay
-        flakeStyle="glossy"
-        gravity={6}
-        infinite
-        containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
-      >
-        <PIConfetti.Origin
-          blastPosition="center"
-          count={100}
-          initialSpeed={4}
+    render: () =>
+      renderHomePreview(
+        <PIConfetti
+          autoplay
+          flakeStyle="glossy"
+          gravity={6}
+          infinite
+          containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
         >
-          {previewFlakes(PIConfetti.Flake)}
-        </PIConfetti.Origin>
-      </PIConfetti>
-    ),
+          <PIConfetti.Origin
+            blastPosition="center"
+            count={100}
+            initialSpeed={4}
+          >
+            {previewFlakes(PIConfetti.Flake)}
+          </PIConfetti.Origin>
+        </PIConfetti>
+      ),
   },
   {
     key: 'cannon',
     title: 'Cannon',
     description: 'Confetti cannons from edges',
-    render: () => (
-      <CannonConfetti
-        autoplay
-        fadeOutOnEnd
-        infinite
-        flakeStyle="glossy"
-        gravity={4}
-        drag={{ vertical: 3, horizontal: 6 }}
-        sprayDuration={300}
-        initialScale={0.7}
-        containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
-      >
-        <CannonConfetti.Origin
-          position="bottom-left"
-          count={50}
-          initialSpeed={6}
-          spread={Math.PI / 3}
-          depth={{ min: 1, max: 1.1 }}
+    render: () =>
+      renderHomePreview(
+        <CannonConfetti
+          autoplay
+          fadeOutOnEnd
+          infinite
+          flakeStyle="glossy"
+          gravity={4}
+          drag={{ vertical: 3, horizontal: 6 }}
+          sprayDuration={300}
+          initialScale={0.7}
+          containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
         >
-          {previewFlakes(CannonConfetti.Flake)}
-        </CannonConfetti.Origin>
-        <CannonConfetti.Origin
-          position="bottom-right"
-          count={50}
-          initialSpeed={6}
-          spread={Math.PI / 3}
-          depth={{ min: 1, max: 1.1 }}
-        >
-          {previewFlakes(CannonConfetti.Flake)}
-        </CannonConfetti.Origin>
-        <CannonConfetti.Origin
-          position="bottom-center"
-          count={50}
-          initialSpeed={4}
-          spread={Math.PI / 3}
-        >
-          {previewFlakes(CannonConfetti.Flake)}
-        </CannonConfetti.Origin>
-      </CannonConfetti>
-    ),
+          <CannonConfetti.Origin
+            position="bottom-left"
+            count={50}
+            initialSpeed={6}
+            spread={Math.PI / 3}
+            depth={{ min: 1, max: 1.1 }}
+          >
+            {previewFlakes(CannonConfetti.Flake)}
+          </CannonConfetti.Origin>
+          <CannonConfetti.Origin
+            position="bottom-right"
+            count={50}
+            initialSpeed={6}
+            spread={Math.PI / 3}
+            depth={{ min: 1, max: 1.1 }}
+          >
+            {previewFlakes(CannonConfetti.Flake)}
+          </CannonConfetti.Origin>
+          <CannonConfetti.Origin
+            position="bottom-center"
+            count={50}
+            initialSpeed={4}
+            spread={Math.PI / 3}
+          >
+            {previewFlakes(CannonConfetti.Flake)}
+          </CannonConfetti.Origin>
+        </CannonConfetti>
+      ),
   },
 ] as const;
 
 export default function HomeScreen() {
+  const { config: singleConfig, updateConfig: updateSingleConfig } =
+    useScreenConfig('single');
+
   return (
     <FlatList
       data={modes}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={styles.list}
       keyExtractor={(item) => item.key}
+      ListHeaderComponent={
+        <View
+          testID="single-profile-config"
+          accessibilityLabel="Single confetti test setup"
+          style={styles.configPanel}
+        >
+          <Text style={styles.configTitle}>Single Test Setup</Text>
+          <View style={styles.engineRow}>
+            <Text style={styles.configLabel}>Engine:</Text>
+            <View style={styles.segmentedControl}>
+              {fallingEngineOptions.map((option) => {
+                const selected = singleConfig.engineType === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    accessibilityLabel={`Single ${option.label} engine`}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    testID={`single-engine-${option.value}`}
+                    onPress={() =>
+                      updateSingleConfig({ engineType: option.value })
+                    }
+                    style={[
+                      styles.segmentButton,
+                      selected ? styles.segmentButtonSelected : null,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.segmentText,
+                        selected ? styles.segmentTextSelected : null,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+          <ConfigDropdown
+            label="Texture:"
+            data={textureOptions}
+            value={singleConfig.textureType}
+            onChange={(v) => updateSingleConfig({ textureType: v })}
+          />
+          <ConfigDropdown
+            label="Vertical Spacing:"
+            data={verticalSpacingOptions}
+            value={singleConfig.verticalSpacing}
+            onChange={(v) => updateSingleConfig({ verticalSpacing: v })}
+          />
+        </View>
+      }
       renderItem={({ item }) => <ModeCard item={item} styles={styles} />}
     />
   );
@@ -151,6 +227,59 @@ const styles = StyleSheet.create({
     maxWidth: 600,
     alignSelf: 'center',
     width: '100%',
+  },
+  configPanel: {
+    width: '100%',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    marginBottom: 6,
+    backgroundColor: colors.secondaryBackground,
+    borderRadius: 16,
+  },
+  configTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.label,
+  },
+  configLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.label,
+  },
+  engineRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  segmentedControl: {
+    flexDirection: 'row',
+    gap: 4,
+    padding: 3,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.separator,
+    backgroundColor: colors.background,
+  },
+  segmentButton: {
+    minHeight: 34,
+    minWidth: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 7,
+  },
+  segmentButtonSelected: {
+    backgroundColor: colors.label,
+  },
+  segmentText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.label,
+  },
+  segmentTextSelected: {
+    color: colors.background,
   },
   cardDescriptionContainer: {
     paddingVertical: 16,

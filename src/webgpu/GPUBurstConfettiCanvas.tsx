@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
 import { PixelRatio, StyleSheet, View } from 'react-native';
+import { useFrameCallback } from 'react-native-reanimated';
 import {
   Canvas,
   useDevice,
@@ -17,6 +18,7 @@ import {
   type BurstConfettiResources,
 } from './hooks/useBurstConfettiResources';
 import {
+  BURST_UNIFORMS_BYTES,
   BURST_VERTS_PER_FLAKE,
   createBurstConfettiPipelines,
 } from './shaders/burstConfetti';
@@ -44,6 +46,17 @@ type Props = {
   viewportHeight: number;
 };
 
+type RawFrameState = {
+  device: GPUDevice;
+  context: GPUCanvasContext & { present?: () => void };
+  uniformBuffer: GPUBuffer;
+  renderPipeline: GPURenderPipeline;
+  renderBindGroup: GPUBindGroup;
+  count: number;
+  viewportWidth: number;
+  viewportHeight: number;
+};
+
 export const GPUBurstConfettiCanvas = ({
   containerStyle,
   onContainerLayout,
@@ -64,8 +77,15 @@ export const GPUBurstConfettiCanvas = ({
 }: Props) => {
   const { device } = useDevice();
   const canvasRef = useRef<CanvasRef>(null);
-  const [resources, setResources] =
-    useState<BurstConfettiResources | null>(null);
+  const [resources, setResources] = useState<BurstConfettiResources | null>(
+    null
+  );
+  const [rawFrameState, setRawFrameState] = useState<RawFrameState | null>(
+    null
+  );
+  const uniformDataRef = useRef(
+    new Float32Array(BURST_UNIFORMS_BYTES / Float32Array.BYTES_PER_ELEMENT)
+  );
   const latestParticlesRef = useRef<BurstParticle[]>([]);
 
   const count = particles.length;
@@ -121,11 +141,24 @@ export const GPUBurstConfettiCanvas = ({
   }, []);
 
   useEffect(() => {
-    if (!device || !resources) return;
-    if (viewportWidth <= 0 || viewportHeight <= 0) return;
-    if (count <= 0) return;
+    if (!device || !resources) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- WebGPU context availability controls the UI-thread frame callback closure.
+      setRawFrameState(null);
+      return;
+    }
+    if (viewportWidth <= 0 || viewportHeight <= 0) {
+      setRawFrameState(null);
+      return;
+    }
+    if (count <= 0) {
+      setRawFrameState(null);
+      return;
+    }
     const context = canvasRef.current?.getContext('webgpu');
-    if (!context) return;
+    if (!context) {
+      setRawFrameState(null);
+      return;
+    }
 
     const canvas = context.canvas as unknown as NativeCanvas;
     const dpr = PixelRatio.get();
@@ -144,71 +177,63 @@ export const GPUBurstConfettiCanvas = ({
       presentationFormat
     );
 
-    let rafId: number | null = null;
-    let stopped = false;
+    setRawFrameState({
+      device,
+      context,
+      uniformBuffer: resources.uniforms.buffer.buffer,
+      renderPipeline: resources.root.unwrap(renderPipeline),
+      renderBindGroup: resources.root.unwrap(resources.renderBindGroup),
+      count,
+      viewportWidth,
+      viewportHeight,
+    });
+  }, [device, resources, count, viewportWidth, viewportHeight]);
 
-    const renderFrame = () => {
-      if (stopped) return;
+  useFrameCallback(() => {
+    'worklet';
 
-      resources.uniforms.write({
-        viewport: [viewportWidth, viewportHeight],
-        opacity: opacity.get(),
-        progress: progress.get(),
-        totalDuration,
-        flightDuration,
-        gravity: gravityPxPerSec2,
-        initialScale,
-        flipIntensity,
-        drag: [horizontalDrag, verticalDrag],
-        _pad0: 0,
-      });
+    if (!rawFrameState) return;
 
-      const encoder = device.createCommandEncoder();
-      const texture = context.getCurrentTexture();
-      const renderPass = encoder.beginRenderPass({
-        colorAttachments: [
-          {
-            view: texture.createView(),
-            clearValue: [0, 0, 0, 0],
-            loadOp: 'clear',
-            storeOp: 'store',
-          },
-        ],
-      });
-      renderPipeline
-        .with(renderPass)
-        .with(resources.renderBindGroup)
-        .draw(BURST_VERTS_PER_FLAKE, count);
-      renderPass.end();
+    const uniforms = uniformDataRef.current;
+    uniforms[0] = rawFrameState.viewportWidth;
+    uniforms[1] = rawFrameState.viewportHeight;
+    uniforms[2] = opacity.get();
+    uniforms[3] = progress.get();
+    uniforms[4] = totalDuration;
+    uniforms[5] = flightDuration;
+    uniforms[6] = gravityPxPerSec2;
+    uniforms[7] = initialScale;
+    uniforms[8] = flipIntensity;
+    uniforms[9] = 0;
+    uniforms[10] = horizontalDrag;
+    uniforms[11] = verticalDrag;
+    uniforms[12] = 0;
+    uniforms[13] = 0;
+    rawFrameState.device.queue.writeBuffer(
+      rawFrameState.uniformBuffer,
+      0,
+      uniforms
+    );
 
-      device.queue.submit([encoder.finish()]);
-      context.present();
+    const encoder = rawFrameState.device.createCommandEncoder();
+    const renderPass = encoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: rawFrameState.context.getCurrentTexture().createView(),
+          clearValue: [0, 0, 0, 0],
+          loadOp: 'clear',
+          storeOp: 'store',
+        },
+      ],
+    });
+    renderPass.setPipeline(rawFrameState.renderPipeline);
+    renderPass.setBindGroup(0, rawFrameState.renderBindGroup);
+    renderPass.draw(BURST_VERTS_PER_FLAKE, rawFrameState.count);
+    renderPass.end();
 
-      rafId = requestAnimationFrame(renderFrame);
-    };
-
-    rafId = requestAnimationFrame(renderFrame);
-
-    return () => {
-      stopped = true;
-      if (rafId !== null) cancelAnimationFrame(rafId);
-    };
-  }, [
-    device,
-    resources,
-    count,
-    totalDuration,
-    flightDuration,
-    progress,
-    opacity,
-    gravityPxPerSec2,
-    horizontalDrag,
-    verticalDrag,
-    initialScale,
-    flipIntensity,
-    viewportWidth,
-    viewportHeight,
-  ]);
+    rawFrameState.device.queue.submit([encoder.finish()]);
+    rawFrameState.context.present?.();
+  });
 
   return (
     <View

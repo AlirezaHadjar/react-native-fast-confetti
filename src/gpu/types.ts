@@ -15,10 +15,7 @@ import type {
   Range,
   Rotation,
 } from '../types';
-import type {
-  GPUConfettiExtraProps,
-  GPUTextureMode,
-} from '../webgpu/types';
+import type { GPUConfettiExtraProps, GPUTextureMode } from '../webgpu/types';
 
 export type ConfettiProps = CoreConfettiProps & GPUConfettiExtraProps;
 export type ContinuousConfettiProps = CoreContinuousConfettiProps &

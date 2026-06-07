@@ -1,17 +1,14 @@
 import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { ConfettiMethods } from 'react-native-fast-confetti';
-import {
-  ContinuousConfetti as SkiaContinuousConfetti,
-} from 'react-native-fast-confetti';
-import {
-  ContinuousConfetti as GpuContinuousConfetti,
-} from 'react-native-fast-confetti/gpu';
+import { ContinuousConfetti as SkiaContinuousConfetti } from 'react-native-fast-confetti';
+import { ContinuousConfetti as GpuContinuousConfetti } from 'react-native-fast-confetti/gpu';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
 import {
-  engineOptions,
+  fallingEngineOptions,
+  isGpuEngine,
   textureOptions,
   verticalSpacingOptions,
 } from '../constants/config';
@@ -28,7 +25,7 @@ export default function ContinuousScreen() {
 
   const rotation = getRotation(config.textureType, 'continuous');
   const confettiKey = `continuous-${config.textureType}-${config.verticalSpacing}`;
-  const isGpu = config.engineType === 'webgpu';
+  const isGpu = isGpuEngine(config.engineType);
 
   const textureProps = getTextureProps(
     config.textureType,
@@ -51,7 +48,7 @@ export default function ContinuousScreen() {
       <View style={styles.controls}>
         <ConfigDropdown
           label="Engine:"
-          data={engineOptions}
+          data={fallingEngineOptions}
           value={config.engineType}
           onChange={(v) => updateConfig({ engineType: v })}
         />

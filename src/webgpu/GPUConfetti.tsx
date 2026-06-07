@@ -18,10 +18,7 @@ import {
   DEFAULT_CONFETTI_WOBBLE,
   DEFAULT_VERTICAL_SPACING,
 } from '../constants';
-import {
-  DEFAULT_MAGNUS_STRENGTH,
-  DEFAULT_WIND_STRENGTH,
-} from './constants';
+import { DEFAULT_MAGNUS_STRENGTH, DEFAULT_WIND_STRENGTH } from './constants';
 import { Flake } from '../FlakeComponent';
 import { useSimulationLifecycle } from './hooks/useSimulationLifecycle';
 import { useConfettiFlakes } from '../hooks/useConfettiFlakes';
@@ -39,10 +36,7 @@ import {
   generateSpawnsArray,
 } from './utils';
 
-const ConfettiInner = forwardRef<
-  GPUConfettiMethods,
-  InternalGPUConfettiProps
->(
+const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
   (
     {
       children,
@@ -85,17 +79,13 @@ const ConfettiInner = forwardRef<
 
     const parentTexture = useTextureProps(textureRootProps);
 
-    const {
-      allColors,
-      sizeVariations,
-      colorOverrides,
-      parentColorCount,
-    } = useConfettiFlakes({
-      children,
-      rootColors,
-      rootFlakeStyle: flakeStyle,
-      parentTexture,
-    });
+    const { allColors, sizeVariations, colorOverrides, parentColorCount } =
+      useConfettiFlakes({
+        children,
+        rootColors,
+        rootFlakeStyle: flakeStyle,
+        parentTexture,
+      });
 
     const maxFlakeWidth = Math.max(...sizeVariations.map((f) => f.width));
     const maxFlakeHeight = Math.max(...sizeVariations.map((f) => f.height));
@@ -127,8 +117,10 @@ const ConfettiInner = forwardRef<
       resume,
       reset,
       beginCycle,
-      bumpCycle,
-    } = useSimulationLifecycle({ fadeOutOnEnd });
+    } = useSimulationLifecycle({
+      fadeOutOnEnd,
+      enabled: false,
+    });
 
     const [seed, setSeed] = useState(0);
     const bumpSeed = useCallback(() => setSeed((s) => s + 1), []);
@@ -199,12 +191,11 @@ const ConfettiInner = forwardRef<
       restart: runOnUI(restart),
     }));
 
-    // onAllOffScreen: GPU reported every piece is off-viewport. If we're in
-    // infinite mode, re-seed + restart the cycle. Otherwise fire end callback.
+    // onAllOffScreen: GPU reported every piece is off-viewport. Infinite mode
+    // recycles particles in the compute shader, so it should not re-seed.
     const handleAllOffScreen = useCallback(() => {
       if (infinite) {
-        bumpSeed();
-        runOnUI(bumpCycle)();
+        return;
       } else {
         runOnUI(() => {
           'worklet';
@@ -212,7 +203,7 @@ const ConfettiInner = forwardRef<
         })();
         onAnimationEnd?.();
       }
-    }, [infinite, bumpSeed, bumpCycle, running, onAnimationEnd]);
+    }, [infinite, running, onAnimationEnd]);
 
     useEffect(() => {
       if (!ready || !hasSpawns) return;
@@ -235,7 +226,9 @@ const ConfettiInner = forwardRef<
 
     // Default gravity direction is +Y (down). Caller can override with a
     // SharedValue (e.g. driven by gyroscope).
-    const defaultGravityDir = useSharedValue<[number, number, number]>([0, 1, 0]);
+    const defaultGravityDir = useSharedValue<[number, number, number]>([
+      0, 1, 0,
+    ]);
     const gravityDir = externalGravityDir ?? defaultGravityDir;
 
     const gravityPxPerSec2 = gravity * containerHeight;
@@ -279,6 +272,7 @@ const ConfettiInner = forwardRef<
         spawns={spawns}
         cycleDuration={autoRestart ? cycleDuration : 0}
         elapsed={elapsed}
+        running={running}
         cycleCount={cycleCount}
         opacity={opacity}
         onAllOffScreen={handleAllOffScreen}
