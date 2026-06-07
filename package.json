@@ -55,15 +55,15 @@
     "@eslint/eslintrc": "^3.3.5",
     "@eslint/js": "^10.0.1",
     "@evilmartians/lefthook": "^1.5.0",
-    "@react-native/babel-preset": "0.83.2",
+    "@react-native/babel-preset": "0.85.3",
     "@release-it/conventional-changelog": "^10.0.6",
-    "@shopify/react-native-skia": "2.5.1",
+    "@shopify/react-native-skia": "2.6.2",
     "@types/jest": "^30.0.0",
     "@types/react": "^19.2.0",
     "commitlint": "^20.5.0",
     "del-cli": "^7.0.0",
     "eslint": "^9.0.0",
-    "eslint-config-expo": "^55.0.0",
+    "eslint-config-expo": "^56.0.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-ft-flow": "^3.0.11",
     "eslint-plugin-prettier": "^5.5.5",
@@ -71,12 +71,13 @@
     "hermes-eslint": "^0.34.0",
     "jest": "^30.3.0",
     "prettier": "^3.8.1",
-    "react": "19.2.0",
-    "react-native": "0.83.2",
+    "react": "19.2.3",
+    "react-native": "0.85.3",
     "react-native-builder-bob": "^0.40.9",
-    "react-native-reanimated": "^4.2.2",
+    "react-native-reanimated": "4.3.1",
+    "react-native-worklets": "0.8.3",
     "release-it": "^19.2.4",
-    "typescript": "^5.9.3"
+    "typescript": "~6.0.3"
   },
   "peerDependencies": {
     "@shopify/react-native-skia": "*",
@@ -90,6 +91,9 @@
     "kitchen-sink"
   ],
   "packageManager": "bun@1.2.19",
+  "overrides": {
+    "zod-validation-error": "4.0.2"
+  },
   "jest": {
     "preset": "react-native",
     "modulePathIgnorePatterns": [

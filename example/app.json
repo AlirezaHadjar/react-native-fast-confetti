@@ -4,6 +4,9 @@
     "slug": "confetti-example",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "confetti-example"
+    "scheme": "confetti-example",
+    "plugins": [
+      "expo-status-bar"
+    ]
   }
 }
