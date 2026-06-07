@@ -1,5 +1,5 @@
 import { View, StyleSheet } from 'react-native';
-import { Button, Host } from '@expo/ui/jetpack-compose';
+import { Button, Host, Text } from '@expo/ui/jetpack-compose';
 
 type Props = {
   actions: {
@@ -24,7 +24,9 @@ export function ConfettiControls({ actions }: Props) {
     <View style={styles.container}>
       {buttons.map((label) => (
         <Host key={label} matchContents style={{ width: '100%' }}>
-          <Button onPress={actionMap[label]}>{label}</Button>
+          <Button onClick={actionMap[label]}>
+            <Text>{label}</Text>
+          </Button>
         </Host>
       ))}
     </View>

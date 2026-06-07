@@ -136,6 +136,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       colors: allColors,
       boxes,
       sizeColorOverrides: colorOverrides,
+      count,
     });
 
     const sizeVariationsCount = sizeVariations.length;

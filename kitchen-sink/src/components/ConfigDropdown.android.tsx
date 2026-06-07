@@ -1,6 +1,5 @@
-import { useState } from 'react';
-import { Text as RNText, StyleSheet, View } from 'react-native';
-import { ContextMenu, Button, Host } from '@expo/ui/jetpack-compose';
+import { Pressable, Text as RNText, StyleSheet, View } from 'react-native';
+import { MenuView } from '@expo/ui/community/menu';
 import { colors } from '../constants/colors';
 import type { DropdownOption } from '../constants/config';
 
@@ -17,36 +16,32 @@ export function ConfigDropdown<T extends string | number>({
   value,
   onChange,
 }: Props<T>) {
-  const [expanded, setExpanded] = useState(false);
   const selectedLabel =
     data.find((option) => option.value === value)?.label ?? '';
 
   return (
     <View style={styles.container}>
       <RNText style={styles.label}>{label}</RNText>
-      <Host matchContents>
-        <ContextMenu>
-          <ContextMenu.Trigger>
-            <Button variant="bordered" onPress={() => setExpanded(!expanded)}>
-              {selectedLabel}
-            </Button>
-          </ContextMenu.Trigger>
-          <ContextMenu.Items>
-            {data.map((option) => (
-              <Button
-                key={String(option.value)}
-                onPress={() => {
-                  onChange(option.value);
-                  setExpanded(false);
-                }}
-                elementColors={{ contentColor: colors.label }}
-              >
-                {option.label}
-              </Button>
-            ))}
-          </ContextMenu.Items>
-        </ContextMenu>
-      </Host>
+      <MenuView
+        actions={data.map((option) => ({
+          id: String(option.value),
+          title: option.label,
+          titleColor: colors.label,
+        }))}
+        onPressAction={(event) => {
+          const selectedValue = data.find(
+            (option) => String(option.value) === event.nativeEvent.event
+          )?.value;
+
+          if (selectedValue !== undefined) {
+            onChange(selectedValue);
+          }
+        }}
+      >
+        <Pressable style={styles.trigger}>
+          <RNText style={styles.triggerText}>{selectedLabel}</RNText>
+        </Pressable>
+      </MenuView>
     </View>
   );
 }
@@ -60,6 +55,22 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
+    fontWeight: '600',
+    color: colors.label,
+  },
+  trigger: {
+    minWidth: 120,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.separator,
+    borderRadius: 20,
+    backgroundColor: colors.background,
+  },
+  triggerText: {
+    fontSize: 14,
     fontWeight: '600',
     color: colors.label,
   },

@@ -1,31 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
-import { PixelRatio, StyleSheet, View } from 'react-native';
 import type { LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
+import { PixelRatio, StyleSheet, View } from 'react-native';
+import type { SharedValue } from 'react-native-reanimated';
 import {
   Canvas,
   useDevice,
   type CanvasRef,
   type NativeCanvas,
 } from 'react-native-wgpu';
-import type { SharedValue } from 'react-native-reanimated';
 
+import type { SizeVariation } from '../hooks/useConfettiFlakes';
+import {
+  DEFAULT_FADE_START,
+  DEFAULT_FOCAL_LENGTH_RATIO,
+  DEFAULT_LIGHT_DIR,
+} from './constants';
 import {
   createConfettiResources,
   destroyConfettiResources,
   type ConfettiResources,
 } from './hooks/useConfettiResources';
-import type { SizeVariation } from '../hooks/useConfettiFlakes';
+import { UNIFORMS_BYTES, computeCode, renderCode } from './shaders/confetti';
 import type { Spawn } from './utils';
-import {
-  UNIFORMS_BYTES,
-  computeCode,
-  renderCode,
-} from './shaders/confetti';
-import {
-  DEFAULT_FOCAL_LENGTH_RATIO,
-  DEFAULT_LIGHT_DIR,
-  DEFAULT_FADE_START,
-} from './constants';
 
 export type GPUConfettiCanvasParams = {
   windStrength: number;
@@ -109,7 +105,9 @@ export const GPUConfettiCanvas = ({
         return res;
       });
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [device, count, sizeVariations, allColors, spawns, cycleDuration]);
 
   useEffect(() => {
@@ -144,21 +142,61 @@ export const GPUConfettiCanvas = ({
 
     const computeBGL = device.createBindGroupLayout({
       entries: [
-        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-        { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        {
+          binding: 0,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: { type: 'uniform' },
+        },
+        {
+          binding: 1,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: { type: 'read-only-storage' },
+        },
+        {
+          binding: 2,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: { type: 'storage' },
+        },
       ],
     });
 
     const renderBGL = device.createBindGroupLayout({
       entries: [
-        { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-        { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
-        { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
-        { binding: 3, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
-        { binding: 4, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
-        { binding: 5, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
-        { binding: 6, visibility: GPUShaderStage.FRAGMENT, texture: { viewDimension: '2d-array', sampleType: 'float' } },
+        {
+          binding: 0,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+          buffer: { type: 'uniform' },
+        },
+        {
+          binding: 1,
+          visibility: GPUShaderStage.VERTEX,
+          buffer: { type: 'read-only-storage' },
+        },
+        {
+          binding: 2,
+          visibility: GPUShaderStage.VERTEX,
+          buffer: { type: 'read-only-storage' },
+        },
+        {
+          binding: 3,
+          visibility: GPUShaderStage.VERTEX,
+          buffer: { type: 'read-only-storage' },
+        },
+        {
+          binding: 4,
+          visibility: GPUShaderStage.VERTEX,
+          buffer: { type: 'read-only-storage' },
+        },
+        {
+          binding: 5,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: 'filtering' },
+        },
+        {
+          binding: 6,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { viewDimension: '2d-array', sampleType: 'float' },
+        },
       ],
     });
 
@@ -185,7 +223,12 @@ export const GPUConfettiCanvas = ({
         { binding: 3, resource: { buffer: resources.sizesBuffer } },
         { binding: 4, resource: { buffer: resources.paletteBuffer } },
         { binding: 5, resource: resources.sampler },
-        { binding: 6, resource: resources.texturesArray.createView({ dimension: '2d-array' }) },
+        {
+          binding: 6,
+          resource: resources.texturesArray.createView({
+            dimension: '2d-array',
+          }),
+        },
       ],
     });
 
@@ -226,7 +269,10 @@ export const GPUConfettiCanvas = ({
     let stopped = false;
     let lastSimSeconds = elapsed.get();
     let simSecondsAtLastRestart = elapsed.get();
-    const focalLength = Math.max(100, viewportHeight * DEFAULT_FOCAL_LENGTH_RATIO);
+    const focalLength = Math.max(
+      100,
+      viewportHeight * DEFAULT_FOCAL_LENGTH_RATIO
+    );
 
     const renderFrame = () => {
       if (stopped) return;
@@ -377,6 +423,6 @@ export const GPUConfettiCanvas = ({
 };
 
 const styles = StyleSheet.create({
-  container: { ...StyleSheet.absoluteFillObject },
+  container: { ...StyleSheet.absoluteFill },
   canvas: { flex: 1 },
 });

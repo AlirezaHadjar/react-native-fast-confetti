@@ -125,6 +125,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       colors: allColors,
       boxes,
       sizeColorOverrides: colorOverrides,
+      count: totalCount,
     });
 
     const refreshBoxes = useCallback(() => {

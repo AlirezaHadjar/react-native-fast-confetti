@@ -26,8 +26,7 @@ The fastest confetti animation library for React Native, powered by Skia Atlas A
 ## Installation
 
 > [!IMPORTANT]
-> This library depends on [react-native-reanimated](https://github.com/software-mansion/react-native-reanimated), [@shopify/react-native-skia](https://github.com/Shopify/react-native-skia), and [react-native-worklets](https://docs.swmansion.com/react-native-worklets). Make sure to install those first.
-> The optional GPU components also require [react-native-wgpu](https://github.com/wcandillon/react-native-webgpu).
+> This library depends on [react-native-reanimated](https://docs.swmansion.com/react-native-reanimated/docs/guides/compatibility/), [@shopify/react-native-skia](https://github.com/Shopify/react-native-skia), and [react-native-worklets](https://docs.swmansion.com/react-native-worklets/docs/guides/compatibility/). Make sure to install those first.
 
 ```sh
 yarn add react-native-fast-confetti
@@ -89,7 +88,7 @@ import { ContinuousConfetti } from 'react-native-fast-confetti';
 GPU-accelerated falling confetti powered by WebGPU compute and render shaders. It supports the same falling confetti API as `<Confetti />` and adds wind, motion blur, sensor-driven gravity, and procedural material modes.
 
 ```tsx
-import { GPUConfetti } from 'react-native-fast-confetti/webgpu';
+import { GPUConfetti } from "react-native-fast-confetti/webgpu";
 
 <GPUConfetti
   autoplay
@@ -166,8 +165,8 @@ import { CannonConfetti } from 'react-native-fast-confetti';
 All components expose the same control methods via ref:
 
 ```tsx
-import { useRef } from 'react';
-import { Confetti, ConfettiMethods } from 'react-native-fast-confetti';
+import { useRef } from "react";
+import { Confetti, ConfettiMethods } from "react-native-fast-confetti";
 
 const ref = useRef<ConfettiMethods>(null);
 
@@ -197,6 +196,7 @@ ref.current?.reset();
 
 ## Custom Textures
 
+Same as `<Confetti />` except `verticalSpacing` defaults to `200`.
 
 <table width="100%">
   <tr>
@@ -246,9 +246,9 @@ const snowSvg = useSVG(require('./snowflake.svg'));
 Each flake group can have its own color palette. Flake-level `colors` override the parent.
 
 ```tsx
-<Confetti autoplay colors={['#FF0000', '#00FF00']}>
+<Confetti autoplay colors={["#FF0000", "#00FF00"]}>
   <Confetti.Flake width={8} height={14} /> {/* red/green */}
-  <Confetti.Flake size={12} colors={['#0000FF', '#FFFF00']} />{' '}
+  <Confetti.Flake size={12} colors={["#0000FF", "#FFFF00"]} />{" "}
   {/* blue/yellow */}
 </Confetti>
 ```
@@ -289,17 +289,17 @@ Available named positions: `top-left`, `top-center`, `top-right`, `center-left`,
 <details>
 <summary>Advanced props — these work well out of the box, but you can tweak them for full customizability.</summary>
 
-| Name              | Default                  | Description                                                     |
-| ----------------- | ------------------------ | --------------------------------------------------------------- |
-| `wobble`          | { min: 0.03, max: 0.08 }  | Tumble/bobbing intensity.                                       |
-| `drift`           | 0.7                       | Horizontal drift (0-1).                                         |
-| `easing`          | Easing.bezier(0.4,0,1,1)  | Custom easing for the fall animation progress.                  |
-| `flipIntensity`   | 0.85                      | How dramatically pieces flip (0-1). Lower = flatter.            |
-| `rotation`        | N/A                       | Rotation range config.                                          |
-| `depth`           | { min: 0.8, max: 1.0 }    | 3D perspective scale range.                                     |
-| `initialScale`    | 0.3                       | Scale at spawn before growing.                                  |
-| `verticalSpacing` | 70                        | Space between rows. Lower = denser.                             |
-| `containerStyle`  | N/A                       | Style for the container. Supports any sizing (numeric, %, flex). |
+| Name              | Default                  | Description                                                      |
+| ----------------- | ------------------------ | ---------------------------------------------------------------- |
+| `wobble`          | { min: 0.03, max: 0.08 } | Tumble/bobbing intensity.                                        |
+| `drift`           | 0.7                      | Horizontal drift (0-1).                                          |
+| `easing`          | Easing.bezier(0.4,0,1,1) | Custom easing for the fall animation progress.                   |
+| `flipIntensity`   | 0.85                     | How dramatically pieces flip (0-1). Lower = flatter.             |
+| `rotation`        | N/A                      | Rotation range config.                                           |
+| `depth`           | { min: 0.8, max: 1.0 }   | 3D perspective scale range.                                      |
+| `initialScale`    | 0.3                      | Scale at spawn before growing.                                   |
+| `verticalSpacing` | 70                       | Space between rows. Lower = denser.                              |
+| `containerStyle`  | N/A                      | Style for the container. Supports any sizing (numeric, %, flex). |
 
 </details>
 
@@ -315,15 +315,15 @@ Same as `<Confetti />` except:
 
 `<GPUConfetti />` accepts the same props as `<Confetti />`. `<GPUContinuousConfetti />` accepts the same props as `<ContinuousConfetti />`.
 
-| Name               | Default | Description                                                                  |
-| ------------------ | ------- | ---------------------------------------------------------------------------- |
-| `windStrength`     | 0.8     | Strength of the procedural wind field.                                       |
-| `magnusStrength`   | 0.004   | Strength of spin-driven lateral force.                                       |
-| `motionBlurAmount` | 0       | Velocity-aligned stretch amount.                                             |
-| `iridescence`      | 0.15    | Shader rim-color intensity.                                                  |
+| Name               | Default | Description                                                                         |
+| ------------------ | ------- | ----------------------------------------------------------------------------------- |
+| `windStrength`     | 0.8     | Strength of the procedural wind field.                                              |
+| `magnusStrength`   | 0.004   | Strength of spin-driven lateral force.                                              |
+| `motionBlurAmount` | 0       | Velocity-aligned stretch amount.                                                    |
+| `iridescence`      | 0.15    | Shader rim-color intensity.                                                         |
 | `textureMode`      | 0       | Procedural material: default, wood, rubber, gold, holographic, marble, neon, glass. |
-| `autoRestart`      | true    | Auto-reseed after the estimated cycle duration.                              |
-| `gravityDir`       | N/A     | Optional Reanimated shared value `[x, y, z]` for sensor-driven gravity.       |
+| `autoRestart`      | true    | Auto-reseed after the estimated cycle duration.                                     |
+| `gravityDir`       | N/A     | Optional Reanimated shared value `[x, y, z]` for sensor-driven gravity.             |
 
 ### `<PIConfetti />` Props
 
@@ -344,12 +344,12 @@ Same as `<Confetti />` except:
 <details>
 <summary>Advanced props — these work well out of the box, but you can tweak them for full customizability.</summary>
 
-| Name             | Default                | Description                                                     |
-| ---------------- | ---------------------- | --------------------------------------------------------------- |
+| Name             | Default                | Description                                                      |
+| ---------------- | ---------------------- | ---------------------------------------------------------------- |
 | `drag`           | 3.0                    | Air resistance. Number or `{ horizontal, vertical }`.            |
 | `sprayDuration`  | N/A                    | Stagger pieces over N ms.                                        |
-| `speedVariation` | { min: 0.0, max: 1.0 } | Default speed variation for origins.                            |
-| `easing`         | Easing.linear           | Custom easing for the animation progress.                       |
+| `speedVariation` | { min: 0.0, max: 1.0 } | Default speed variation for origins.                             |
+| `easing`         | Easing.linear          | Custom easing for the animation progress.                        |
 | `flipIntensity`  | 0.85                   | How dramatically pieces flip (0-1). Lower = flatter.             |
 | `rotation`       | N/A                    | Default rotation config for origins.                             |
 | `depth`          | { min: 1, max: 1.1 }   | Default depth range for origins.                                 |
@@ -360,23 +360,23 @@ Same as `<Confetti />` except:
 
 ### `<PIConfetti.Origin />` Props
 
-| Name                        | Default | Description                                                         |
-| --------------------------- | ------- | ------------------------------------------------------------------- |
-| `blastPosition` (required)  | -       | Where the burst originates. Named position or `{ x, y }`.          |
-| `count`                     | 100     | Number of pieces from this origin.                                  |
-| `initialSpeed`              | 1       | Launch speed.                                                       |
-| `spread`                    | 2\*PI   | Launch cone width (radians).                                        |
+| Name                       | Default | Description                                               |
+| -------------------------- | ------- | --------------------------------------------------------- |
+| `blastPosition` (required) | -       | Where the burst originates. Named position or `{ x, y }`. |
+| `count`                    | 100     | Number of pieces from this origin.                        |
+| `initialSpeed`             | 1       | Launch speed.                                             |
+| `spread`                   | 2\*PI   | Launch cone width (radians).                              |
 
 <details>
 <summary>Advanced props — these work well out of the box, but you can tweak them for full customizability.</summary>
 
-| Name             | Default                | Description                                  |
-| ---------------- | ---------------------- | -------------------------------------------- |
-| `speedVariation` | { min: 0.0, max: 1.0 } | Per-piece speed multiplier range.            |
-| `colors`         | N/A                    | Colors for this origin (overrides root).     |
-| `flakeStyle`     | N/A                    | Style for this origin (overrides root).      |
-| `rotation`       | N/A                    | Rotation for this origin (overrides root).   |
-| `depth`          | { min: 1, max: 1.1 }   | Depth for this origin (overrides root).      |
+| Name             | Default                | Description                                |
+| ---------------- | ---------------------- | ------------------------------------------ |
+| `speedVariation` | { min: 0.0, max: 1.0 } | Per-piece speed multiplier range.          |
+| `colors`         | N/A                    | Colors for this origin (overrides root).   |
+| `flakeStyle`     | N/A                    | Style for this origin (overrides root).    |
+| `rotation`       | N/A                    | Rotation for this origin (overrides root). |
+| `depth`          | { min: 1, max: 1.1 }   | Depth for this origin (overrides root).    |
 
 </details>
 
@@ -400,17 +400,17 @@ Same as `<Confetti />` except:
 <details>
 <summary>Advanced props — these work well out of the box, but you can tweak them for full customizability.</summary>
 
-| Name             | Default                | Description                                                     |
-| ---------------- | ---------------------- | --------------------------------------------------------------- |
+| Name             | Default                | Description                                                      |
+| ---------------- | ---------------------- | ---------------------------------------------------------------- |
 | `drag`           | 3.0                    | Air resistance. Number or `{ horizontal, vertical }`.            |
 | `sprayDuration`  | 300                    | Stagger all cannons over N ms.                                   |
 | `speedVariation` | { min: 0.8, max: 1.2 } | Default speed variation for origins.                             |
-| `easing`         | Easing.linear           | Custom easing for the animation progress.                        |
+| `easing`         | Easing.linear          | Custom easing for the animation progress.                        |
 | `flipIntensity`  | 0.85                   | How dramatically pieces flip (0-1). Lower = flatter.             |
-| `rotation`       | N/A                    | Default rotation config for origins.                              |
-| `depth`          | { min: 1, max: 1.1 }   | Default depth range for origins.                                  |
-| `initialScale`   | 0.3                    | Scale at spawn before growing.                                    |
-| `containerStyle` | N/A                    | Style for the container. Supports any sizing (numeric, %, flex).  |
+| `rotation`       | N/A                    | Default rotation config for origins.                             |
+| `depth`          | { min: 1, max: 1.1 }   | Default depth range for origins.                                 |
+| `initialScale`   | 0.3                    | Scale at spawn before growing.                                   |
+| `containerStyle` | N/A                    | Style for the container. Supports any sizing (numeric, %, flex). |
 
 </details>
 
@@ -451,6 +451,21 @@ Define flake sizes as children of any confetti component (or origin).
 | `image`      | N/A     | Skia image texture (overrides parent `image`/`svg`).            |
 | `svg`        | N/A     | Skia SVG texture (overrides parent `image`/`svg`).              |
 | `colors`     | N/A     | Color palette for this flake group (overrides parent `colors`). |
+
+## Compatibility
+
+> [!IMPORTANT]
+> This library does not depend on a specific React Native version directly. Compatibility depends on [React Native Reanimated](https://docs.swmansion.com/react-native-reanimated/docs/guides/compatibility/), [React Native Worklets](https://docs.swmansion.com/react-native-worklets/docs/guides/compatibility/), and [React Native Skia](https://github.com/Shopify/react-native-skia). Skia does not publish a Reanimated-style compatibility matrix, so use its [installation requirements](https://shopify.github.io/react-native-skia/docs/getting-started/installation/) as the source of truth.
+
+| Package version   | Tested with React Native | Tested with Skia | Tested with Reanimated | Worklets                  | Minimum inferred from API usage                                                               |
+| ----------------- | ------------------------ | ---------------- | ---------------------- | ------------------------- | --------------------------------------------------------------------------------------------- |
+| `2.0.0`           | `0.83.2`                 | `2.5.1`          | `4.2.2`                | Required via Reanimated 4 | React Native `>=0.79`, React `>=19`, Skia `>=2.0.0`, Reanimated `>=4.0.0`, Worklets `>=0.7.0` |
+| `1.0.0` - `1.1.2` | `0.79.2`                 | `2.0.0-next.4`   | `3.18.0`               | Not required directly     | React Native `>=0.79`, React `>=19`, Skia `2.0.0-next.x` / `>=2.0.0`, Reanimated `>=3.18.0`   |
+| `0.8.3`           | `0.79.2`                 | `2.0.0-next.4`   | `3.17.5`               | Not required directly     | React Native `>=0.79`, React `>=19`, Skia `2.0.0-next.x` / `>=2.0.0`, Reanimated `>=3.17.5`   |
+| `0.8.1` - `0.8.2` | `0.76.6`                 | `1.4.2`          | `3.16.1`               | Not required directly     | React Native `>=0.76`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.16.1`                    |
+| `0.2.0` - `0.7.0` | `0.74.5`                 | `1.4.2`          | `3.15.5`               | Not required directly     | React Native `>=0.74`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.15.5`                    |
+
+For exact app support, check the compatibility pages for the installed versions of Reanimated and Worklets. For Skia, follow the official installation requirements: current Skia versions require React Native `>=0.79` and React `>=19`; React Native `<=0.78` / React `<=18` projects should use Skia `1.12.4` or below.
 
 ## Migrating from v1
 
