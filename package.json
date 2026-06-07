@@ -16,6 +16,8 @@
   "files": [
     "src",
     "lib",
+    "!coverage",
+    "!coverage/**",
     "!**/__tests__",
     "!**/__fixtures__",
     "!**/__mocks__",
@@ -56,6 +58,7 @@
     "@eslint/js": "^10.0.1",
     "@evilmartians/lefthook": "^1.5.0",
     "@react-native/babel-preset": "0.85.3",
+    "@react-native/jest-preset": "0.85.3",
     "@release-it/conventional-changelog": "^10.0.6",
     "@shopify/react-native-skia": "2.6.2",
     "@types/jest": "^30.0.0",
@@ -95,7 +98,7 @@
     "zod-validation-error": "4.0.2"
   },
   "jest": {
-    "preset": "react-native",
+    "preset": "@react-native/jest-preset",
     "modulePathIgnorePatterns": [
       "<rootDir>/example/node_modules",
       "<rootDir>/kitchen-sink/node_modules",
