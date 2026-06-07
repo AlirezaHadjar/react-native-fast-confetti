@@ -26,7 +26,7 @@ The fastest confetti animation library for React Native, powered by Skia Atlas A
 ## Installation
 
 > [!IMPORTANT]
-> This library depends on [react-native-reanimated](https://github.com/software-mansion/react-native-reanimated), [@shopify/react-native-skia](https://github.com/Shopify/react-native-skia), and [react-native-worklets](https://docs.swmansion.com/react-native-worklets). Make sure to install those first.
+> This library depends on [react-native-reanimated](https://docs.swmansion.com/react-native-reanimated/docs/guides/compatibility/), [@shopify/react-native-skia](https://github.com/Shopify/react-native-skia), and [react-native-worklets](https://docs.swmansion.com/react-native-worklets/docs/guides/compatibility/). Make sure to install those first.
 
 ```sh
 yarn add react-native-fast-confetti
@@ -413,6 +413,21 @@ Define flake sizes as children of any confetti component (or origin).
 | `image`      | N/A     | Skia image texture (overrides parent `image`/`svg`).            |
 | `svg`        | N/A     | Skia SVG texture (overrides parent `image`/`svg`).              |
 | `colors`     | N/A     | Color palette for this flake group (overrides parent `colors`). |
+
+## Compatibility
+
+> [!IMPORTANT]
+> This library does not depend on a specific React Native version directly. Compatibility depends on [React Native Reanimated](https://docs.swmansion.com/react-native-reanimated/docs/guides/compatibility/), [React Native Worklets](https://docs.swmansion.com/react-native-worklets/docs/guides/compatibility/), and [React Native Skia](https://github.com/Shopify/react-native-skia). Skia does not publish a Reanimated-style compatibility matrix, so use its [installation requirements](https://shopify.github.io/react-native-skia/docs/getting-started/installation/) as the source of truth.
+
+| Package version | Tested with React Native | Tested with Skia | Tested with Reanimated | Worklets | Minimum inferred from API usage |
+| --- | --- | --- | --- | --- | --- |
+| `2.0.0` | `0.83.2` | `2.5.1` | `4.2.2` | Required via Reanimated 4 | React Native `>=0.79`, React `>=19`, Skia `>=2.0.0`, Reanimated `>=4.0.0`, Worklets `>=0.7.0` |
+| `1.0.0` - `1.1.2` | `0.79.2` | `2.0.0-next.4` | `3.18.0` | Not required directly | React Native `>=0.79`, React `>=19`, Skia `2.0.0-next.x` / `>=2.0.0`, Reanimated `>=3.18.0` |
+| `0.8.3` | `0.79.2` | `2.0.0-next.4` | `3.17.5` | Not required directly | React Native `>=0.79`, React `>=19`, Skia `2.0.0-next.x` / `>=2.0.0`, Reanimated `>=3.17.5` |
+| `0.8.1` - `0.8.2` | `0.76.6` | `1.4.2` | `3.16.1` | Not required directly | React Native `>=0.76`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.16.1` |
+| `0.2.0` - `0.7.0` | `0.74.5` | `1.4.2` | `3.15.5` | Not required directly | React Native `>=0.74`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.15.5` |
+
+For exact app support, check the compatibility pages for the installed versions of Reanimated and Worklets. For Skia, follow the official installation requirements: current Skia versions require React Native `>=0.79` and React `>=19`; React Native `<=0.78` / React `<=18` projects should use Skia `1.12.4` or below.
 
 ## Migrating from v1
 
