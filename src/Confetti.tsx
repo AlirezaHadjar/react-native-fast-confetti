@@ -1,623 +1,333 @@
-import { useRSXformBuffer, Canvas, Atlas } from '@shopify/react-native-skia';
-import { useCallback, useEffect, useImperativeHandle, forwardRef } from 'react';
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useRSXformBuffer } from '@shopify/react-native-skia';
 import {
-  cancelAnimation,
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+} from 'react';
+import {
   Extrapolation,
   interpolate,
-  runOnJS,
   runOnUI,
-  useDerivedValue,
   useSharedValue,
-  withDelay,
-  withSequence,
-  withTiming,
 } from 'react-native-reanimated';
-import { generateBoxesArray, generateEvenlyDistributedValues } from './utils';
+import { ConfettiCanvas } from './ConfettiCanvas';
 import {
-  DEFAULT_AUTOSTART_DELAY,
-  DEFAULT_BLAST_DURATION,
   DEFAULT_BOXES_COUNT,
-  DEFAULT_COLORS,
+  DEFAULT_CONFETTI_DRIFT,
   DEFAULT_CONFETTI_FALL_EASING,
-  DEFAULT_CONFETTI_BLAST_EASING,
-  DEFAULT_CONFETTI_RANDOM_OFFSET,
-  DEFAULT_FALL_DURATION,
-  DEFAULT_FLAKE_SIZE,
+  DEFAULT_CONFETTI_GRAVITY,
+  DEFAULT_CONFETTI_WOBBLE,
   DEFAULT_VERTICAL_SPACING,
-  RANDOM_INITIAL_Y_JIGGLE,
+  TRAJECTORY_SAMPLE_COUNT,
 } from './constants';
+import { Flake } from './FlakeComponent';
+import { useAnimationLifecycle } from './hooks/useAnimationLifecycle';
+import { useConfettiFlakes } from './hooks/useConfettiFlakes';
+import { useConfettiLogic } from './hooks/useConfettiLogic';
+import { useContainerDimensions } from './hooks/useContainerDimensions';
+import { useTextureProps } from './hooks/useTextureProps';
 import type {
   ConfettiMethods,
   ConfettiProps,
+  FallingBox,
   InternalConfettiProps,
-  ConfettiRestartOptions,
-  Position,
 } from './types';
-import { useConfettiLogic } from './hooks/useConfettiLogic';
-import { useVariations } from './hooks/sizeVariations';
+import {
+  computeSpawnGrid,
+  estimateFallingDuration,
+  generateFallingBoxesArray,
+} from './utils';
 
-const calculateHasCannons = (
-  cannonsPositions?: Position[] | null,
-  aHasCannon?: boolean
-) => {
-  'worklet';
-  return (aHasCannon ?? false) || (cannonsPositions?.length ?? 0) > 0;
-};
-
-const calculateInitialProgress = (hasCannons: boolean) => {
-  'worklet';
-  return hasCannons ? 0 : 1;
-};
-
-const InternalConfetti = forwardRef<ConfettiMethods, InternalConfettiProps>(
+const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
   (
     {
+      children,
       count = DEFAULT_BOXES_COUNT,
-      flakeSize = DEFAULT_FLAKE_SIZE,
-      sizeVariation = 0,
-      fallDuration = DEFAULT_FALL_DURATION,
-      blastDuration = DEFAULT_BLAST_DURATION,
-      colors = DEFAULT_COLORS,
-      autoStartDelay = DEFAULT_AUTOSTART_DELAY,
-      verticalSpacing = DEFAULT_VERTICAL_SPACING,
-      rotation,
-      randomSpeed,
-      randomOffset,
-      isContinuous,
+      colors: rootColors,
+      gravity = DEFAULT_CONFETTI_GRAVITY,
+      wobble,
+      drift = DEFAULT_CONFETTI_DRIFT,
+      autoplay = true,
+      infinite = false,
+      continuous = false,
+      fadeOutOnEnd = false,
+      autoStartDelay = 0,
       onAnimationEnd,
       onAnimationStart,
-      width: _width,
-      height: _height,
-      autoplay = true,
-      isInfinite = autoplay,
-      fadeOutOnEnd = false,
-      cannonsPositions = [],
-      fallEasing: _fallEasing,
-      blastEasing: _blastEasing,
-      easing,
       containerStyle,
-      ...flakeProps
+      rotation,
+      depth,
+      verticalSpacing = DEFAULT_VERTICAL_SPACING,
+      flakeStyle = 'glossy',
+      initialScale = 0.3,
+      flipIntensity = 0.85,
+      easing = DEFAULT_CONFETTI_FALL_EASING,
+      ...textureRootProps
     },
     ref
   ) => {
-    const _radiusRange =
-      'radiusRange' in flakeProps ? flakeProps.radiusRange : undefined;
-    const fallEasing =
-      _fallEasing ?? easing ?? DEFAULT_CONFETTI_FALL_EASING;
-    const blastEasing =
-      _blastEasing ?? easing ?? DEFAULT_CONFETTI_BLAST_EASING;
-    // Store dynamic cannon positions - can be overridden via restart method
-    const dynamicCannonsPositions = useSharedValue<Position[] | null>(null);
-    const hasCannons = calculateHasCannons(cannonsPositions);
-    const endProgress = 2;
-    const aHasCannon = useDerivedValue(
-      () => calculateHasCannons(dynamicCannonsPositions.get(), hasCannons),
-      [cannonsPositions, hasCannons]
-    );
-    const aInitialProgress = useDerivedValue(
-      () => calculateInitialProgress(aHasCannon.get()),
-      [aHasCannon]
-    );
-    const aEndProgress = useDerivedValue(() => endProgress, [endProgress]);
-    const progress = useSharedValue(calculateInitialProgress(hasCannons));
-    const opacity = useDerivedValue(() => {
-      if (!fadeOutOnEnd) return 1;
-      return interpolate(
-        progress.get(),
-        [1, 1.9, 2],
-        [1, 0, 0],
-        Extrapolation.CLAMP
-      );
-    }, [fadeOutOnEnd]);
-    const running = useSharedValue(false);
-    const { width: DEFAULT_SCREEN_WIDTH, height: DEFAULT_SCREEN_HEIGHT } =
-      useWindowDimensions();
-    const containerWidth = _width || DEFAULT_SCREEN_WIDTH;
-    const containerHeight = _height || DEFAULT_SCREEN_HEIGHT;
-    // if the count * flakeSize.width is less than to fill the first row, we need to add horizontal spacing
-    const horizontalSpacing = Math.max(
-      0,
-      containerWidth / count - flakeSize.width
-    );
-    const columnWidth = Math.min(flakeSize.width, 20) + horizontalSpacing;
-    const rowHeight = Math.min(flakeSize.height, 20) + verticalSpacing;
-    const columnsNum = Math.floor(containerWidth / columnWidth);
-    const rowsNum = Math.ceil(count / columnsNum);
-    const baseVerticalOffset = flakeSize.height * 0.5;
-    // Calculate vertical offset based on whether we have cannons (either from prop or dynamic)
-    const aVerticalOffset = useDerivedValue(() => {
-      return (
-        -rowsNum * rowHeight * (aHasCannon.get() ? 0.2 : 1) +
-        verticalSpacing -
-        RANDOM_INITIAL_Y_JIGGLE -
-        baseVerticalOffset
-      );
-    }, [rowsNum, rowHeight, verticalSpacing, baseVerticalOffset, aHasCannon]);
-    const sizeVariations = useVariations({
-      sizeVariation,
-      flakeSize,
-      _radiusRange,
+    const { containerWidth, containerHeight, onContainerLayout, ready } =
+      useContainerDimensions(containerStyle);
+
+    const parentTexture = useTextureProps(textureRootProps);
+
+    // --- Parse children + build atlas via hook ---
+    const {
+      allColors,
+      sizeVariations,
+      colorOverrides,
+      sizeIsTextured,
+      parentColorCount,
+    } = useConfettiFlakes({
+      children,
+      rootColors,
+      rootFlakeStyle: flakeStyle,
+      parentTexture,
     });
-    const boxes = useSharedValue(
-      generateBoxesArray({
+
+    // --- Compute grid layout for spawn positions ---
+    const maxFlakeWidth = Math.max(...sizeVariations.map((f) => f.width));
+    const maxFlakeHeight = Math.max(...sizeVariations.map((f) => f.height));
+    const { columnsNum, columnWidth, rowsNum, verticalOffset } =
+      computeSpawnGrid({
         count,
-        colorsVariations: colors.length,
-        sizeVariations: sizeVariations.length,
-        duration: fallDuration,
-        rotation,
-        randomSpeed,
-        randomOffset,
-      })
-    );
-    const delayStartTime = useSharedValue(0);
-    const initialVertical = useDerivedValue(() => {
-      const randomYOffset =
-        randomOffset?.y?.max || DEFAULT_CONFETTI_RANDOM_OFFSET.y?.max || 0;
+        maxFlakeWidth,
+        maxFlakeHeight,
+        containerWidth,
+        containerHeight,
+        verticalSpacing,
+      });
 
-      if (aHasCannon.get()) return 0;
-      return randomYOffset;
-    }, [randomOffset?.y?.max, aHasCannon]);
-
-    const aFallingMaxYMovement = useDerivedValue(() => {
-      return (
-        Math.abs(aVerticalOffset.get()) +
-        containerHeight +
-        verticalSpacing +
-        Math.abs(initialVertical.get()) +
-        Math.min(1 - (randomSpeed?.min || 0), 1) * containerHeight
-      );
-    }, [
-      aVerticalOffset,
+    // --- Auto-compute duration from physics ---
+    const maxWobble = wobble?.max ?? DEFAULT_CONFETTI_WOBBLE.max;
+    const duration = estimateFallingDuration({
+      gravity,
       containerHeight,
-      verticalSpacing,
-      initialVertical,
-      randomSpeed,
-    ]);
+      verticalOffset,
+      maxWobble,
+    });
 
-    //Calculate the time it takes for a single confetti flake to traverse the visible screen area.
-    const aSingleFlakeFallDuration = useDerivedValue(() => {
-      return (containerHeight * fallDuration) / aFallingMaxYMovement.get();
-    }, [containerHeight, fallDuration, aFallingMaxYMovement]);
-    const continuousDelay =
-      isContinuous === 2
-        ? (fallDuration - aSingleFlakeFallDuration.get()) * 0.9
-        : 0;
-    const delay = autoStartDelay + continuousDelay;
+    const cycleCount = useSharedValue(0);
+
+    const onCycleEnd = useCallback(() => {
+      'worklet';
+      cycleCount.set(cycleCount.get() + 1);
+    }, [cycleCount]);
+
+    const { progress, running, opacity, pause, reset, resume, runAnimation } =
+      useAnimationLifecycle({
+        duration,
+        infinite,
+        fadeOutOnEnd,
+        easing,
+        onAnimationStart,
+        onAnimationEnd,
+        onCycleEnd,
+      });
+
+    const totalTime = duration / 1000;
+
+    const boxes = useSharedValue<FallingBox[]>([]);
+    const trajectories = useSharedValue<number[]>([]);
 
     const { texture, sprites } = useConfettiLogic({
       sizeVariations,
-      colors,
+      colors: allColors,
       boxes,
-      textureProps:
-        flakeProps.type === 'image' && flakeProps.flakeImage
-          ? { type: 'image', content: flakeProps.flakeImage }
-          : flakeProps.type === 'svg' && flakeProps.flakeSvg
-            ? { type: 'svg', content: flakeProps.flakeSvg }
-            : undefined,
+      sizeColorOverrides: colorOverrides,
+      count,
     });
 
-    const pause = () => {
-      'worklet';
-
-      running.set(false);
-      cancelAnimation(progress);
-    };
-
-    const reset = () => {
-      'worklet';
-
-      pause();
-      progress.set(aInitialProgress.get());
-    };
+    const sizeVariationsCount = sizeVariations.length;
 
     const refreshBoxes = useCallback(() => {
       'worklet';
-
-      const newBoxes = generateBoxesArray({
+      const result = generateFallingBoxesArray({
         count,
-        colorsVariations: colors.length,
-        sizeVariations: sizeVariations.length,
-        duration: fallDuration,
+        sizeVariations: sizeVariationsCount,
+        sizeColorOverrides: colorOverrides,
+        parentColorCount,
+        sizeIsTextured,
+        containerWidth,
+        containerHeight,
+        verticalSpacing,
+        maxFlakeWidth,
+        maxFlakeHeight,
+        verticalOffset,
+        columnsNum,
+        columnWidth,
+        rowsNum,
         rotation,
-        randomSpeed,
-        randomOffset,
+        depth,
+        wobble,
+        totalTime,
+        gravity,
+        infinite,
+        continuous,
       });
-      boxes.set(newBoxes);
+      boxes.set(result.boxes);
+      trajectories.set(result.trajectories);
     }, [
       count,
-      colors.length,
-      sizeVariations.length,
+      sizeVariationsCount,
+      colorOverrides,
+      parentColorCount,
+      sizeIsTextured,
       boxes,
-      fallDuration,
+      trajectories,
+      containerWidth,
+      containerHeight,
+      verticalSpacing,
+      maxFlakeWidth,
+      maxFlakeHeight,
+      verticalOffset,
+      columnsNum,
+      columnWidth,
+      rowsNum,
       rotation,
-      randomSpeed,
-      randomOffset,
+      depth,
+      wobble,
+      totalTime,
+      gravity,
+      infinite,
+      continuous,
     ]);
 
-    const JSOnStart = useCallback(
-      () => onAnimationStart?.(),
-      [onAnimationStart]
-    );
-    const JSOnEnd = useCallback(() => onAnimationEnd?.(), [onAnimationEnd]);
-
-    const UIOnStart = useCallback(() => {
-      'worklet';
-      runOnJS(JSOnStart)();
-    }, [JSOnStart]);
-
-    const UIOnEnd = useCallback(() => {
-      'worklet';
-      runOnJS(JSOnEnd)();
-    }, [JSOnEnd]);
-
-    const runAnimation = useCallback(
-      (
-        {
-          blastDuration: _blastDuration,
-          fallDuration: _fallDuration,
-          delay = 0,
-        }: {
-          blastDuration?: number;
-          fallDuration?: number;
-          delay?: number;
-        },
-        onEnd?: (finished: boolean | undefined) => void
-      ) => {
-        'worklet';
-
-        const hasCannons = calculateHasCannons(
-          dynamicCannonsPositions.get(),
-          aHasCannon.get()
-        );
-
-        const animations: number[] = [];
-
-        if (_blastDuration && hasCannons)
-          animations.push(
-            withTiming(
-              1,
-              { duration: _blastDuration, easing: blastEasing },
-              (finished) => {
-                if (!_fallDuration) onEnd?.(finished);
-              }
-            )
-          );
-        if (_fallDuration)
-          animations.push(
-            withTiming(
-              2,
-              { duration: _fallDuration, easing: fallEasing },
-              (finished) => {
-                onEnd?.(finished);
-              }
-            )
-          );
-
-        const finalAnimation =
-          delay > 0
-            ? withDelay(delay, withSequence(...animations))
-            : withSequence(...animations);
-
-        if (delay > 0) {
-          delayStartTime.set(Date.now());
-        }
-
-        return finalAnimation;
-      },
-      [aHasCannon, delayStartTime, fallEasing, blastEasing, dynamicCannonsPositions]
-    );
-
     const restart = useCallback(
-      (options: ConfettiRestartOptions = {}) => {
+      (delay: number = 0) => {
         'worklet';
-
-        const hasCannons = calculateHasCannons(
-          options.cannonsPositions,
-          aHasCannon.get()
-        );
-        const initialProgress = calculateInitialProgress(hasCannons);
-
-        // Update dynamic cannon positions if provided
-        dynamicCannonsPositions.set(options.cannonsPositions || null);
-
         refreshBoxes();
-        progress.set(initialProgress);
-        running.set(true);
-        if (isContinuous !== 2) UIOnStart();
-
-        function repeatAnimation() {
-          'worklet';
-          if (!isContinuous) UIOnEnd();
-          refreshBoxes();
-          if (isInfinite) {
-            cancelAnimation(progress);
-            progress.set(initialProgress);
-            progress.set(
-              runAnimation(
-                {
-                  blastDuration,
-                  fallDuration,
-                  delay: fallDuration - 2.5 * aSingleFlakeFallDuration.get(),
-                },
-                (finished) => {
-                  'worklet';
-                  if (!finished || !isInfinite) return;
-                  repeatAnimation();
-                }
-              )
-            );
-          }
-        }
-
-        const startAnimation = (delay: number) => {
-          'worklet';
-          progress.set(
-            runAnimation({ blastDuration, fallDuration, delay }, (finished) => {
-              'worklet';
-              if (!finished || !isInfinite) return;
-              repeatAnimation();
-            })
-          );
-        };
-
-        startAnimation(delay);
+        cycleCount.set(0);
+        runAnimation(delay);
       },
-      [
-        aHasCannon,
-        dynamicCannonsPositions,
-        refreshBoxes,
-        progress,
-        running,
-        isContinuous,
-        UIOnStart,
-        delay,
-        UIOnEnd,
-        isInfinite,
-        runAnimation,
-        blastDuration,
-        fallDuration,
-        aSingleFlakeFallDuration,
-      ]
+      [refreshBoxes, cycleCount, runAnimation]
     );
-
-    const resume = () => {
-      'worklet';
-
-      if (running.get()) return;
-      running.set(true);
-
-      const isBlasting = progress.get() < 1;
-      const blastRemaining = blastDuration * (1 - progress.get());
-      const fallingRemaining = fallDuration * (2 - progress.get());
-
-      function repeatAnimation() {
-        'worklet';
-        if (!isContinuous) UIOnEnd();
-        refreshBoxes();
-        if (isInfinite) {
-          cancelAnimation(progress);
-          progress.set(aInitialProgress.get());
-          progress.set(
-            runAnimation(
-              {
-                blastDuration,
-                fallDuration,
-                delay: fallDuration - 2.5 * aSingleFlakeFallDuration.get(),
-              },
-              (finished) => {
-                'worklet';
-                if (!finished || !isInfinite) return;
-                repeatAnimation();
-              }
-            )
-          );
-        }
-      }
-
-      let _delay = 0;
-
-      //  we're resuming when the animation is not running and is in the delay phase
-      if (isContinuous === 2 && progress.get() === aInitialProgress.get()) {
-        const elapsed = Date.now() - delayStartTime.get();
-        const remaining = delay - elapsed;
-        _delay = remaining;
-      }
-
-      progress.set(
-        runAnimation(
-          {
-            blastDuration: isBlasting ? blastRemaining : undefined,
-            fallDuration: isBlasting ? fallDuration : fallingRemaining,
-            delay: _delay,
-          },
-          (finished) => {
-            'worklet';
-            if (!finished || !isInfinite) return;
-
-            repeatAnimation();
-          }
-        )
-      );
-    };
 
     useImperativeHandle(ref, () => ({
       pause: runOnUI(pause),
-      reset: runOnUI(reset),
+      reset: runOnUI(() => {
+        'worklet';
+        reset();
+        cycleCount.set(0);
+      }),
       resume: runOnUI(resume),
       restart: runOnUI(restart),
     }));
 
-    const getPosition = (index: number) => {
-      'worklet';
-      const rowIndex = Math.floor(index / columnsNum);
-      const isLastRow = rowIndex === rowsNum - 1;
-
-      let x: number;
-      // if the last row is not full, we need to calculate the spacing to spread items evenly
-      if (isLastRow) {
-        // Calculate remaining items in last row
-        const itemsInLastRow = count - (rowsNum - 1) * columnsNum;
-        // Calculate spacing to spread items evenly
-        const lastRowSpacing =
-          (containerWidth - itemsInLastRow * flakeSize.width) /
-          (itemsInLastRow + 1);
-        // Get position within last row (0 to itemsInLastRow-1)
-        const positionInLastRow = index - (rowsNum - 1) * columnsNum;
-        x =
-          lastRowSpacing +
-          positionInLastRow * (flakeSize.width + lastRowSpacing);
-      } else {
-        x = (index % columnsNum) * columnWidth;
-      }
-
-      let y = rowIndex * rowHeight;
-
-      y -= Math.abs(initialVertical.get());
-      return { x, y };
-    };
-
     useEffect(() => {
+      if (!ready) return;
       runOnUI(() => {
-        if (autoplay && !running.get()) restart();
+        if (!running.get()) {
+          if (autoplay) {
+            restart(autoStartDelay);
+          } else {
+            refreshBoxes();
+          }
+        }
       })();
-    }, [autoplay, restart, running]);
+    }, [autoplay, autoStartDelay, restart, refreshBoxes, running, ready]);
 
+    const maxIdx = TRAJECTORY_SAMPLE_COUNT;
     const transforms = useRSXformBuffer(count, (val, i) => {
       'worklet';
       const piece = boxes.get()[i];
-      if (!piece) return;
-
-      let tx = 0,
-        ty = 0;
-      const { x, y } = getPosition(i); // Already includes random offsets
-      const hasCannons = calculateHasCannons(
-        dynamicCannonsPositions.get(),
-        aHasCannon.get()
-      );
-
-      if (progress.get() < 1 && hasCannons) {
-        // Distribute confetti evenly across cannons by using modulo
-        const currentCannonsPositions =
-          dynamicCannonsPositions.get() || cannonsPositions;
-        const blastIndex = i % currentCannonsPositions.length;
-        const blastPosX = currentCannonsPositions[blastIndex]?.x || 0;
-        const blastPosY = currentCannonsPositions[blastIndex]?.y || 0;
-
-        const initialRandomX = piece.randomXs[0] || 0;
-        const initialRandomY = piece.initialRandomY;
-        const initialX = x + piece.randomOffsetX + initialRandomX;
-        const initialY =
-          y + piece.randomOffsetY + initialRandomY + aVerticalOffset.get();
-
-        tx = interpolate(
-          progress.get(),
-          [piece.blastThreshold, 1],
-          [blastPosX, initialX],
-          Extrapolation.CLAMP
-        );
-        ty = interpolate(
-          progress.get(),
-          [piece.blastThreshold, 1],
-          [blastPosY, initialY],
-          Extrapolation.CLAMP
-        );
-      } else {
-        const initialRandomY = piece.initialRandomY;
-        tx = x + piece.randomOffsetX;
-        ty = y + piece.randomOffsetY + initialRandomY + aVerticalOffset.get();
-
-        // Apply random speed to the fall height
-        const yChange = interpolate(
-          progress.get(),
-          [1, 2],
-          [0, aFallingMaxYMovement.get() * piece.randomSpeed], // Use random speed here
-          Extrapolation.CLAMP
-        );
-        // Interpolate between randomX values for smooth left-right movement
-        const randomX = interpolate(
-          progress.get(),
-          generateEvenlyDistributedValues(1, 2, piece.randomXs.length),
-          piece.randomXs, // Use the randomX array for horizontal movement
-          Extrapolation.CLAMP
-        );
-
-        tx += randomX;
-        ty += yChange;
+      if (!piece) {
+        val.set(0, 0, -10000, -10000);
+        return;
       }
 
-      const rotationDirection = piece.clockwise ? 1 : -1;
-      const rz =
-        piece.initialRotation +
-        interpolate(
-          progress.get(),
-          [aInitialProgress.get(), aEndProgress.get()],
-          [0, rotationDirection * piece.maxRotation.z],
-          Extrapolation.CLAMP
-        );
-      const rx =
-        piece.initialRotation +
-        interpolate(
-          progress.get(),
-          [aInitialProgress.get(), aEndProgress.get()],
-          [0, rotationDirection * piece.maxRotation.x],
-          Extrapolation.CLAMP
-        );
+      const globalP = progress.get();
 
-      const oscillatingScale = Math.abs(Math.cos(rx)); // Scale goes from 1 -> 0 -> 1
-      const blastScale = interpolate(
-        progress.get(),
-        [0, 0.2, 1],
-        [0, 1, 1],
-        Extrapolation.CLAMP
-      );
-      const scale = blastScale * oscillatingScale;
-      const size = sizeVariations[piece.sizeIndex]!;
+      let p: number;
+      if (continuous) {
+        const elapsed = cycleCount.get() + globalP;
+        const pieceElapsed = elapsed - piece.phaseOffset;
+        p = pieceElapsed <= 0 ? 0 : pieceElapsed % 1.0;
+      } else {
+        p = globalP;
+      }
+      const t = p * totalTime;
 
+      // --- Trajectory lookup ---
+      const rawIdx = p * maxIdx;
+      const s0 = Math.min(Math.floor(rawIdx), maxIdx - 1);
+      const u = rawIdx - s0;
+
+      const base = (i * (maxIdx + 1) + s0) * 3;
+      const traj = trajectories.get();
+      const x0 = traj[base] ?? 0;
+      const y0 = traj[base + 1] ?? 0;
+      const t0 = traj[base + 2] ?? 0;
+      const x1 = traj[base + 3] ?? 0;
+      const y1 = traj[base + 4] ?? 0;
+      const t1 = traj[base + 5] ?? 0;
+
+      const rawTx = x0 + (x1 - x0) * u;
+      const ty = y0 + (y1 - y0) * u;
+      const tx = piece.spawnX + (rawTx - piece.spawnX) * drift;
+      const tumbleTheta = t0 + (t1 - t0) * u;
+
+      // --- Visual rotation (continuous spin, separate axis) ---
+      const clockwiseDir = piece.clockwise ? 1 : -1;
+      const rz = piece.spinPhase + clockwiseDir * piece.spinRate * t;
+
+      // --- Scale from tumble ---
+      const rawCos = Math.cos(tumbleTheta);
+      const minFlipScale = 1 - flipIntensity;
+      const absClamped = Math.max(Math.abs(rawCos), minFlipScale);
+      const oscillatingScale = piece.isTextured
+        ? absClamped
+        : (rawCos >= 0 ? 1 : -1) * absClamped;
+      const appearScale = continuous
+        ? 1
+        : interpolate(p, [0, 0.05], [initialScale, 1], Extrapolation.CLAMP);
+      const scale = appearScale * oscillatingScale * piece.depthScale;
+
+      // --- RSXform ---
+      const size = sizeVariations[piece.sizeIndex];
+      if (!size) {
+        val.set(0, 0, -10000, -10000);
+        return;
+      }
       const px = size.width / 2;
       const py = size.height / 2;
-
-      // Apply the transformation, including the flipping effect and randomX oscillation
       const s = Math.sin(rz) * scale;
       const c = Math.cos(rz) * scale;
-
-      // Use the interpolated randomX for horizontal oscillation
       val.set(c, s, tx - c * px + s * py, ty - s * px - c * py);
     });
 
     return (
-      <View pointerEvents="none" style={[styles.container, containerStyle]}>
-        <Canvas style={styles.canvasContainer}>
-          <Atlas
-            image={texture}
-            sprites={sprites}
-            transforms={transforms}
-            opacity={opacity}
-          />
-        </Canvas>
-      </View>
+      <ConfettiCanvas
+        containerStyle={containerStyle}
+        ready={ready}
+        texture={texture}
+        sprites={sprites}
+        transforms={transforms}
+        opacity={opacity}
+        onContainerLayout={onContainerLayout}
+      />
     );
   }
 );
 
-const Confetti = forwardRef<ConfettiMethods, ConfettiProps>((props, ref) => {
-  return <InternalConfetti {...props} ref={ref} />;
-});
+ConfettiInner.displayName = 'Confetti';
 
-Confetti.displayName = 'Confetti';
+const Confetti = ConfettiInner as React.ForwardRefExoticComponent<
+  ConfettiProps & React.RefAttributes<ConfettiMethods>
+> & {
+  Flake: typeof Flake;
+};
+
+Confetti.Flake = Flake;
+
+/**
+ * Legacy export for ContinuousConfetti.
+ * ContinuousConfetti will need to be migrated to the new API separately.
+ */
+const InternalConfetti = ConfettiInner as React.ForwardRefExoticComponent<
+  InternalConfettiProps & React.RefAttributes<ConfettiMethods>
+>;
 InternalConfetti.displayName = 'InternalConfetti';
 
 export { Confetti, InternalConfetti };
-
-const styles = StyleSheet.create({
-  container: {
-    height: '100%',
-    width: '100%',
-    position: 'absolute',
-    zIndex: 1,
-  },
-  canvasContainer: {
-    width: '100%',
-    height: '100%',
-  },
-});

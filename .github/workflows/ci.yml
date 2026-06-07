@@ -61,4 +61,4 @@ jobs:
 
       - name: Build example for Web
         run: |
-          yarn example expo export --platform web
+          yarn kitchen-sink expo export --platform web

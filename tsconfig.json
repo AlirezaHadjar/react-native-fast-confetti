@@ -1,4 +1,5 @@
 {
+  "exclude": ["example", "kitchen-sink"],
   "compilerOptions": {
     "rootDir": ".",
     "paths": {
