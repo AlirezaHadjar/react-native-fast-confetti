@@ -11,7 +11,7 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "jsx": "react-jsx",
-    "lib": ["ESNext"],
+    "lib": ["tsover", "ESNext"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "noEmit": true,

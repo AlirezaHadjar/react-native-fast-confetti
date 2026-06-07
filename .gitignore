@@ -6,7 +6,8 @@
 .expo/
 
 # VSCode
-.vscode/
+.vscode/*
+!.vscode/settings.json
 jsconfig.json
 
 # Xcode

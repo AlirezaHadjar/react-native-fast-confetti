@@ -26,7 +26,10 @@ import {
   updateConfettiRuntimeResources,
   type ConfettiResources,
 } from './hooks/useConfettiResources';
-import { UNIFORMS_BYTES, computeCode, renderCode } from './shaders/confetti';
+import {
+  VERTS_PER_FLAKE,
+  createConfettiPipelines,
+} from './shaders/confetti';
 import type { Spawn } from './utils';
 
 export type GPUConfettiCanvasParams = {
@@ -169,134 +172,11 @@ export const GPUConfettiCanvas = ({
       alphaMode: 'premultiplied',
     });
 
-    const computeModule = device.createShaderModule({ code: computeCode });
-    const renderModule = device.createShaderModule({ code: renderCode });
+    const { computePipeline, renderPipeline } = createConfettiPipelines(
+      resources.root,
+      presentationFormat
+    );
 
-    const computeBGL = device.createBindGroupLayout({
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: { type: 'uniform' },
-        },
-        {
-          binding: 1,
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: { type: 'read-only-storage' },
-        },
-        {
-          binding: 2,
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: { type: 'storage' },
-        },
-      ],
-    });
-
-    const renderBGL = device.createBindGroupLayout({
-      entries: [
-        {
-          binding: 0,
-          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-          buffer: { type: 'uniform' },
-        },
-        {
-          binding: 1,
-          visibility: GPUShaderStage.VERTEX,
-          buffer: { type: 'read-only-storage' },
-        },
-        {
-          binding: 2,
-          visibility: GPUShaderStage.VERTEX,
-          buffer: { type: 'read-only-storage' },
-        },
-        {
-          binding: 3,
-          visibility: GPUShaderStage.VERTEX,
-          buffer: { type: 'read-only-storage' },
-        },
-        {
-          binding: 4,
-          visibility: GPUShaderStage.VERTEX,
-          buffer: { type: 'read-only-storage' },
-        },
-        {
-          binding: 5,
-          visibility: GPUShaderStage.FRAGMENT,
-          sampler: { type: 'filtering' },
-        },
-        {
-          binding: 6,
-          visibility: GPUShaderStage.FRAGMENT,
-          texture: { viewDimension: '2d-array', sampleType: 'float' },
-        },
-      ],
-    });
-
-    const uniformBuffer = device.createBuffer({
-      size: UNIFORMS_BYTES,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-
-    const computeBindGroup = device.createBindGroup({
-      layout: computeBGL,
-      entries: [
-        { binding: 0, resource: { buffer: uniformBuffer } },
-        { binding: 1, resource: { buffer: resources.spawnsBuffer } },
-        { binding: 2, resource: { buffer: resources.runtimeBuffer } },
-      ],
-    });
-
-    const renderBindGroup = device.createBindGroup({
-      layout: renderBGL,
-      entries: [
-        { binding: 0, resource: { buffer: uniformBuffer } },
-        { binding: 1, resource: { buffer: resources.spawnsBuffer } },
-        { binding: 2, resource: { buffer: resources.runtimeBuffer } },
-        { binding: 3, resource: { buffer: resources.sizesBuffer } },
-        { binding: 4, resource: { buffer: resources.paletteBuffer } },
-        { binding: 5, resource: resources.sampler },
-        {
-          binding: 6,
-          resource: resources.texturesArray.createView({
-            dimension: '2d-array',
-          }),
-        },
-      ],
-    });
-
-    const computePipeline = device.createComputePipeline({
-      layout: device.createPipelineLayout({ bindGroupLayouts: [computeBGL] }),
-      compute: { module: computeModule, entryPoint: 'cs_update' },
-    });
-
-    const renderPipeline = device.createRenderPipeline({
-      layout: device.createPipelineLayout({ bindGroupLayouts: [renderBGL] }),
-      vertex: { module: renderModule, entryPoint: 'vs_main' },
-      fragment: {
-        module: renderModule,
-        entryPoint: 'fs_main',
-        targets: [
-          {
-            format: presentationFormat,
-            blend: {
-              color: {
-                srcFactor: 'src-alpha',
-                dstFactor: 'one-minus-src-alpha',
-                operation: 'add',
-              },
-              alpha: {
-                srcFactor: 'one',
-                dstFactor: 'one-minus-src-alpha',
-                operation: 'add',
-              },
-            },
-          },
-        ],
-      },
-      primitive: { topology: 'triangle-list' },
-    });
-
-    const scratch = new Float32Array(UNIFORMS_BYTES / 4);
     let rafId: number | null = null;
     let stopped = false;
     const easing = resolveEasing(params.easing ?? Easing.linear);
@@ -336,63 +216,43 @@ export const GPUConfettiCanvas = ({
           : (cycleProgress - DEFAULT_FADE_START) / (1 - DEFAULT_FADE_START);
       const fadeOpacity = fadeOutOnEnd ? 1 - clamp01(fadeProgress) : 1;
 
-      // viewport + lens
-      scratch[0] = viewportWidth;
-      scratch[1] = viewportHeight;
-      scratch[2] = focalLength;
-      scratch[3] = opacity.get() * fadeOpacity;
-      // dt/time/drift/initialScale
-      scratch[4] = dt;
-      scratch[5] = timeSec;
-      scratch[6] = drift;
-      scratch[7] = initialScale;
-      // wind/magnus/continuous/infinite
-      scratch[8] = params.windStrength;
-      scratch[9] = params.magnusStrength;
-      scratch[10] = continuous ? 1 : 0;
-      scratch[11] = infinite ? 1 : 0;
-      // progress/cycleCount/cycleDuration/fadeOutOnEnd
-      // `progress` slot now carries `elapsed` (seconds); shader only uses it
-      // indirectly through `dt` and `time`.
-      scratch[12] = nowSim;
-      scratch[13] = cycleCount.get();
-      scratch[14] = cycleDuration;
-      scratch[15] = fadeOutOnEnd ? 1 : 0;
-      // fadeStart/bounce/friction/motionBlur
-      scratch[16] = DEFAULT_FADE_START;
-      scratch[17] = params.bounceRestitution;
-      scratch[18] = params.floorFriction;
-      scratch[19] = params.motionBlurAmount;
-      // shadow/iridescence/gravityMag
-      scratch[20] = params.shadowOpacity;
-      scratch[21] = params.iridescence;
-      scratch[22] = gMag;
-      scratch[23] = params.textureMode;
-      // lightDir @ offset 96/4=24
-      scratch[24] = DEFAULT_LIGHT_DIR[0];
-      scratch[25] = DEFAULT_LIGHT_DIR[1];
-      scratch[26] = DEFAULT_LIGHT_DIR[2];
-      scratch[27] = Math.max(0, Math.min(1, 1 - params.flipIntensity));
-      // gravityDir @ offset 112/4=28
-      scratch[28] = gDir[0];
-      scratch[29] = gDir[1];
-      scratch[30] = gDir[2];
-      // [31] padding
-
-      device.queue.writeBuffer(
-        uniformBuffer,
-        0,
-        scratch.buffer as ArrayBuffer,
-        scratch.byteOffset,
-        scratch.byteLength
-      );
+      resources.uniforms.write({
+        viewport: [viewportWidth, viewportHeight],
+        focalLength,
+        opacity: opacity.get() * fadeOpacity,
+        dt,
+        time: timeSec,
+        drift,
+        initialScale,
+        windStrength: params.windStrength,
+        magnusStrength: params.magnusStrength,
+        continuous: continuous ? 1 : 0,
+        infinite: infinite ? 1 : 0,
+        progress: nowSim,
+        cycleCount: cycleCount.get(),
+        cycleDuration,
+        fadeOutOnEnd: fadeOutOnEnd ? 1 : 0,
+        fadeStart: DEFAULT_FADE_START,
+        bounceRestitution: params.bounceRestitution,
+        floorFriction: params.floorFriction,
+        motionBlurAmount: params.motionBlurAmount,
+        shadowOpacity: params.shadowOpacity,
+        iridescence: params.iridescence,
+        gravityMag: gMag,
+        textureMode: params.textureMode,
+        lightDir: DEFAULT_LIGHT_DIR,
+        minVisibleScale: Math.max(0, Math.min(1, 1 - params.flipIntensity)),
+        gravityDir: gDir,
+        _pad2: 0,
+      });
 
       const encoder = device.createCommandEncoder();
       if (dt > 0) {
         const computePass = encoder.beginComputePass();
-        computePass.setPipeline(computePipeline);
-        computePass.setBindGroup(0, computeBindGroup);
-        computePass.dispatchWorkgroups(Math.ceil(count / 64));
+        computePipeline
+          .with(computePass)
+          .with(resources.computeBindGroup)
+          .dispatchWorkgroups(Math.ceil(count / 64));
         computePass.end();
       }
 
@@ -407,10 +267,10 @@ export const GPUConfettiCanvas = ({
           },
         ],
       });
-      renderPass.setPipeline(renderPipeline);
-      renderPass.setBindGroup(0, renderBindGroup);
-      // Tessellated flake: TESS*TESS*6 vertices (TESS=6 → 216 verts per instance).
-      renderPass.draw(216, count);
+      renderPipeline
+        .with(renderPass)
+        .with(resources.renderBindGroup)
+        .draw(VERTS_PER_FLAKE, count);
       renderPass.end();
 
       device.queue.submit([encoder.finish()]);
@@ -434,7 +294,6 @@ export const GPUConfettiCanvas = ({
     return () => {
       stopped = true;
       if (rafId !== null) cancelAnimationFrame(rafId);
-      uniformBuffer.destroy();
     };
   }, [
     device,

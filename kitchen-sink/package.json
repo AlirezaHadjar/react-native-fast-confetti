@@ -34,11 +34,13 @@
     "react-native-screens": "4.25.2",
     "react-native-web": "^0.21.0",
     "react-native-wgpu": "^0.5.11",
-    "react-native-worklets": "0.8.3"
+    "react-native-worklets": "0.8.3",
+    "typegpu": "0.11.8"
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
-    "react-native-builder-bob": "^0.40.9"
+    "react-native-builder-bob": "^0.40.9",
+    "unplugin-typegpu": "0.11.5"
   },
   "reanimated": {
     "staticFeatureFlags": {

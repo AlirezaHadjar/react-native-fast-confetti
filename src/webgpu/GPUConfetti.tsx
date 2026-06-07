@@ -27,7 +27,7 @@ import { useSimulationLifecycle } from './hooks/useSimulationLifecycle';
 import { useConfettiFlakes } from '../hooks/useConfettiFlakes';
 import { useContainerDimensions } from '../hooks/useContainerDimensions';
 import { useTextureProps } from '../hooks/useTextureProps';
-import { computeSizeFlags } from './hooks/useConfettiResources';
+import { computeSizeFlags } from './resourcePacking';
 import type {
   GPUConfettiMethods,
   GPUConfettiProps,

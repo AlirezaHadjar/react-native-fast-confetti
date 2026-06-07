@@ -66,9 +66,9 @@
     "@react-native/jest-preset": "0.85.3",
     "@release-it/conventional-changelog": "^10.0.6",
     "@shopify/react-native-skia": "2.6.2",
-    "@webgpu/types": "^0.1.69",
     "@types/jest": "^30.0.0",
     "@types/react": "^19.2.0",
+    "@webgpu/types": "^0.1.69",
     "commitlint": "^20.5.0",
     "del-cli": "^7.0.0",
     "eslint": "^9.0.0",
@@ -84,20 +84,26 @@
     "react-native": "0.85.3",
     "react-native-builder-bob": "^0.40.9",
     "react-native-reanimated": "4.3.1",
-    "react-native-worklets": "0.8.3",
     "react-native-wgpu": "^0.5.11",
+    "react-native-worklets": "0.8.3",
     "release-it": "^19.2.4",
-    "typescript": "~6.0.3"
+    "typegpu": "0.11.8",
+    "typescript": "npm:tsover@6.0.1",
+    "unplugin-typegpu": "0.11.5"
   },
   "peerDependencies": {
     "@shopify/react-native-skia": "*",
     "react": "*",
     "react-native": "*",
     "react-native-reanimated": "*",
+    "typegpu": "*",
     "react-native-wgpu": "*",
     "react-native-worklets": "*"
   },
   "peerDependenciesMeta": {
+    "typegpu": {
+      "optional": true
+    },
     "react-native-wgpu": {
       "optional": true
     }
@@ -108,10 +114,18 @@
   ],
   "packageManager": "bun@1.2.19",
   "overrides": {
+    "typescript": "npm:tsover@6.0.1",
     "zod-validation-error": "4.0.2"
   },
   "jest": {
     "preset": "@react-native/jest-preset",
+    "moduleNameMapper": {
+      "^react-native-reanimated$": "<rootDir>/src/__fixtures__/mocks/reactNativeReanimated.ts",
+      "^tsover-runtime$": "<rootDir>/node_modules/tsover-runtime/dist/index.js"
+    },
+    "transformIgnorePatterns": [
+      "node_modules/(?!((jest-)?react-native|@react-native(-community)?|@shopify/react-native-skia|react-native-reanimated|react-native-worklets|typegpu|tsover-runtime)/)"
+    ],
     "modulePathIgnorePatterns": [
       "<rootDir>/example/node_modules",
       "<rootDir>/kitchen-sink/node_modules",
@@ -156,7 +170,8 @@
       [
         "module",
         {
-          "esm": true
+          "esm": true,
+          "configFile": true
         }
       ],
       [
