@@ -67,7 +67,6 @@ export default function RootLayout() {
         />
         <Stack.Screen name="single" options={{ title: 'Single' }} />
         <Stack.Screen name="continuous" options={{ title: 'Continuous' }} />
-        <Stack.Screen name="gpu" options={{ title: 'WebGPU' }} />
         <Stack.Screen name="pi" options={{ title: 'PI' }} />
         <Stack.Screen name="cannon" options={{ title: 'Cannon' }} />
       </Stack>

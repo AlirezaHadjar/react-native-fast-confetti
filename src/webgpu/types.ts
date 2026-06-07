@@ -1,9 +1,13 @@
 import type { SharedValue } from 'react-native-reanimated';
 import type {
+  CannonConfettiMethods,
+  CannonConfettiProps,
   ConfettiMethods,
   ConfettiProps,
   ContinuousConfettiProps,
   InternalConfettiProps,
+  PIConfettiMethods,
+  PIConfettiProps,
 } from '../types';
 
 export type GPUTextureMode =
@@ -76,4 +80,9 @@ export type InternalGPUConfettiProps = InternalConfettiProps &
   GPUConfettiExtraProps;
 export type GPUContinuousConfettiProps = ContinuousConfettiProps &
   GPUConfettiExtraProps;
+export type GPUPIConfettiProps = PIConfettiProps & GPUConfettiExtraProps;
+export type GPUCannonConfettiProps = CannonConfettiProps &
+  GPUConfettiExtraProps;
 export type GPUConfettiMethods = ConfettiMethods;
+export type GPUPIConfettiMethods = PIConfettiMethods;
+export type GPUCannonConfettiMethods = CannonConfettiMethods;

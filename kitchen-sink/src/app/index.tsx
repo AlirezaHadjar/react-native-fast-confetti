@@ -2,7 +2,6 @@ import {
   FlatList,
   StyleSheet,
   Dimensions,
-  View,
 } from 'react-native';
 import { colors } from '../constants/colors';
 import {
@@ -62,29 +61,6 @@ const modes = [
       >
         {previewFlakes(ContinuousConfetti.Flake)}
       </ContinuousConfetti>
-    ),
-  },
-  {
-    key: 'gpu',
-    title: 'WebGPU',
-    description: 'GPU compute falling confetti',
-    render: () => (
-      <View style={styles.gpuPreview}>
-        {Array.from({ length: 36 }).map((_, index) => (
-          <View
-            key={index}
-            style={[
-              styles.gpuFlake,
-              {
-                left: (index * 47) % ITEM_WIDTH,
-                top: (index * 29) % ITEM_HEIGHT,
-                backgroundColor: gpuPreviewColors[index % gpuPreviewColors.length],
-                transform: [{ rotate: `${(index * 23) % 180}deg` }],
-              },
-            ]}
-          />
-        ))}
-      </View>
     ),
   },
   {
@@ -156,15 +132,6 @@ const modes = [
   },
 ] as const;
 
-const gpuPreviewColors = [
-  '#FF5733',
-  '#33FF57',
-  '#3357FF',
-  '#F5FF33',
-  '#FF33B5',
-  '#33FFDE',
-];
-
 export default function HomeScreen() {
   return (
     <FlatList
@@ -202,18 +169,6 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     overflow: 'hidden',
     borderCurve: 'continuous',
-  },
-  gpuPreview: {
-    width: ITEM_WIDTH,
-    height: ITEM_HEIGHT,
-    backgroundColor: 'rgba(20, 20, 28, 0.08)',
-  },
-  gpuFlake: {
-    position: 'absolute',
-    width: 8,
-    height: 16,
-    borderRadius: 4,
-    opacity: 0.85,
   },
   cardTitle: {
     fontSize: 17,

@@ -20,7 +20,7 @@ import {
 } from '../shaders/confetti';
 
 // `createImageBitmap` is installed on globalThis by react-native-wgpu.
-type NativeImageBitmap = unknown;
+export type NativeImageBitmap = unknown;
 
 declare const createImageBitmap: (
   source: ArrayBuffer | ArrayBufferView
@@ -31,10 +31,10 @@ const HEX_TO_RGBA = (hex: string): [number, number, number, number] => {
   return [c[0] ?? 0, c[1] ?? 0, c[2] ?? 0, c[3] ?? 1];
 };
 
-const toPaletteInputs = (colors: string[]) =>
+export const toPaletteInputs = (colors: string[]) =>
   (colors.length > 0 ? colors : ['#ffffff']).map(HEX_TO_RGBA);
 
-const rasterizeFlakeTextures = async (
+export const rasterizeFlakeTextures = async (
   sizes: SizeVariation[],
   maxWidth: number,
   maxHeight: number

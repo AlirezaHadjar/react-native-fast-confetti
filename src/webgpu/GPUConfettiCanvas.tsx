@@ -181,6 +181,7 @@ export const GPUConfettiCanvas = ({
     let stopped = false;
     const easing = resolveEasing(params.easing ?? Easing.linear);
     const getSimulationSeconds = (rawElapsed: number) => {
+      if (continuous) return rawElapsed;
       if (cycleDuration <= 0) return rawElapsed;
       return easing(clamp01(rawElapsed / cycleDuration)) * cycleDuration;
     };
@@ -209,7 +210,9 @@ export const GPUConfettiCanvas = ({
       const gDir = params.gravityDir.get();
       const gMag = gravityPxPerSec2;
       const cycleProgress =
-        cycleDuration > 0 ? clamp01(rawElapsed / cycleDuration) : 0;
+        !continuous && cycleDuration > 0
+          ? clamp01(rawElapsed / cycleDuration)
+          : 0;
       const fadeProgress =
         cycleProgress <= DEFAULT_FADE_START
           ? 0
@@ -277,9 +280,11 @@ export const GPUConfettiCanvas = ({
       context.present();
 
       // Time-based restart: once per cycleDuration (only if caller wants it).
+      // Continuous mode recycles individual particles in the compute shader,
+      // so a whole-batch restart would create a visible interruption.
       // Callers can disable auto-restart via `cycleDuration === 0` (e.g. when
       // gyro is active and pieces should stay in play indefinitely).
-      if (cycleDuration > 0) {
+      if (!continuous && cycleDuration > 0) {
         const cycleSeconds = elapsed.get() - simSecondsAtLastRestart;
         if (cycleSeconds >= cycleDuration) {
           simSecondsAtLastRestart = elapsed.get();

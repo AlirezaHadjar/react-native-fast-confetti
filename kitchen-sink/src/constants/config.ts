@@ -1,4 +1,5 @@
 export type TextureType = 'default' | 'money' | 'snowflake';
+export type EngineType = 'skia' | 'webgpu';
 
 export type DropdownOption<T = any> = {
   label: string;
@@ -11,6 +12,11 @@ export const textureOptions: DropdownOption<TextureType>[] = [
   { label: 'Snow', value: 'snowflake' },
 ];
 
+export const engineOptions: DropdownOption<EngineType>[] = [
+  { label: 'Skia', value: 'skia' },
+  { label: 'WebGPU', value: 'webgpu' },
+];
+
 export const verticalSpacingOptions: DropdownOption<number>[] = [
   { label: 'V. Dense', value: 5 },
   { label: 'Dense', value: 20 },
@@ -20,21 +26,25 @@ export const verticalSpacingOptions: DropdownOption<number>[] = [
 ];
 
 export type ScreenConfig = {
+  engineType: EngineType;
   textureType: TextureType;
   verticalSpacing: number;
 };
 
 export const DEFAULT_CONFIGS: Record<string, ScreenConfig> = {
   single: {
+    engineType: 'skia',
     textureType: 'default',
     verticalSpacing: 20,
   },
   continuous: {
+    engineType: 'skia',
     textureType: 'default',
     verticalSpacing: 200,
   },
-  pi: { textureType: 'default', verticalSpacing: 20 },
+  pi: { engineType: 'skia', textureType: 'default', verticalSpacing: 20 },
   cannon: {
+    engineType: 'skia',
     textureType: 'default',
     verticalSpacing: 20,
   },

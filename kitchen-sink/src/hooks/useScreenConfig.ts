@@ -6,9 +6,10 @@ export function useScreenConfig(screenName: string) {
   const storageKey = `config.${screenName}`;
   const fallback = DEFAULT_CONFIGS[screenName]!;
 
-  const [config, setConfig] = useState<ScreenConfig>(() =>
-    getJSON(storageKey, fallback)
-  );
+  const [config, setConfig] = useState<ScreenConfig>(() => ({
+    ...fallback,
+    ...getJSON(storageKey, fallback),
+  }));
 
   const updateConfig = (partial: Partial<ScreenConfig>) => {
     setConfig((prev) => {

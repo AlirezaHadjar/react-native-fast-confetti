@@ -382,6 +382,16 @@ export const confettiCompute = tgpu.computeFn({
     return;
   }
 
+  if (u.continuous > 0.5 && rt.pos.y > u.viewport.y + 128) {
+    rt = RuntimeSchema({
+      pos: d.vec3f(spawn.pos0),
+      life: d.f32(0),
+      vel: d.vec3f(spawn.vel0),
+      quat: d.vec4f(spawn.quat0),
+      omega: d.vec3f(spawn.omega0),
+    });
+  }
+
   const Cn = spawn.drag.x;
   const Ct = spawn.drag.y;
   const Crot = spawn.drag.z;
