@@ -172,6 +172,7 @@ ref.current?.reset();
 
 ## Custom Textures
 
+Same as `<Confetti />` except `verticalSpacing` defaults to `200`.
 
 <table width="100%">
   <tr>
@@ -264,17 +265,17 @@ Available named positions: `top-left`, `top-center`, `top-right`, `center-left`,
 <details>
 <summary>Advanced props — these work well out of the box, but you can tweak them for full customizability.</summary>
 
-| Name              | Default                  | Description                                                     |
-| ----------------- | ------------------------ | --------------------------------------------------------------- |
-| `wobble`          | { min: 0.03, max: 0.08 }  | Tumble/bobbing intensity.                                       |
-| `drift`           | 0.7                       | Horizontal drift (0-1).                                         |
-| `easing`          | Easing.bezier(0.4,0,1,1)  | Custom easing for the fall animation progress.                  |
-| `flipIntensity`   | 0.85                      | How dramatically pieces flip (0-1). Lower = flatter.            |
-| `rotation`        | N/A                       | Rotation range config.                                          |
-| `depth`           | { min: 0.8, max: 1.0 }    | 3D perspective scale range.                                     |
-| `initialScale`    | 0.3                       | Scale at spawn before growing.                                  |
-| `verticalSpacing` | 70                        | Space between rows. Lower = denser.                             |
-| `containerStyle`  | N/A                       | Style for the container. Supports any sizing (numeric, %, flex). |
+| Name              | Default                  | Description                                                      |
+| ----------------- | ------------------------ | ---------------------------------------------------------------- |
+| `wobble`          | { min: 0.03, max: 0.08 } | Tumble/bobbing intensity.                                        |
+| `drift`           | 0.7                      | Horizontal drift (0-1).                                          |
+| `easing`          | Easing.bezier(0.4,0,1,1) | Custom easing for the fall animation progress.                   |
+| `flipIntensity`   | 0.85                     | How dramatically pieces flip (0-1). Lower = flatter.             |
+| `rotation`        | N/A                      | Rotation range config.                                           |
+| `depth`           | { min: 0.8, max: 1.0 }   | 3D perspective scale range.                                      |
+| `initialScale`    | 0.3                      | Scale at spawn before growing.                                   |
+| `verticalSpacing` | 70                       | Space between rows. Lower = denser.                              |
+| `containerStyle`  | N/A                      | Style for the container. Supports any sizing (numeric, %, flex). |
 
 </details>
 
@@ -305,12 +306,12 @@ Same as `<Confetti />` except:
 <details>
 <summary>Advanced props — these work well out of the box, but you can tweak them for full customizability.</summary>
 
-| Name             | Default                | Description                                                     |
-| ---------------- | ---------------------- | --------------------------------------------------------------- |
+| Name             | Default                | Description                                                      |
+| ---------------- | ---------------------- | ---------------------------------------------------------------- |
 | `drag`           | 3.0                    | Air resistance. Number or `{ horizontal, vertical }`.            |
 | `sprayDuration`  | N/A                    | Stagger pieces over N ms.                                        |
-| `speedVariation` | { min: 0.0, max: 1.0 } | Default speed variation for origins.                            |
-| `easing`         | Easing.linear           | Custom easing for the animation progress.                       |
+| `speedVariation` | { min: 0.0, max: 1.0 } | Default speed variation for origins.                             |
+| `easing`         | Easing.linear          | Custom easing for the animation progress.                        |
 | `flipIntensity`  | 0.85                   | How dramatically pieces flip (0-1). Lower = flatter.             |
 | `rotation`       | N/A                    | Default rotation config for origins.                             |
 | `depth`          | { min: 1, max: 1.1 }   | Default depth range for origins.                                 |
@@ -321,23 +322,23 @@ Same as `<Confetti />` except:
 
 ### `<PIConfetti.Origin />` Props
 
-| Name                        | Default | Description                                                         |
-| --------------------------- | ------- | ------------------------------------------------------------------- |
-| `blastPosition` (required)  | -       | Where the burst originates. Named position or `{ x, y }`.          |
-| `count`                     | 100     | Number of pieces from this origin.                                  |
-| `initialSpeed`              | 1       | Launch speed.                                                       |
-| `spread`                    | 2\*PI   | Launch cone width (radians).                                        |
+| Name                       | Default | Description                                               |
+| -------------------------- | ------- | --------------------------------------------------------- |
+| `blastPosition` (required) | -       | Where the burst originates. Named position or `{ x, y }`. |
+| `count`                    | 100     | Number of pieces from this origin.                        |
+| `initialSpeed`             | 1       | Launch speed.                                             |
+| `spread`                   | 2\*PI   | Launch cone width (radians).                              |
 
 <details>
 <summary>Advanced props — these work well out of the box, but you can tweak them for full customizability.</summary>
 
-| Name             | Default                | Description                                  |
-| ---------------- | ---------------------- | -------------------------------------------- |
-| `speedVariation` | { min: 0.0, max: 1.0 } | Per-piece speed multiplier range.            |
-| `colors`         | N/A                    | Colors for this origin (overrides root).     |
-| `flakeStyle`     | N/A                    | Style for this origin (overrides root).      |
-| `rotation`       | N/A                    | Rotation for this origin (overrides root).   |
-| `depth`          | { min: 1, max: 1.1 }   | Depth for this origin (overrides root).      |
+| Name             | Default                | Description                                |
+| ---------------- | ---------------------- | ------------------------------------------ |
+| `speedVariation` | { min: 0.0, max: 1.0 } | Per-piece speed multiplier range.          |
+| `colors`         | N/A                    | Colors for this origin (overrides root).   |
+| `flakeStyle`     | N/A                    | Style for this origin (overrides root).    |
+| `rotation`       | N/A                    | Rotation for this origin (overrides root). |
+| `depth`          | { min: 1, max: 1.1 }   | Depth for this origin (overrides root).    |
 
 </details>
 
@@ -361,17 +362,17 @@ Same as `<Confetti />` except:
 <details>
 <summary>Advanced props — these work well out of the box, but you can tweak them for full customizability.</summary>
 
-| Name             | Default                | Description                                                     |
-| ---------------- | ---------------------- | --------------------------------------------------------------- |
+| Name             | Default                | Description                                                      |
+| ---------------- | ---------------------- | ---------------------------------------------------------------- |
 | `drag`           | 3.0                    | Air resistance. Number or `{ horizontal, vertical }`.            |
 | `sprayDuration`  | 300                    | Stagger all cannons over N ms.                                   |
 | `speedVariation` | { min: 0.8, max: 1.2 } | Default speed variation for origins.                             |
-| `easing`         | Easing.linear           | Custom easing for the animation progress.                        |
+| `easing`         | Easing.linear          | Custom easing for the animation progress.                        |
 | `flipIntensity`  | 0.85                   | How dramatically pieces flip (0-1). Lower = flatter.             |
-| `rotation`       | N/A                    | Default rotation config for origins.                              |
-| `depth`          | { min: 1, max: 1.1 }   | Default depth range for origins.                                  |
-| `initialScale`   | 0.3                    | Scale at spawn before growing.                                    |
-| `containerStyle` | N/A                    | Style for the container. Supports any sizing (numeric, %, flex).  |
+| `rotation`       | N/A                    | Default rotation config for origins.                             |
+| `depth`          | { min: 1, max: 1.1 }   | Default depth range for origins.                                 |
+| `initialScale`   | 0.3                    | Scale at spawn before growing.                                   |
+| `containerStyle` | N/A                    | Style for the container. Supports any sizing (numeric, %, flex). |
 
 </details>
 
