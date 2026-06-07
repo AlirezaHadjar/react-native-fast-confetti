@@ -11,10 +11,10 @@
       "types": "./lib/typescript/src/index.d.ts",
       "default": "./lib/module/index.js"
     },
-    "./webgpu": {
-      "source": "./src/webgpu/index.ts",
-      "types": "./lib/typescript/src/webgpu/index.d.ts",
-      "default": "./lib/module/webgpu/index.js"
+    "./gpu": {
+      "source": "./src/gpu/index.ts",
+      "types": "./lib/typescript/src/gpu/index.d.ts",
+      "default": "./lib/module/gpu/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -96,6 +96,11 @@
     "react-native-reanimated": "*",
     "react-native-wgpu": "*",
     "react-native-worklets": "*"
+  },
+  "peerDependenciesMeta": {
+    "react-native-wgpu": {
+      "optional": true
+    }
   },
   "workspaces": [
     "example",

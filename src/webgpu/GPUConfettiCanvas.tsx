@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
 import { PixelRatio, StyleSheet, View } from 'react-native';
-import type { SharedValue } from 'react-native-reanimated';
+import {
+  Easing,
+  type EasingFunction,
+  type EasingFunctionFactory,
+  type SharedValue,
+} from 'react-native-reanimated';
 import {
   Canvas,
   useDevice,
@@ -18,6 +23,7 @@ import {
 import {
   createConfettiResources,
   destroyConfettiResources,
+  updateConfettiRuntimeResources,
   type ConfettiResources,
 } from './hooks/useConfettiResources';
 import { UNIFORMS_BYTES, computeCode, renderCode } from './shaders/confetti';
@@ -33,6 +39,7 @@ export type GPUConfettiCanvasParams = {
   shadowOpacity: number;
   iridescence: number;
   textureMode: number;
+  easing: EasingFunction | EasingFunctionFactory;
   gravityDir: SharedValue<[number, number, number]>;
 };
 
@@ -57,6 +64,15 @@ type Props = {
   viewportHeight: number;
   params: GPUConfettiCanvasParams;
   onAllOffScreen: () => void;
+};
+
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+
+const resolveEasing = (
+  easing: EasingFunction | EasingFunctionFactory
+): EasingFunction => {
+  if (typeof easing === 'function') return easing;
+  return easing.factory();
 };
 
 export const GPUConfettiCanvas = ({
@@ -84,9 +100,19 @@ export const GPUConfettiCanvas = ({
   const { device } = useDevice();
   const canvasRef = useRef<CanvasRef>(null);
   const [resources, setResources] = useState<ConfettiResources | null>(null);
+  const latestSpawnsRef = useRef<Spawn[] | null>(null);
+  const latestCycleDurationRef = useRef(cycleDuration);
+
+  const hasSpawns = spawns !== null;
 
   useEffect(() => {
-    if (!device || !spawns) return;
+    latestSpawnsRef.current = spawns;
+    latestCycleDurationRef.current = cycleDuration;
+  }, [spawns, cycleDuration]);
+
+  useEffect(() => {
+    const currentSpawns = latestSpawnsRef.current;
+    if (!device || !currentSpawns) return;
     let cancelled = false;
     (async () => {
       const res = await createConfettiResources({
@@ -94,8 +120,8 @@ export const GPUConfettiCanvas = ({
         count,
         sizeVariations,
         allColors,
-        spawns,
-        cycleDuration,
+        spawns: currentSpawns,
+        cycleDuration: latestCycleDurationRef.current,
       });
       if (cancelled) {
         destroyConfettiResources(res);
@@ -109,7 +135,12 @@ export const GPUConfettiCanvas = ({
     return () => {
       cancelled = true;
     };
-  }, [device, count, sizeVariations, allColors, spawns, cycleDuration]);
+  }, [device, count, sizeVariations, allColors, hasSpawns]);
+
+  useEffect(() => {
+    if (!resources || !spawns) return;
+    updateConfettiRuntimeResources(resources, spawns, cycleDuration);
+  }, [resources, spawns, cycleDuration]);
 
   useEffect(() => {
     return () => {
@@ -268,7 +299,12 @@ export const GPUConfettiCanvas = ({
     const scratch = new Float32Array(UNIFORMS_BYTES / 4);
     let rafId: number | null = null;
     let stopped = false;
-    let lastSimSeconds = elapsed.get();
+    const easing = resolveEasing(params.easing ?? Easing.linear);
+    const getSimulationSeconds = (rawElapsed: number) => {
+      if (cycleDuration <= 0) return rawElapsed;
+      return easing(clamp01(rawElapsed / cycleDuration)) * cycleDuration;
+    };
+    let lastSimSeconds = getSimulationSeconds(elapsed.get());
     let simSecondsAtLastRestart = elapsed.get();
     const focalLength = Math.max(
       100,
@@ -278,7 +314,8 @@ export const GPUConfettiCanvas = ({
     const renderFrame = () => {
       if (stopped) return;
 
-      const nowSim = elapsed.get();
+      const rawElapsed = elapsed.get();
+      const nowSim = getSimulationSeconds(rawElapsed);
       let dt = nowSim - lastSimSeconds;
       lastSimSeconds = nowSim;
       if (dt < 0) {
@@ -291,12 +328,19 @@ export const GPUConfettiCanvas = ({
       const timeSec = Date.now() / 1000;
       const gDir = params.gravityDir.get();
       const gMag = gravityPxPerSec2;
+      const cycleProgress =
+        cycleDuration > 0 ? clamp01(rawElapsed / cycleDuration) : 0;
+      const fadeProgress =
+        cycleProgress <= DEFAULT_FADE_START
+          ? 0
+          : (cycleProgress - DEFAULT_FADE_START) / (1 - DEFAULT_FADE_START);
+      const fadeOpacity = fadeOutOnEnd ? 1 - clamp01(fadeProgress) : 1;
 
       // viewport + lens
       scratch[0] = viewportWidth;
       scratch[1] = viewportHeight;
       scratch[2] = focalLength;
-      scratch[3] = opacity.get();
+      scratch[3] = opacity.get() * fadeOpacity;
       // dt/time/drift/initialScale
       scratch[4] = dt;
       scratch[5] = timeSec;

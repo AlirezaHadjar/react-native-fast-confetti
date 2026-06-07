@@ -3,7 +3,8 @@
   "compilerOptions": {
     "rootDir": ".",
     "paths": {
-      "react-native-fast-confetti": ["./src/index"]
+      "react-native-fast-confetti": ["./src/index"],
+      "react-native-fast-confetti/gpu": ["./src/gpu/index"]
     },
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,

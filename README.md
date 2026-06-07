@@ -83,29 +83,25 @@ import { ContinuousConfetti } from 'react-native-fast-confetti';
   </tr>
 </table>
 
-### `<GPUConfetti />`
+### GPU Confetti
 
-GPU-accelerated falling confetti powered by WebGPU compute and render shaders. It supports the same falling confetti API as `<Confetti />` and adds wind, motion blur, sensor-driven gravity, and procedural material modes.
+GPU-accelerated falling confetti powered by WebGPU compute and render shaders. Import the same component names from the `/gpu` subpath; the props and methods mirror the standard components, with extra GPU-only controls available.
 
 ```tsx
-import { GPUConfetti } from "react-native-fast-confetti/webgpu";
+import { Confetti } from 'react-native-fast-confetti/gpu';
 
-<GPUConfetti
+<Confetti
   autoplay
   infinite
-  windStrength={0.8}
-  magnusStrength={0.004}
-  motionBlurAmount={0.35}
-  textureMode={4}
 >
-  <GPUConfetti.Flake size={12} radius={6} />
-  <GPUConfetti.Flake width={8} height={14} />
-</GPUConfetti>;
+  <Confetti.Flake size={12} radius={6} />
+  <Confetti.Flake width={8} height={14} />
+</Confetti>;
 ```
 
-### `<GPUContinuousConfetti />`
+### GPU Continuous Confetti
 
-A WebGPU-backed continuous stream. It mirrors `<ContinuousConfetti />` and accepts the same GPU-only props as `<GPUConfetti />`.
+A WebGPU-backed continuous stream. Import `ContinuousConfetti` from `react-native-fast-confetti/gpu`; it mirrors `<ContinuousConfetti />` and accepts the same GPU-only props as GPU `<Confetti />`.
 
 ### `<PIConfetti />`
 
@@ -313,14 +309,14 @@ Same as `<Confetti />` except:
 
 ### GPU Props
 
-`<GPUConfetti />` accepts the same props as `<Confetti />`. `<GPUContinuousConfetti />` accepts the same props as `<ContinuousConfetti />`.
+`Confetti` from `react-native-fast-confetti/gpu` accepts the same props as the standard `<Confetti />`. `ContinuousConfetti` from the same subpath accepts the same props as the standard `<ContinuousConfetti />`.
 
 | Name               | Default | Description                                                                         |
 | ------------------ | ------- | ----------------------------------------------------------------------------------- |
-| `windStrength`     | 0.8     | Strength of the procedural wind field.                                              |
-| `magnusStrength`   | 0.004   | Strength of spin-driven lateral force.                                              |
+| `windStrength`     | 0       | Strength of the procedural wind field.                                              |
+| `magnusStrength`   | 0       | Strength of spin-driven lateral force.                                              |
 | `motionBlurAmount` | 0       | Velocity-aligned stretch amount.                                                    |
-| `iridescence`      | 0.15    | Shader rim-color intensity.                                                         |
+| `iridescence`      | 0       | Shader rim-color intensity.                                                         |
 | `textureMode`      | 0       | Procedural material: default, wood, rubber, gold, holographic, marble, neon, glass. |
 | `autoRestart`      | true    | Auto-reseed after the estimated cycle duration.                                     |
 | `gravityDir`       | N/A     | Optional Reanimated shared value `[x, y, z]` for sensor-driven gravity.             |

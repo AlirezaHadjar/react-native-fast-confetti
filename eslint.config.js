@@ -14,7 +14,7 @@ module.exports = defineConfig([
       'curly': 'off',
       'import/no-unresolved': [
         'error',
-        { ignore: ['^react-native-fast-confetti/webgpu$'] },
+        { ignore: ['^react-native-fast-confetti/gpu$'] },
       ],
       'react-compiler/react-compiler': 'error',
     },

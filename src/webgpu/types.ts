@@ -19,12 +19,12 @@ export type GPUTextureMode =
 export type GPUConfettiExtraProps = {
   /**
    * Strength of the procedural wind field.
-   * @default 0.8
+   * @default 0
    */
   windStrength?: number;
   /**
    * Strength of spin-driven lateral force.
-   * @default 0.004
+   * @default 0
    */
   magnusStrength?: number;
   /**
@@ -49,7 +49,7 @@ export type GPUConfettiExtraProps = {
   shadowOpacity?: number;
   /**
    * Intensity of shader rim iridescence.
-   * @default 0.15
+   * @default 0
    */
   iridescence?: number;
   /**

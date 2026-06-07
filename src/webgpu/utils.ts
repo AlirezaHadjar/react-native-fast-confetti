@@ -1,4 +1,5 @@
 import {
+  DEFAULT_CONFETTI_DEPTH,
   DEFAULT_CONFETTI_ROTATION,
   DEFAULT_CONFETTI_WOBBLE,
   DEFAULT_ROTATIONAL_DAMPING,
@@ -9,7 +10,11 @@ import {
   WOBBLE_MARGIN_FALLBACK,
   WOBBLE_MARGIN_PER_UNIT,
 } from '../constants';
-import { DEFAULT_MAGNUS_STRENGTH, DEFAULT_Z_RANGE } from './constants';
+import {
+  DEFAULT_FOCAL_LENGTH_RATIO,
+  DEFAULT_MAGNUS_STRENGTH,
+  DEFAULT_Z_RANGE,
+} from './constants';
 import type { ColorRange } from '../hooks/useConfettiFlakes';
 import type { Range, Rotation } from '../types';
 
@@ -221,8 +226,12 @@ export const generateSpawnsArray = ({
 }): Spawn[] => {
   const xRot = resolveRange(rotation?.x, DEFAULT_CONFETTI_ROTATION.x);
   const zRot = resolveRange(rotation?.z, DEFAULT_CONFETTI_ROTATION.z);
+  const depthRange = resolveRange(depth, DEFAULT_CONFETTI_DEPTH);
   const wobbleRange = resolveRange(wobble, DEFAULT_CONFETTI_WOBBLE);
-  void depth;
+  const focalLength = Math.max(
+    100,
+    containerHeight * DEFAULT_FOCAL_LENGTH_RATIO
+  );
 
   const scaledGravity = gravity * containerHeight;
   const Cn = 4.0 / scaledGravity;
@@ -247,7 +256,9 @@ export const generateSpawnsArray = ({
     );
     const yJitter = getRandomValue(-verticalSpacing / 2, verticalSpacing / 2);
     const y = rowIndex * rowHeight + verticalOffset + yJitter;
-    const z = getRandomValue(zRange[0], zRange[1]);
+    const depthScale = getRandomValue(depthRange.min, depthRange.max);
+    const perspectiveZ = focalLength / Math.max(depthScale, 0.0001) - focalLength;
+    const z = perspectiveZ + getRandomValue(zRange[0], zRange[1]);
 
     const initialVy = infinite
       ? vTermApprox * getRandomValue(0.95, 1.05)

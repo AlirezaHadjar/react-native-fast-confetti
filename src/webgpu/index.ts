@@ -1,5 +1,5 @@
-export { GPUConfetti } from './GPUConfetti';
-export { GPUContinuousConfetti } from './GPUContinuousConfetti';
+export { Confetti } from './GPUConfetti';
+export { ContinuousConfetti } from './GPUContinuousConfetti';
 export type {
   GPUConfettiExtraProps,
   GPUConfettiMethods,

@@ -39,7 +39,7 @@ import {
   generateSpawnsArray,
 } from './utils';
 
-const GPUConfettiInner = forwardRef<
+const ConfettiInner = forwardRef<
   GPUConfettiMethods,
   InternalGPUConfettiProps
 >(
@@ -73,7 +73,7 @@ const GPUConfettiInner = forwardRef<
       floorFriction = 0.92,
       motionBlurAmount = 0.0,
       shadowOpacity = 0.35,
-      iridescence = 0.15,
+      iridescence = 0,
       textureMode = 0,
       gravityDir: externalGravityDir,
       ...textureRootProps
@@ -130,9 +130,6 @@ const GPUConfettiInner = forwardRef<
       bumpCycle,
     } = useSimulationLifecycle({ fadeOutOnEnd });
 
-    // Keep these variables available for JSX below even if unused here.
-    void easing;
-
     const [seed, setSeed] = useState(0);
     const bumpSeed = useCallback(() => setSeed((s) => s + 1), []);
 
@@ -187,6 +184,7 @@ const GPUConfettiInner = forwardRef<
       infinite,
       continuous,
     ]);
+    const hasSpawns = spawns !== null;
 
     const restart = useCallback(() => {
       'worklet';
@@ -217,26 +215,22 @@ const GPUConfettiInner = forwardRef<
     }, [infinite, bumpSeed, bumpCycle, running, onAnimationEnd]);
 
     useEffect(() => {
-      if (!ready || !spawns) return;
+      if (!ready || !hasSpawns) return;
       if (!autoplay) return;
       const t = setTimeout(() => {
-        runOnUI(() => {
-          'worklet';
-          if (!running.get()) {
-            beginCycle();
-          }
-        })();
+        if (running.get()) return;
+        runOnUI(beginCycle)();
         onAnimationStart?.();
       }, autoStartDelay);
       return () => clearTimeout(t);
     }, [
       ready,
-      spawns,
       autoplay,
       autoStartDelay,
       running,
       beginCycle,
       onAnimationStart,
+      hasSpawns,
     ]);
 
     // Default gravity direction is +Y (down). Caller can override with a
@@ -257,6 +251,7 @@ const GPUConfettiInner = forwardRef<
         shadowOpacity,
         iridescence,
         textureMode,
+        easing,
         gravityDir,
       }),
       [
@@ -269,6 +264,7 @@ const GPUConfettiInner = forwardRef<
         shadowOpacity,
         iridescence,
         textureMode,
+        easing,
         gravityDir,
       ]
     );
@@ -300,13 +296,13 @@ const GPUConfettiInner = forwardRef<
   }
 );
 
-GPUConfettiInner.displayName = 'GPUConfetti';
+ConfettiInner.displayName = 'Confetti';
 
-const GPUConfetti = GPUConfettiInner as React.ForwardRefExoticComponent<
+const Confetti = ConfettiInner as React.ForwardRefExoticComponent<
   GPUConfettiProps & React.RefAttributes<GPUConfettiMethods>
 > & { Flake: typeof Flake };
 
-GPUConfetti.Flake = Flake;
+Confetti.Flake = Flake;
 
-export { GPUConfetti };
-export { GPUConfettiInner as InternalGPUConfetti };
+export { Confetti };
+export { ConfettiInner as InternalConfetti };

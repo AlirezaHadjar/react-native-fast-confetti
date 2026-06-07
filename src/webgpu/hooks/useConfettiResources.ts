@@ -326,6 +326,38 @@ export const createConfettiResources = async ({
   };
 };
 
+export const updateConfettiRuntimeResources = (
+  resources: ConfettiResources,
+  spawns: Spawn[],
+  cycleDuration: number
+): boolean => {
+  if (spawns.length !== resources.count) {
+    return false;
+  }
+
+  const spawnsF32 = packSpawns(spawns);
+  resources.device.queue.writeBuffer(
+    resources.spawnsBuffer,
+    0,
+    spawnsF32.buffer as ArrayBuffer,
+    spawnsF32.byteOffset,
+    spawnsF32.byteLength
+  );
+
+  const runtimeInitial = packInitialRuntime(spawns, cycleDuration);
+  resources.device.queue.writeBuffer(
+    resources.runtimeBuffer,
+    0,
+    runtimeInitial.buffer as ArrayBuffer,
+    runtimeInitial.byteOffset,
+    runtimeInitial.byteLength
+  );
+
+  resources.runtimeInitial = runtimeInitial;
+  resources.cycleDuration = cycleDuration;
+  return true;
+};
+
 export const destroyConfettiResources = (r: ConfettiResources) => {
   r.spawnsBuffer.destroy();
   r.runtimeBuffer.destroy();

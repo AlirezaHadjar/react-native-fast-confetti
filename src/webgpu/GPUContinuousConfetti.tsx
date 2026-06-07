@@ -1,5 +1,5 @@
 import { forwardRef } from 'react';
-import { InternalGPUConfetti } from './GPUConfetti';
+import { InternalConfetti } from './GPUConfetti';
 import { Flake } from '../FlakeComponent';
 import type {
   GPUConfettiMethods,
@@ -7,11 +7,11 @@ import type {
   InternalGPUConfettiProps,
 } from './types';
 
-const GPUContinuousConfettiInner = forwardRef<
+const ContinuousConfettiInner = forwardRef<
   GPUConfettiMethods,
   GPUContinuousConfettiProps
 >(({ verticalSpacing = 200, ...props }, ref) => (
-  <InternalGPUConfetti
+  <InternalConfetti
     {...(props as InternalGPUConfettiProps)}
     ref={ref}
     verticalSpacing={verticalSpacing}
@@ -20,15 +20,15 @@ const GPUContinuousConfettiInner = forwardRef<
   />
 ));
 
-GPUContinuousConfettiInner.displayName = 'GPUContinuousConfetti';
+ContinuousConfettiInner.displayName = 'ContinuousConfetti';
 
-const GPUContinuousConfetti =
-  GPUContinuousConfettiInner as React.ForwardRefExoticComponent<
+const ContinuousConfetti =
+  ContinuousConfettiInner as React.ForwardRefExoticComponent<
     GPUContinuousConfettiProps & React.RefAttributes<GPUConfettiMethods>
   > & {
     Flake: typeof Flake;
   };
 
-GPUContinuousConfetti.Flake = Flake;
+ContinuousConfetti.Flake = Flake;
 
-export { GPUContinuousConfetti };
+export { ContinuousConfetti };
