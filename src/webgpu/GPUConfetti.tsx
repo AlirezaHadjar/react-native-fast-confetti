@@ -64,7 +64,7 @@ const GPUConfettiInner = forwardRef<
       verticalSpacing = DEFAULT_VERTICAL_SPACING,
       flakeStyle = 'glossy',
       initialScale = 0.3,
-      flipIntensity: _flipIntensity = 0.85,
+      flipIntensity = 0.85,
       easing = DEFAULT_CONFETTI_FALL_EASING,
       windStrength = DEFAULT_WIND_STRENGTH,
       magnusStrength = DEFAULT_MAGNUS_STRENGTH,
@@ -80,8 +80,6 @@ const GPUConfettiInner = forwardRef<
     },
     ref
   ) => {
-    void _flipIntensity;
-
     const { containerWidth, containerHeight, onContainerLayout, ready } =
       useContainerDimensions(containerStyle);
 
@@ -252,6 +250,7 @@ const GPUConfettiInner = forwardRef<
       () => ({
         windStrength,
         magnusStrength,
+        flipIntensity,
         bounceRestitution,
         floorFriction,
         motionBlurAmount,
@@ -263,6 +262,7 @@ const GPUConfettiInner = forwardRef<
       [
         windStrength,
         magnusStrength,
+        flipIntensity,
         bounceRestitution,
         floorFriction,
         motionBlurAmount,

@@ -26,6 +26,7 @@ import type { Spawn } from './utils';
 export type GPUConfettiCanvasParams = {
   windStrength: number;
   magnusStrength: number;
+  flipIntensity: number;
   bounceRestitution: number;
   floorFriction: number;
   motionBlurAmount: number;
@@ -327,7 +328,7 @@ export const GPUConfettiCanvas = ({
       scratch[24] = DEFAULT_LIGHT_DIR[0];
       scratch[25] = DEFAULT_LIGHT_DIR[1];
       scratch[26] = DEFAULT_LIGHT_DIR[2];
-      // [27] padding
+      scratch[27] = Math.max(0, Math.min(1, 1 - params.flipIntensity));
       // gravityDir @ offset 112/4=28
       scratch[28] = gDir[0];
       scratch[29] = gDir[1];

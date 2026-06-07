@@ -1,12 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentType } from 'react';
-import {
-  NativeModules,
-  Platform,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { NativeModules, Platform, StyleSheet, Text, View } from 'react-native';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
@@ -28,9 +22,11 @@ type GPUConfettiComponent = ComponentType<any> & {
 
 export default function GPUScreen() {
   const confettiRef = useRef<GPUConfettiMethods>(null);
-  const [GPUConfetti, setGPUConfetti] =
-    useState<GPUConfettiComponent | null>(null);
-  const [loadError, setLoadError] = useState(false);
+  const hasNativeWebGPU = Platform.OS === 'web' || !!NativeModules.WebGPUModule;
+  const [GPUConfetti, setGPUConfetti] = useState<GPUConfettiComponent | null>(
+    null
+  );
+  const [loadError, setLoadError] = useState(!hasNativeWebGPU);
   const { config, updateConfig } = useScreenConfig('single');
   const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets();
 
@@ -40,10 +36,7 @@ export default function GPUScreen() {
   );
 
   useEffect(() => {
-    if (Platform.OS !== 'web' && !NativeModules.WebGPUModule) {
-      setLoadError(true);
-      return;
-    }
+    if (!hasNativeWebGPU) return;
 
     let mounted = true;
     void import('react-native-fast-confetti/webgpu')
@@ -57,7 +50,7 @@ export default function GPUScreen() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [hasNativeWebGPU]);
 
   if (isLoading) return null;
 

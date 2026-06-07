@@ -43,7 +43,7 @@ struct Uniforms {
   textureMode:       f32,
 
   lightDir:          vec3f,
-  _pad1:             f32,
+  minVisibleScale:   f32,
 
   gravityDir:        vec3f,
   _pad2:             f32,
@@ -205,7 +205,7 @@ struct VOut {
   @location(0) uv: vec2f,
   @location(1) color: vec4f,
   @location(2) normal: vec3f,
-  @location(3) radiusNorm: vec2f,
+  @location(3) sizeAndRadius: vec3f,
   @location(4) flagsAndLayer: vec2f,  // flags, textureLayer
   @location(5) seedAndRim: vec2f,     // per-instance seed (0..1), rim factor
 };
@@ -221,6 +221,16 @@ fn project(p: vec3f) -> vec2f {
 fn toClip(screen: vec2f) -> vec2f {
   return vec2f((screen.x / u.viewport.x) * 2.0 - 1.0,
                1.0 - (screen.y / u.viewport.y) * 2.0);
+}
+
+fn normalizeOr2(v: vec2f, fallback: vec2f) -> vec2f {
+  let len = length(v);
+  return select(fallback, v / max(len, 0.0001), len > 0.0001);
+}
+
+fn clampAxis(axis: vec2f, fallback: vec2f, minLen: f32) -> vec2f {
+  let dir = normalizeOr2(axis, fallback);
+  return dir * max(length(axis), minLen);
 }
 
 // Tessellated flake: TESS × TESS quads = TESS*TESS*6 vertices per instance.
@@ -249,7 +259,6 @@ fn vs_main(
 
   let u_  = (f32(cellX) + off.x) / f32(TESS);
   let v_  = (f32(cellY) + off.y) / f32(TESS);
-  let uv_ = vec2f(u_, v_);
 
   let spawn = spawns[iid];
   let rt    = runtime[iid];
@@ -290,27 +299,51 @@ fn vs_main(
   let dzdy = dzdv / max(height, 0.0001);
   let nBody = normalize(vec3f(-dzdx, -dzdy, 1.0));
 
-  // Body-frame bent position.
-  let px = (u_ - 0.5) * width * appearScale;
-  let py = (v_ - 0.5) * height * appearScale;
-  let pz = zBend * appearScale;
-  let localBody = vec3f(px, py, pz);
-
-  let worldOffset = qRot(rt.quat, localBody);
-  var worldPos = rt.pos + worldOffset;
-
   // Drift: damp lateral motion toward spawn column.
   let lateralDamp = mix(0.0, 1.0, u.drift);
-  worldPos.x = spawn.pos0.x + (worldPos.x - spawn.pos0.x) * lateralDamp;
+  var centerWorld = rt.pos;
+  centerWorld.x = spawn.pos0.x + (centerWorld.x - spawn.pos0.x) * lateralDamp;
+
+  let centerScreen = project(centerWorld);
+  let perspectiveScale = u.focalLength / max(centerWorld.z + u.focalLength, 1.0);
+
+  let axisXWorld = qRot(rt.quat, vec3f(width * 0.5 * appearScale, 0.0, 0.0));
+  let axisYWorld = qRot(rt.quat, vec3f(0.0, height * 0.5 * appearScale, 0.0));
+  let axisZWorld = qRot(rt.quat, vec3f(0.0, 0.0, zBend * appearScale));
+
+  var axisXScreen = project(centerWorld + axisXWorld) - centerScreen;
+  var axisYScreen = project(centerWorld + axisYWorld) - centerScreen;
+  let bendScreen = project(centerWorld + axisZWorld) - centerScreen;
+
+  let yDir0 = normalizeOr2(axisYScreen, vec2f(0.0, 1.0));
+  let xFallback = vec2f(-yDir0.y, yDir0.x);
+  let minVisibleScale = clamp(u.minVisibleScale, 0.0, 1.0);
+  axisXScreen = clampAxis(
+    axisXScreen,
+    xFallback,
+    width * 0.5 * appearScale * perspectiveScale * minVisibleScale
+  );
+  let xDir = normalizeOr2(axisXScreen, vec2f(1.0, 0.0));
+  axisYScreen = clampAxis(
+    axisYScreen,
+    vec2f(-xDir.y, xDir.x),
+    height * 0.5 * appearScale * perspectiveScale * minVisibleScale
+  );
+
+  var screen =
+    centerScreen +
+    axisXScreen * ((u_ - 0.5) * 2.0) +
+    axisYScreen * ((v_ - 0.5) * 2.0) +
+    bendScreen;
 
   // Motion blur stretch along velocity direction.
   if (u.motionBlurAmount > 0.001 && speed > 1.0) {
     let velDir = rt.vel / speed;
     let stretch = (u.motionBlurAmount * min(speed, 1200.0)) / 1200.0 * 0.6;
-    worldPos = worldPos + velDir * ((v_ - 0.5) * height * stretch);
+    let blurWorld = centerWorld + velDir * ((v_ - 0.5) * height * stretch);
+    screen = screen + (project(blurWorld) - centerScreen);
   }
 
-  let screen = project(worldPos);
   let clip   = toClip(screen);
 
   // World-space normal = body bent normal rotated by piece quaternion.
@@ -326,10 +359,7 @@ fn vs_main(
   out.uv  = vec2f(u_, 1.0 - v_);
   out.color = vec4f(palette[colorIdx].rgb, alpha);
   out.normal = N;
-  out.radiusNorm = vec2f(
-    select(0.0, radius / max(width, 0.0001), width > 0.0),
-    select(0.0, radius / max(height, 0.0001), height > 0.0),
-  );
+  out.sizeAndRadius = vec3f(width, height, radius);
   out.flagsAndLayer = vec2f(flags, textureLayer);
   // Stable per-instance seed (hash of index) in [0,1] so fragment can pick a
   // piece-specific wood grain / rubber color / etc.
@@ -338,13 +368,13 @@ fn vs_main(
   return out;
 }
 
-fn sdfRoundedBox(p: vec2f, halfExtent: vec2f, radiusUv: vec2f) -> f32 {
-  let r = min(radiusUv, halfExtent);
-  let q = abs(p) - (halfExtent - r);
+fn sdfRoundedBoxPx(p: vec2f, halfExtent: vec2f, radius: f32) -> f32 {
+  let r = min(radius, min(halfExtent.x, halfExtent.y));
+  let q = abs(p) - (halfExtent - vec2f(r));
   let qPos = max(q, vec2f(0.0));
   let len = length(qPos);
   let inside = min(max(q.x, q.y), 0.0);
-  return len + inside - min(r.x, r.y);
+  return len + inside - r;
 }
 
 // --- Procedural noise helpers (value noise) ---
@@ -398,10 +428,12 @@ fn fs_main(in: VOut) -> @location(0) vec4f {
   let mode       = u32(u.textureMode);
 
   // Rounded-rect mask.
-  let p = in.uv - vec2f(0.5);
-  let d = sdfRoundedBox(p, vec2f(0.5), in.radiusNorm);
-  let radiusActive = step(0.01, max(in.radiusNorm.x, in.radiusNorm.y));
-  let aa = max(fwidth(d), 0.001);
+  let flakeSize = in.sizeAndRadius.xy;
+  let radius = in.sizeAndRadius.z;
+  let p = (in.uv - vec2f(0.5)) * flakeSize;
+  let d = sdfRoundedBoxPx(p, flakeSize * 0.5, radius);
+  let radiusActive = step(0.01, radius);
+  let aa = max(fwidth(d), 0.5);
   let insideMask = 1.0 - smoothstep(-aa, aa, d);
   let maskAlpha  = mix(1.0, insideMask, radiusActive);
 
