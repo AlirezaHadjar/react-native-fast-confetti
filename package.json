@@ -2,6 +2,7 @@
   "name": "react-native-fast-confetti",
   "version": "2.0.0",
   "description": "The fastest confetti animation library in react native",
+  "sideEffects": false,
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
   "exports": {
