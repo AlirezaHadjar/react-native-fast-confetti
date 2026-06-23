@@ -33,6 +33,14 @@ export type Rotation = {
   z?: Range;
 };
 
+export type ReducedMotionConfig =
+  | 'system'
+  | 'never'
+  | {
+      mode: 'system' | 'always';
+      factor?: number;
+    };
+
 export type FallingBox = {
   spawnX: number;
   spawnY: number;
@@ -150,6 +158,14 @@ type ConfettiBaseProps = {
    * @description Custom easing function for the animation progress.
    */
   easing?: EasingFunction | EasingFunctionFactory;
+  /**
+   * @description Controls how confetti responds to the device Reduce Motion setting.
+   * `system` applies the default reduction factor when Reduce Motion is enabled.
+   * `never` always uses full motion. An object can customize the reduction factor
+   * for system-driven or always-on reduction.
+   * @default 'system'
+   */
+  reducedMotion?: ReducedMotionConfig;
 };
 
 export type ConfettiProps = ConfettiBaseProps & FlakeTexture;
@@ -313,6 +329,14 @@ type BurstConfettiBaseProps = {
    * @description Custom easing function for the animation progress.
    */
   easing?: EasingFunction | EasingFunctionFactory;
+  /**
+   * @description Controls how confetti responds to the device Reduce Motion setting.
+   * `system` applies the default reduction factor when Reduce Motion is enabled.
+   * `never` always uses full motion. An object can customize the reduction factor
+   * for system-driven or always-on reduction.
+   * @default 'system'
+   */
+  reducedMotion?: ReducedMotionConfig;
 };
 
 type PIConfettiBaseProps = BurstConfettiBaseProps;

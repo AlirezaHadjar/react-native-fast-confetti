@@ -50,6 +50,7 @@ export default function ContinuousScreen() {
       <ContinuousConfetti
         key={confettiKey}
         ref={confettiRef}
+        autoplay
         rotation={rotation}
         count={200}
         flipIntensity={config.textureType === 'money' ? 0.1 : 0.85}

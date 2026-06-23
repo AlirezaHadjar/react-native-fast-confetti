@@ -10,6 +10,11 @@ import type {
 } from '../types';
 import type { CannonConfig } from '../utils';
 import { resolveNamedPosition } from '../utils';
+import {
+  reduceCountForMotion,
+  scaleRotationForMotion,
+  scaleValueForMotion,
+} from '../reducedMotion';
 import { pickChildren } from '../children';
 import { Origin, Flake } from '../CannonConfettiComponents';
 import {
@@ -18,6 +23,7 @@ import {
   DEFAULT_CANNON_CONFETTI_INITIAL_SPEED,
   DEFAULT_CANNON_CONFETTI_SPEED_VARIATION,
   DEFAULT_CANNON_CONFETTI_DEPTH,
+  DEFAULT_CANNON_CONFETTI_ROTATION,
   DEFAULT_CANNON_ORIGIN_COUNT,
 } from '../constants';
 import { parseFlakeChildren, buildAtlasColors } from './useConfettiFlakes';
@@ -38,17 +44,20 @@ type UseCannonOriginsParams = {
   containerWidth: number;
   containerHeight: number;
   parentTexture?: TextureInfo;
+  reducedMotionFactor: number;
 };
 
 type UseCannonOriginsResult = {
   cannonsPositions: Position[];
   cannonConfigs: CannonConfig[];
+  durationCannonConfigs: CannonConfig[];
   allColors: string[];
   sizeVariations: SizeVariation[];
   colorOverrides: (ColorRange | null)[];
   sizeIsTextured: boolean[];
   parentColorCount: number;
   totalCount: number;
+  visibleCount: number;
 };
 
 export const useCannonOrigins = ({
@@ -62,6 +71,7 @@ export const useCannonOrigins = ({
   containerWidth,
   containerHeight,
   parentTexture,
+  reducedMotionFactor,
 }: UseCannonOriginsParams): UseCannonOriginsResult => {
   const { targetChildren: originChildren } = pickChildren<CannonOriginProps>(
     children,
@@ -95,11 +105,13 @@ export const useCannonOrigins = ({
     const origins = originChildren ?? [];
     const positions: Position[] = [];
     const configs: CannonConfig[] = [];
+    const durationConfigs: CannonConfig[] = [];
     const allSizes: SizeVariation[] = [];
     const allColorOverrides: (ColorRange | null)[] = [];
     const allSizeIsTextured: boolean[] = [];
     const allColorsAccum: string[] = [];
     let totalCount = 0;
+    let visibleCount = 0;
     let globalParentColorCount = 0;
 
     for (const origin of origins) {
@@ -127,7 +139,21 @@ export const useCannonOrigins = ({
         parentTexture
       );
       const originColors = props.colors ?? rootColors ?? DEFAULT_COLORS;
-      const originCount = props.count ?? DEFAULT_CANNON_ORIGIN_COUNT;
+      const fullMotionCount = props.count ?? DEFAULT_CANNON_ORIGIN_COUNT;
+      const spread = props.spread ?? DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE;
+      const speed =
+        props.initialSpeed ?? DEFAULT_CANNON_CONFETTI_INITIAL_SPEED;
+      const speedVariation =
+        props.speedVariation ??
+        rootSpeedVariation ??
+        DEFAULT_CANNON_CONFETTI_SPEED_VARIATION;
+      const rotation =
+        props.rotation ?? rootRotation ?? DEFAULT_CANNON_CONFETTI_ROTATION;
+      const depth = props.depth ?? rootDepth ?? DEFAULT_CANNON_CONFETTI_DEPTH;
+      const originCount = reduceCountForMotion(
+        fullMotionCount,
+        reducedMotionFactor
+      );
 
       // Build atlas colors for this origin's flakes
       const {
@@ -162,29 +188,34 @@ export const useCannonOrigins = ({
 
       allColorsAccum.push(...originAtlasColors);
 
-      // For cannon config: use the full origin color range
-      configs.push({
-        spread: props.spread ?? DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE,
-        speed: props.initialSpeed ?? DEFAULT_CANNON_CONFETTI_INITIAL_SPEED,
-        count: originCount,
-        speedVariation:
-          props.speedVariation ??
-          rootSpeedVariation ??
-          DEFAULT_CANNON_CONFETTI_SPEED_VARIATION,
+      const durationConfig: CannonConfig = {
+        spread,
+        speed,
+        count: fullMotionCount,
+        speedVariation,
         colorStart: colorOffset,
         colorCount: originAtlasColors.length,
         sizeStart,
         sizeCount: originSizes.length,
-        rotation: props.rotation ?? rootRotation,
-        depth: props.depth ?? rootDepth ?? DEFAULT_CANNON_CONFETTI_DEPTH,
+        rotation,
+        depth,
         target: resolvedTarget,
+      };
+
+      durationConfigs.push(durationConfig);
+      configs.push({
+        ...durationConfig,
+        spread: scaleValueForMotion(spread, reducedMotionFactor),
+        count: fullMotionCount,
+        rotation: scaleRotationForMotion(rotation, reducedMotionFactor),
       });
 
       if (originParentColorCount > 0 && globalParentColorCount === 0) {
         globalParentColorCount = originParentColorCount;
       }
 
-      totalCount += originCount;
+      totalCount += fullMotionCount;
+      visibleCount += originCount;
     }
 
     if (allColorsAccum.length === 0) {
@@ -194,12 +225,14 @@ export const useCannonOrigins = ({
     return {
       cannonsPositions: positions,
       cannonConfigs: configs,
+      durationCannonConfigs: durationConfigs,
       allColors: allColorsAccum,
       sizeVariations: allSizes,
       colorOverrides: allColorOverrides,
       sizeIsTextured: allSizeIsTextured,
       parentColorCount: globalParentColorCount,
       totalCount,
+      visibleCount,
     };
   }, [
     originChildren,
@@ -212,5 +245,6 @@ export const useCannonOrigins = ({
     rootTarget,
     rootFlakeStyle,
     parentTexture,
+    reducedMotionFactor,
   ]);
 };

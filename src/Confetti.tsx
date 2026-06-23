@@ -6,6 +6,7 @@ import {
   useImperativeHandle,
 } from 'react';
 import {
+  Easing,
   Extrapolation,
   interpolate,
   runOnUI,
@@ -26,7 +27,14 @@ import { useAnimationLifecycle } from './hooks/useAnimationLifecycle';
 import { useConfettiFlakes } from './hooks/useConfettiFlakes';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useContainerDimensions } from './hooks/useContainerDimensions';
+import { useReducedMotionFactor } from './hooks/useReducedMotionFactor';
 import { useTextureProps } from './hooks/useTextureProps';
+import {
+  isReducedMotionPieceVisible,
+  reduceCountForMotion,
+  reducedMotionScale,
+  scaleValueForMotion,
+} from './reducedMotion';
 import type {
   ConfettiMethods,
   ConfettiProps,
@@ -63,10 +71,22 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       initialScale = 0.3,
       flipIntensity = 0.85,
       easing = DEFAULT_CONFETTI_FALL_EASING,
+      reducedMotion,
       ...textureRootProps
     },
     ref
   ) => {
+    const { factor: reducedMotionFactor, ready: reducedMotionReady } =
+      useReducedMotionFactor(reducedMotion);
+    const motionScale = reducedMotionScale(reducedMotionFactor);
+    const bufferCount = Math.max(0, Math.round(count));
+    const visibleCount = reduceCountForMotion(bufferCount, reducedMotionFactor);
+    const effectiveDrift = scaleValueForMotion(drift, reducedMotionFactor);
+    const effectiveFlipIntensity = scaleValueForMotion(
+      flipIntensity,
+      reducedMotionFactor
+    );
+
     const { containerWidth, containerHeight, onContainerLayout, ready } =
       useContainerDimensions(containerStyle);
 
@@ -91,7 +111,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
     const maxFlakeHeight = Math.max(...sizeVariations.map((f) => f.height));
     const { columnsNum, columnWidth, rowsNum, verticalOffset } =
       computeSpawnGrid({
-        count,
+        count: Math.max(bufferCount, 1),
         maxFlakeWidth,
         maxFlakeHeight,
         containerWidth,
@@ -100,12 +120,11 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       });
 
     // --- Auto-compute duration from physics ---
-    const maxWobble = wobble?.max ?? DEFAULT_CONFETTI_WOBBLE.max;
     const duration = estimateFallingDuration({
       gravity,
       containerHeight,
       verticalOffset,
-      maxWobble,
+      maxWobble: wobble?.max ?? DEFAULT_CONFETTI_WOBBLE.max,
     });
 
     const cycleCount = useSharedValue(0);
@@ -120,10 +139,11 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
         duration,
         infinite,
         fadeOutOnEnd,
-        easing,
+        easing: continuous ? Easing.linear : easing,
         onAnimationStart,
         onAnimationEnd,
         onCycleEnd,
+        disabled: visibleCount === 0,
       });
 
     const totalTime = duration / 1000;
@@ -136,7 +156,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       colors: allColors,
       boxes,
       sizeColorOverrides: colorOverrides,
-      count,
+      count: bufferCount,
     });
 
     const sizeVariationsCount = sizeVariations.length;
@@ -144,7 +164,8 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
     const refreshBoxes = useCallback(() => {
       'worklet';
       const result = generateFallingBoxesArray({
-        count,
+        count: bufferCount,
+        layoutCount: Math.max(bufferCount, 1),
         sizeVariations: sizeVariationsCount,
         sizeColorOverrides: colorOverrides,
         parentColorCount,
@@ -169,7 +190,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       boxes.set(result.boxes);
       trajectories.set(result.trajectories);
     }, [
-      count,
+      bufferCount,
       sizeVariationsCount,
       colorOverrides,
       parentColorCount,
@@ -216,21 +237,49 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
     }));
 
     useEffect(() => {
-      if (!ready) return;
+      if (!ready || !reducedMotionReady) return;
       runOnUI(() => {
-        if (!running.get()) {
+        if (visibleCount === 0) {
           if (autoplay) {
-            restart(autoStartDelay);
+            restart(0);
           } else {
+            reset();
+            cycleCount.set(0);
             refreshBoxes();
           }
+          return;
+        }
+        if (running.get()) {
+          refreshBoxes();
+          return;
+        }
+        if (autoplay) {
+          restart(autoStartDelay);
+        } else {
+          refreshBoxes();
         }
       })();
-    }, [autoplay, autoStartDelay, restart, refreshBoxes, running, ready]);
+    }, [
+      autoplay,
+      autoStartDelay,
+      restart,
+      refreshBoxes,
+      running,
+      ready,
+      reset,
+      cycleCount,
+      visibleCount,
+      reducedMotionReady,
+    ]);
 
     const maxIdx = TRAJECTORY_SAMPLE_COUNT;
-    const transforms = useRSXformBuffer(count, (val, i) => {
+    const transforms = useRSXformBuffer(bufferCount, (val, i) => {
       'worklet';
+      if (!isReducedMotionPieceVisible(i, bufferCount, visibleCount)) {
+        val.set(0, 0, -10000, -10000);
+        return;
+      }
+
       const piece = boxes.get()[i];
       if (!piece) {
         val.set(0, 0, -10000, -10000);
@@ -265,16 +314,17 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
 
       const rawTx = x0 + (x1 - x0) * u;
       const ty = y0 + (y1 - y0) * u;
-      const tx = piece.spawnX + (rawTx - piece.spawnX) * drift;
+      const tx = piece.spawnX + (rawTx - piece.spawnX) * effectiveDrift;
       const tumbleTheta = t0 + (t1 - t0) * u;
 
       // --- Visual rotation (continuous spin, separate axis) ---
       const clockwiseDir = piece.clockwise ? 1 : -1;
-      const rz = piece.spinPhase + clockwiseDir * piece.spinRate * t;
+      const rz =
+        piece.spinPhase + clockwiseDir * piece.spinRate * t * motionScale;
 
       // --- Scale from tumble ---
       const rawCos = Math.cos(tumbleTheta);
-      const minFlipScale = 1 - flipIntensity;
+      const minFlipScale = 1 - effectiveFlipIntensity;
       const absClamped = Math.max(Math.abs(rawCos), minFlipScale);
       const oscillatingScale = piece.isTextured
         ? absClamped
@@ -300,7 +350,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
     return (
       <ConfettiCanvas
         containerStyle={containerStyle}
-        ready={ready}
+        ready={ready && reducedMotionReady}
         texture={texture}
         sprites={sprites}
         transforms={transforms}

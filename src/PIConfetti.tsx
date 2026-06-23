@@ -27,6 +27,11 @@ import { usePIOrigins } from './hooks/usePIOrigins';
 import { useTextureProps } from './hooks/useTextureProps';
 import { useAnimationLifecycle } from './hooks/useAnimationLifecycle';
 import { useContainerDimensions } from './hooks/useContainerDimensions';
+import { useReducedMotionFactor } from './hooks/useReducedMotionFactor';
+import {
+  isReducedMotionPieceVisible,
+  scaleValueForMotion,
+} from './reducedMotion';
 import { ConfettiCanvas } from './ConfettiCanvas';
 import { Origin, Flake } from './PIConfettiComponents';
 
@@ -49,6 +54,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       flipIntensity = 0.85,
       easing,
       sprayDuration,
+      reducedMotion,
       onAnimationEnd,
       onAnimationStart,
       containerStyle,
@@ -56,6 +62,13 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
     },
     ref
   ) => {
+    const { factor: reducedMotionFactor, ready: reducedMotionReady } =
+      useReducedMotionFactor(reducedMotion);
+    const effectiveFlipIntensity = scaleValueForMotion(
+      flipIntensity,
+      reducedMotionFactor
+    );
+
     const { containerWidth, containerHeight, onContainerLayout, ready } =
       useContainerDimensions(containerStyle);
 
@@ -70,12 +83,14 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       blastPositions,
       originDelays,
       piConfigs,
+      durationPiConfigs,
       allColors,
       sizeVariations,
       colorOverrides,
       sizeIsTextured,
       parentColorCount,
       totalCount,
+      visibleCount,
     } = usePIOrigins({
       children,
       rootColors,
@@ -86,11 +101,12 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       containerWidth,
       containerHeight,
       parentTexture,
+      reducedMotionFactor,
     });
 
     // --- Auto-compute duration from physics ---
     const { flightDuration, totalDuration: duration } = estimatePIDuration({
-      piConfigs,
+      piConfigs: durationPiConfigs,
       blastPositions,
       originDelays,
       gravity,
@@ -162,6 +178,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         onAnimationEnd,
         fadeRange: [0.5, 0.9],
         onCycleEnd: refreshBoxes,
+        disabled: visibleCount === 0,
       });
 
     const workletRestart = useCallback(
@@ -202,18 +219,46 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
     }));
 
     useEffect(() => {
-      if (!ready) return;
+      if (!ready || !reducedMotionReady) return;
       runOnUI(() => {
-        if (autoplay && !running.get())
+        if (visibleCount === 0) {
+          if (autoplay) {
+            workletRestart(null, null, 0);
+          } else {
+            reset();
+            refreshBoxes();
+          }
+          return;
+        }
+        if (running.get()) {
+          refreshBoxes();
+          return;
+        }
+        if (autoplay)
           workletRestart(null, null, autoStartDelay);
       })();
-    }, [autoplay, autoStartDelay, workletRestart, running, ready]);
+    }, [
+      autoplay,
+      autoStartDelay,
+      workletRestart,
+      running,
+      ready,
+      reset,
+      refreshBoxes,
+      visibleCount,
+      reducedMotionReady,
+    ]);
 
     const scaledGravity = gravity * containerHeight;
     const flightTimeSec = flightDuration / 1000;
 
     const transforms = useRSXformBuffer(totalCount, (val, i) => {
       'worklet';
+      if (!isReducedMotionPieceVisible(i, totalCount, visibleCount)) {
+        val.set(0, 0, -10000, -10000);
+        return;
+      }
+
       const piece = boxes.get()[i];
       if (!piece) {
         val.set(0, 0, -10000, -10000);
@@ -278,7 +323,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         localProgress * rotationDirection * piece.maxRotation.x;
 
       // Scale: appearance animation at launch + oscillation
-      const minFlipScale = 1 - flipIntensity;
+      const minFlipScale = 1 - effectiveFlipIntensity;
       const oscillatingScale =
         piece.maxRotation.x === 0
           ? 1
@@ -308,7 +353,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
     return (
       <ConfettiCanvas
         containerStyle={containerStyle}
-        ready={ready}
+        ready={ready && reducedMotionReady}
         texture={texture}
         sprites={sprites}
         transforms={transforms}

@@ -243,6 +243,19 @@ Props that accept a position (`blastPosition`, `position`, `target`) can use a n
 
 Available named positions: `top-left`, `top-center`, `top-right`, `center-left`, `center`, `center-right`, `bottom-left`, `bottom-center`, `bottom-right`
 
+## Reduced Motion
+
+By default, confetti respects the device Reduce Motion setting. When Reduce Motion is enabled, the library scales down particle count and motion intensity with a default factor of `0.5`.
+
+```tsx
+<Confetti reducedMotion="system" />
+<Confetti reducedMotion="never" />
+<Confetti reducedMotion={{ mode: 'system', factor: 0.75 }} />
+<Confetti reducedMotion={{ mode: 'always', factor: 1 }} />
+```
+
+The factor is clamped between `0` and `1`. A factor of `0` keeps full motion; a factor of `1` disables animated confetti.
+
 ## Props
 
 ### `<Confetti />` Props
@@ -259,6 +272,7 @@ Available named positions: `top-left`, `top-center`, `top-right`, `center-left`,
 | `fadeOutOnEnd`     | false            | Fade pieces as they exit.                  |
 | `image`            | N/A              | Default Skia image texture for all flakes. |
 | `svg`              | N/A              | Default Skia SVG texture for all flakes.   |
+| `reducedMotion`    | 'system'         | Reduce motion using the system setting.    |
 | `onAnimationStart` | N/A              | Called when animation starts.              |
 | `onAnimationEnd`   | N/A              | Called when animation ends.                |
 
@@ -300,6 +314,7 @@ Same as `<Confetti />` except:
 | `fadeOutOnEnd`     | false            | Fade pieces as they exit.                    |
 | `image`            | N/A              | Default Skia image texture for all flakes.   |
 | `svg`              | N/A              | Default Skia SVG texture for all flakes.     |
+| `reducedMotion`    | 'system'         | Reduce motion using the system setting.      |
 | `onAnimationStart` | N/A              | Called when animation starts.                |
 | `onAnimationEnd`   | N/A              | Called when animation ends.                  |
 
@@ -356,6 +371,7 @@ Same as `<Confetti />` except:
 | `fadeOutOnEnd`     | false            | Fade pieces as they exit.                    |
 | `image`            | N/A              | Default Skia image texture for all flakes.   |
 | `svg`              | N/A              | Default Skia SVG texture for all flakes.     |
+| `reducedMotion`    | 'system'         | Reduce motion using the system setting.      |
 | `onAnimationStart` | N/A              | Called when animation starts.                |
 | `onAnimationEnd`   | N/A              | Called when animation ends.                  |
 
