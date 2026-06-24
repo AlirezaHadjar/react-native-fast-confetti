@@ -33,7 +33,7 @@ export type Rotation = {
   z?: Range;
 };
 
-export type ReducedMotionConfig =
+export type ReduceMotionConfig =
   | 'system'
   | 'never'
   | {
@@ -165,7 +165,7 @@ type ConfettiBaseProps = {
    * for system-driven or always-on reduction.
    * @default 'system'
    */
-  reducedMotion?: ReducedMotionConfig;
+  reduceMotion?: ReduceMotionConfig;
 };
 
 export type ConfettiProps = ConfettiBaseProps & FlakeTexture;
@@ -336,7 +336,7 @@ type BurstConfettiBaseProps = {
    * for system-driven or always-on reduction.
    * @default 'system'
    */
-  reducedMotion?: ReducedMotionConfig;
+  reduceMotion?: ReduceMotionConfig;
 };
 
 type PIConfettiBaseProps = BurstConfettiBaseProps;

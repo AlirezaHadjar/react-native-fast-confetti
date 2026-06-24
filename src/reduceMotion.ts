@@ -1,45 +1,45 @@
-import type { Range, ReducedMotionConfig, Rotation } from './types';
+import type { Range, ReduceMotionConfig, Rotation } from './types';
 
-export const DEFAULT_REDUCED_MOTION_FACTOR = 0.5;
+export const DEFAULT_REDUCE_MOTION_FACTOR = 0.5;
 
-export function clampReducedMotionFactor(factor: number): number {
-  if (!Number.isFinite(factor)) return DEFAULT_REDUCED_MOTION_FACTOR;
+export function clampReduceMotionFactor(factor: number): number {
+  if (!Number.isFinite(factor)) return DEFAULT_REDUCE_MOTION_FACTOR;
   return Math.min(Math.max(factor, 0), 1);
 }
 
-export function resolveReducedMotionFactor(
-  config: ReducedMotionConfig | undefined,
-  systemReducedMotionEnabled: boolean
+export function resolveReduceMotionFactor(
+  config: ReduceMotionConfig | undefined,
+  systemReduceMotionEnabled: boolean
 ): number {
   if (config === 'never') return 0;
 
   if (config === undefined || config === 'system') {
-    return systemReducedMotionEnabled ? DEFAULT_REDUCED_MOTION_FACTOR : 0;
+    return systemReduceMotionEnabled ? DEFAULT_REDUCE_MOTION_FACTOR : 0;
   }
 
-  const factor = clampReducedMotionFactor(
-    config.factor ?? DEFAULT_REDUCED_MOTION_FACTOR
+  const factor = clampReduceMotionFactor(
+    config.factor ?? DEFAULT_REDUCE_MOTION_FACTOR
   );
 
   if (config.mode === 'always') return factor;
 
-  return systemReducedMotionEnabled ? factor : 0;
+  return systemReduceMotionEnabled ? factor : 0;
 }
 
-export function reducedMotionScale(factor: number): number {
-  return 1 - clampReducedMotionFactor(factor);
+export function reduceMotionScale(factor: number): number {
+  return 1 - clampReduceMotionFactor(factor);
 }
 
 export function reduceCountForMotion(count: number, factor: number): number {
   const normalizedCount = Math.max(0, Math.round(count));
-  const scale = reducedMotionScale(factor);
+  const scale = reduceMotionScale(factor);
 
   if (normalizedCount === 0 || scale === 0) return 0;
 
   return Math.max(1, Math.round(normalizedCount * scale));
 }
 
-export function isReducedMotionPieceVisible(
+export function isReduceMotionPieceVisible(
   index: number,
   totalCount: number,
   visibleCount: number
@@ -55,7 +55,7 @@ export function isReducedMotionPieceVisible(
 }
 
 export function scaleValueForMotion(value: number, factor: number): number {
-  return value * reducedMotionScale(factor);
+  return value * reduceMotionScale(factor);
 }
 
 export function scaleRangeForMotion(
@@ -63,7 +63,7 @@ export function scaleRangeForMotion(
   factor: number
 ): Range | undefined {
   if (!range) return undefined;
-  const scale = reducedMotionScale(factor);
+  const scale = reduceMotionScale(factor);
   return {
     min: range.min * scale,
     max: range.max * scale,

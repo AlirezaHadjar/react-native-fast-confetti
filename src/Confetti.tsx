@@ -27,14 +27,14 @@ import { useAnimationLifecycle } from './hooks/useAnimationLifecycle';
 import { useConfettiFlakes } from './hooks/useConfettiFlakes';
 import { useConfettiLogic } from './hooks/useConfettiLogic';
 import { useContainerDimensions } from './hooks/useContainerDimensions';
-import { useReducedMotionFactor } from './hooks/useReducedMotionFactor';
+import { useReduceMotionFactor } from './hooks/useReduceMotionFactor';
 import { useTextureProps } from './hooks/useTextureProps';
 import {
-  isReducedMotionPieceVisible,
+  isReduceMotionPieceVisible,
   reduceCountForMotion,
-  reducedMotionScale,
+  reduceMotionScale,
   scaleValueForMotion,
-} from './reducedMotion';
+} from './reduceMotion';
 import type {
   ConfettiMethods,
   ConfettiProps,
@@ -71,20 +71,20 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       initialScale = 0.3,
       flipIntensity = 0.85,
       easing = DEFAULT_CONFETTI_FALL_EASING,
-      reducedMotion,
+      reduceMotion,
       ...textureRootProps
     },
     ref
   ) => {
-    const { factor: reducedMotionFactor, ready: reducedMotionReady } =
-      useReducedMotionFactor(reducedMotion);
-    const motionScale = reducedMotionScale(reducedMotionFactor);
+    const { factor: reduceMotionFactor, ready: reduceMotionReady } =
+      useReduceMotionFactor(reduceMotion);
+    const motionScale = reduceMotionScale(reduceMotionFactor);
     const bufferCount = Math.max(0, Math.round(count));
-    const visibleCount = reduceCountForMotion(bufferCount, reducedMotionFactor);
-    const effectiveDrift = scaleValueForMotion(drift, reducedMotionFactor);
+    const visibleCount = reduceCountForMotion(bufferCount, reduceMotionFactor);
+    const effectiveDrift = scaleValueForMotion(drift, reduceMotionFactor);
     const effectiveFlipIntensity = scaleValueForMotion(
       flipIntensity,
-      reducedMotionFactor
+      reduceMotionFactor
     );
 
     const { containerWidth, containerHeight, onContainerLayout, ready } =
@@ -237,7 +237,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
     }));
 
     useEffect(() => {
-      if (!ready || !reducedMotionReady) return;
+      if (!ready || !reduceMotionReady) return;
       runOnUI(() => {
         if (visibleCount === 0) {
           if (autoplay) {
@@ -269,13 +269,13 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       reset,
       cycleCount,
       visibleCount,
-      reducedMotionReady,
+      reduceMotionReady,
     ]);
 
     const maxIdx = TRAJECTORY_SAMPLE_COUNT;
     const transforms = useRSXformBuffer(bufferCount, (val, i) => {
       'worklet';
-      if (!isReducedMotionPieceVisible(i, bufferCount, visibleCount)) {
+      if (!isReduceMotionPieceVisible(i, bufferCount, visibleCount)) {
         val.set(0, 0, -10000, -10000);
         return;
       }
@@ -350,7 +350,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
     return (
       <ConfettiCanvas
         containerStyle={containerStyle}
-        ready={ready && reducedMotionReady}
+        ready={ready && reduceMotionReady}
         texture={texture}
         sprites={sprites}
         transforms={transforms}

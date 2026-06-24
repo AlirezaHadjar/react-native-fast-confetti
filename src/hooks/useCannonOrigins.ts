@@ -14,7 +14,7 @@ import {
   reduceCountForMotion,
   scaleRotationForMotion,
   scaleValueForMotion,
-} from '../reducedMotion';
+} from '../reduceMotion';
 import { pickChildren } from '../children';
 import { Origin, Flake } from '../CannonConfettiComponents';
 import {
@@ -44,7 +44,7 @@ type UseCannonOriginsParams = {
   containerWidth: number;
   containerHeight: number;
   parentTexture?: TextureInfo;
-  reducedMotionFactor: number;
+  reduceMotionFactor: number;
 };
 
 type UseCannonOriginsResult = {
@@ -71,7 +71,7 @@ export const useCannonOrigins = ({
   containerWidth,
   containerHeight,
   parentTexture,
-  reducedMotionFactor,
+  reduceMotionFactor,
 }: UseCannonOriginsParams): UseCannonOriginsResult => {
   const { targetChildren: originChildren } = pickChildren<CannonOriginProps>(
     children,
@@ -152,7 +152,7 @@ export const useCannonOrigins = ({
       const depth = props.depth ?? rootDepth ?? DEFAULT_CANNON_CONFETTI_DEPTH;
       const originCount = reduceCountForMotion(
         fullMotionCount,
-        reducedMotionFactor
+        reduceMotionFactor
       );
 
       // Build atlas colors for this origin's flakes
@@ -205,9 +205,9 @@ export const useCannonOrigins = ({
       durationConfigs.push(durationConfig);
       configs.push({
         ...durationConfig,
-        spread: scaleValueForMotion(spread, reducedMotionFactor),
+        spread: scaleValueForMotion(spread, reduceMotionFactor),
         count: fullMotionCount,
-        rotation: scaleRotationForMotion(rotation, reducedMotionFactor),
+        rotation: scaleRotationForMotion(rotation, reduceMotionFactor),
       });
 
       if (originParentColorCount > 0 && globalParentColorCount === 0) {
@@ -245,6 +245,6 @@ export const useCannonOrigins = ({
     rootTarget,
     rootFlakeStyle,
     parentTexture,
-    reducedMotionFactor,
+    reduceMotionFactor,
   ]);
 };

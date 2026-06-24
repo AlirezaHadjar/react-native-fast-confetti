@@ -13,7 +13,7 @@ import {
   reduceCountForMotion,
   scaleRotationForMotion,
   scaleValueForMotion,
-} from '../reducedMotion';
+} from '../reduceMotion';
 import { pickChildren } from '../children';
 import { Origin, Flake } from '../PIConfettiComponents';
 import {
@@ -42,7 +42,7 @@ type UsePIOriginsParams = {
   containerWidth: number;
   containerHeight: number;
   parentTexture?: TextureInfo;
-  reducedMotionFactor: number;
+  reduceMotionFactor: number;
 };
 
 type UsePIOriginsResult = {
@@ -69,7 +69,7 @@ export const usePIOrigins = ({
   containerWidth,
   containerHeight,
   parentTexture,
-  reducedMotionFactor,
+  reduceMotionFactor,
 }: UsePIOriginsParams): UsePIOriginsResult => {
   const { targetChildren: originChildren } = pickChildren<PIOriginProps>(
     children,
@@ -149,7 +149,7 @@ export const usePIOrigins = ({
       const depth = props.depth ?? rootDepth ?? DEFAULT_PI_CONFETTI_DEPTH;
       const originCount = reduceCountForMotion(
         fullMotionCount,
-        reducedMotionFactor
+        reduceMotionFactor
       );
 
       // Build atlas colors for this origin's flakes
@@ -201,9 +201,9 @@ export const usePIOrigins = ({
       durationConfigs.push(durationConfig);
       configs.push({
         ...durationConfig,
-        spread: scaleValueForMotion(spread, reducedMotionFactor),
+        spread: scaleValueForMotion(spread, reduceMotionFactor),
         count: fullMotionCount,
-        rotation: scaleRotationForMotion(rotation, reducedMotionFactor),
+        rotation: scaleRotationForMotion(rotation, reduceMotionFactor),
       });
 
       if (originParentColorCount > 0 && globalParentColorCount === 0) {
@@ -241,6 +241,6 @@ export const usePIOrigins = ({
     rootSpeedVariation,
     rootFlakeStyle,
     parentTexture,
-    reducedMotionFactor,
+    reduceMotionFactor,
   ]);
 };
