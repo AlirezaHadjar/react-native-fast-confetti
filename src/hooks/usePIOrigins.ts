@@ -9,6 +9,11 @@ import type {
 } from '../types';
 import type { PIConfig } from '../utils';
 import { resolveNamedPosition } from '../utils';
+import {
+  reduceCountForMotion,
+  scaleRotationForMotion,
+  scaleValueForMotion,
+} from '../reduceMotion';
 import { pickChildren } from '../children';
 import { Origin, Flake } from '../PIConfettiComponents';
 import {
@@ -17,6 +22,7 @@ import {
   DEFAULT_PI_CONFETTI_INITIAL_SPEED,
   DEFAULT_PI_CONFETTI_SPEED_VARIATION,
   DEFAULT_PI_CONFETTI_DEPTH,
+  DEFAULT_PI_CONFETTI_ROTATION,
   DEFAULT_PI_ORIGIN_COUNT,
 } from '../constants';
 import { parseFlakeChildren, buildAtlasColors } from './useConfettiFlakes';
@@ -36,18 +42,21 @@ type UsePIOriginsParams = {
   containerWidth: number;
   containerHeight: number;
   parentTexture?: TextureInfo;
+  reduceMotionFactor: number;
 };
 
 type UsePIOriginsResult = {
   blastPositions: Position[];
   originDelays: number[];
   piConfigs: PIConfig[];
+  durationPiConfigs: PIConfig[];
   allColors: string[];
   sizeVariations: SizeVariation[];
   colorOverrides: (ColorRange | null)[];
   sizeIsTextured: boolean[];
   parentColorCount: number;
   totalCount: number;
+  visibleCount: number;
 };
 
 export const usePIOrigins = ({
@@ -60,6 +69,7 @@ export const usePIOrigins = ({
   containerWidth,
   containerHeight,
   parentTexture,
+  reduceMotionFactor,
 }: UsePIOriginsParams): UsePIOriginsResult => {
   const { targetChildren: originChildren } = pickChildren<PIOriginProps>(
     children,
@@ -94,11 +104,13 @@ export const usePIOrigins = ({
     const positions: Position[] = [];
     const delays: number[] = [];
     const configs: PIConfig[] = [];
+    const durationConfigs: PIConfig[] = [];
     const allSizes: SizeVariation[] = [];
     const allColorOverrides: (ColorRange | null)[] = [];
     const allSizeIsTextured: boolean[] = [];
     const allColorsAccum: string[] = [];
     let totalCount = 0;
+    let visibleCount = 0;
     let globalParentColorCount = 0;
 
     for (const origin of origins) {
@@ -124,7 +136,21 @@ export const usePIOrigins = ({
         parentTexture
       );
       const originColors = props.colors ?? rootColors ?? DEFAULT_COLORS;
-      const originCount = props.count ?? DEFAULT_PI_ORIGIN_COUNT;
+      const fullMotionCount = props.count ?? DEFAULT_PI_ORIGIN_COUNT;
+      const spread = props.spread ?? DEFAULT_PI_CONFETTI_SPREAD;
+      const initialSpeed =
+        props.initialSpeed ?? DEFAULT_PI_CONFETTI_INITIAL_SPEED;
+      const speedVariation =
+        props.speedVariation ??
+        rootSpeedVariation ??
+        DEFAULT_PI_CONFETTI_SPEED_VARIATION;
+      const rotation =
+        props.rotation ?? rootRotation ?? DEFAULT_PI_CONFETTI_ROTATION;
+      const depth = props.depth ?? rootDepth ?? DEFAULT_PI_CONFETTI_DEPTH;
+      const originCount = reduceCountForMotion(
+        fullMotionCount,
+        reduceMotionFactor
+      );
 
       // Build atlas colors for this origin's flakes
       const {
@@ -159,27 +185,33 @@ export const usePIOrigins = ({
 
       allColorsAccum.push(...originAtlasColors);
 
-      configs.push({
-        spread: props.spread ?? DEFAULT_PI_CONFETTI_SPREAD,
-        initialSpeed: props.initialSpeed ?? DEFAULT_PI_CONFETTI_INITIAL_SPEED,
-        count: originCount,
-        speedVariation:
-          props.speedVariation ??
-          rootSpeedVariation ??
-          DEFAULT_PI_CONFETTI_SPEED_VARIATION,
+      const durationConfig: PIConfig = {
+        spread,
+        initialSpeed,
+        count: fullMotionCount,
+        speedVariation,
         colorStart: colorOffset,
         colorCount: originAtlasColors.length,
         sizeStart,
         sizeCount: originSizes.length,
-        rotation: props.rotation ?? rootRotation,
-        depth: props.depth ?? rootDepth ?? DEFAULT_PI_CONFETTI_DEPTH,
+        rotation,
+        depth,
+      };
+
+      durationConfigs.push(durationConfig);
+      configs.push({
+        ...durationConfig,
+        spread: scaleValueForMotion(spread, reduceMotionFactor),
+        count: fullMotionCount,
+        rotation: scaleRotationForMotion(rotation, reduceMotionFactor),
       });
 
       if (originParentColorCount > 0 && globalParentColorCount === 0) {
         globalParentColorCount = originParentColorCount;
       }
 
-      totalCount += originCount;
+      totalCount += fullMotionCount;
+      visibleCount += originCount;
     }
 
     if (allColorsAccum.length === 0) {
@@ -190,12 +222,14 @@ export const usePIOrigins = ({
       blastPositions: positions,
       originDelays: delays,
       piConfigs: configs,
+      durationPiConfigs: durationConfigs,
       allColors: allColorsAccum,
       sizeVariations: allSizes,
       colorOverrides: allColorOverrides,
       sizeIsTextured: allSizeIsTextured,
       parentColorCount: globalParentColorCount,
       totalCount,
+      visibleCount,
     };
   }, [
     originChildren,
@@ -207,5 +241,6 @@ export const usePIOrigins = ({
     rootSpeedVariation,
     rootFlakeStyle,
     parentTexture,
+    reduceMotionFactor,
   ]);
 };

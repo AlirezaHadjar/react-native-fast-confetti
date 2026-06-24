@@ -32,6 +32,11 @@ import { useCannonOrigins } from './hooks/useCannonOrigins';
 import { useTextureProps } from './hooks/useTextureProps';
 import { useAnimationLifecycle } from './hooks/useAnimationLifecycle';
 import { useContainerDimensions } from './hooks/useContainerDimensions';
+import { useReduceMotionFactor } from './hooks/useReduceMotionFactor';
+import {
+  isReduceMotionPieceVisible,
+  scaleValueForMotion,
+} from './reduceMotion';
 import { ConfettiCanvas } from './ConfettiCanvas';
 import { Origin, Flake } from './CannonConfettiComponents';
 
@@ -61,10 +66,18 @@ const CannonConfettiInner = forwardRef<
       flipIntensity = 0.85,
       flakeStyle = 'glossy',
       easing,
+      reduceMotion,
       ...textureRootProps
     },
     ref
   ) => {
+    const { factor: reduceMotionFactor, ready: reduceMotionReady } =
+      useReduceMotionFactor(reduceMotion);
+    const effectiveFlipIntensity = scaleValueForMotion(
+      flipIntensity,
+      reduceMotionFactor
+    );
+
     const { containerWidth, containerHeight, onContainerLayout, ready } =
       useContainerDimensions(containerStyle);
 
@@ -78,12 +91,14 @@ const CannonConfettiInner = forwardRef<
     const {
       cannonsPositions,
       cannonConfigs,
+      durationCannonConfigs,
       allColors,
       sizeVariations,
       colorOverrides,
       sizeIsTextured,
       parentColorCount,
       totalCount,
+      visibleCount,
     } = useCannonOrigins({
       children,
       rootColors,
@@ -95,11 +110,12 @@ const CannonConfettiInner = forwardRef<
       containerWidth,
       containerHeight,
       parentTexture,
+      reduceMotionFactor,
     });
 
     // --- Auto-compute duration from physics ---
     const duration = estimateCannonDuration({
-      cannonConfigs,
+      cannonConfigs: durationCannonConfigs,
       cannonsPositions,
       gravity,
       drag: vDrag,
@@ -133,6 +149,7 @@ const CannonConfettiInner = forwardRef<
       colors: allColors,
       boxes,
       sizeColorOverrides: colorOverrides,
+      count: totalCount,
     });
 
     const refreshBoxes = useCallback(() => {
@@ -172,6 +189,7 @@ const CannonConfettiInner = forwardRef<
         onAnimationStart,
         onAnimationEnd,
         onCycleEnd: refreshBoxes,
+        disabled: visibleCount === 0,
       });
 
     const workletRestart = useCallback(
@@ -230,7 +248,10 @@ const CannonConfettiInner = forwardRef<
                 : defaultTarget;
 
             return {
-              spread: DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE,
+              spread: scaleValueForMotion(
+                DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE,
+                reduceMotionFactor
+              ),
               speed: DEFAULT_CANNON_CONFETTI_INITIAL_SPEED,
               count: perOriginCount,
               speedVariation: { ...DEFAULT_CANNON_CONFETTI_SPEED_VARIATION },
@@ -252,6 +273,7 @@ const CannonConfettiInner = forwardRef<
         colorCount,
         sizeCount,
         rootTarget,
+        reduceMotionFactor,
       ]
     );
 
@@ -263,12 +285,35 @@ const CannonConfettiInner = forwardRef<
     }));
 
     useEffect(() => {
-      if (!ready) return;
+      if (!ready || !reduceMotionReady) return;
       runOnUI(() => {
-        if (autoplay && !running.get())
+        if (visibleCount === 0) {
+          if (autoplay) {
+            workletRestart(null, null, 0);
+          } else {
+            reset();
+            refreshBoxes();
+          }
+          return;
+        }
+        if (running.get()) {
+          refreshBoxes();
+          return;
+        }
+        if (autoplay)
           workletRestart(null, null, autoStartDelay);
       })();
-    }, [autoplay, autoStartDelay, workletRestart, running, ready]);
+    }, [
+      autoplay,
+      autoStartDelay,
+      workletRestart,
+      running,
+      ready,
+      reset,
+      refreshBoxes,
+      visibleCount,
+      reduceMotionReady,
+    ]);
 
     // Physics constants scaled to container height
     const scaledGravity = gravity * containerHeight;
@@ -277,6 +322,11 @@ const CannonConfettiInner = forwardRef<
 
     const transforms = useRSXformBuffer(totalCount, (val, i) => {
       'worklet';
+      if (!isReduceMotionPieceVisible(i, totalCount, visibleCount)) {
+        val.set(0, 0, -10000, -10000);
+        return;
+      }
+
       const piece = boxes.get()[i];
       if (!piece) {
         val.set(0, 0, -10000, -10000);
@@ -320,7 +370,7 @@ const CannonConfettiInner = forwardRef<
       const rx =
         piece.initialRotation + p * rotationDirection * piece.maxRotation.x;
 
-      const minFlipScale = 1 - flipIntensity;
+      const minFlipScale = 1 - effectiveFlipIntensity;
       const oscillatingScale =
         piece.maxRotation.x === 0
           ? 1
@@ -350,7 +400,7 @@ const CannonConfettiInner = forwardRef<
     return (
       <ConfettiCanvas
         containerStyle={containerStyle}
-        ready={ready}
+        ready={ready && reduceMotionReady}
         texture={texture}
         sprites={sprites}
         transforms={transforms}

@@ -12,6 +12,7 @@ export type {
   NamedPosition,
   FlakeStyle,
   Drag,
+  ReduceMotionConfig,
 } from './types';
 
 export { Confetti } from './Confetti';

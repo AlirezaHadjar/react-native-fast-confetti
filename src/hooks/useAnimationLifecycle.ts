@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import {
   cancelAnimation,
   Easing,
+  ReduceMotion,
   type EasingFunction,
   type EasingFunctionFactory,
   Extrapolation,
@@ -24,6 +25,7 @@ type UseAnimationLifecycleParams = {
   fadeRange?: [number, number];
   /** Worklet called at the end of each animation cycle (before looping). */
   onCycleEnd?: () => void;
+  disabled?: boolean;
 };
 
 export const useAnimationLifecycle = ({
@@ -35,6 +37,7 @@ export const useAnimationLifecycle = ({
   onAnimationEnd,
   fadeRange = [0.8, 1],
   onCycleEnd,
+  disabled = false,
 }: UseAnimationLifecycleParams) => {
   const progress = useSharedValue(0);
   const running = useSharedValue(false);
@@ -65,6 +68,14 @@ export const useAnimationLifecycle = ({
   const runAnimation = useCallback(
     (delay: number = 0) => {
       'worklet';
+      if (disabled) {
+        running.set(false);
+        cancelAnimation(progress);
+        progress.set(0);
+        UIOnStart();
+        UIOnEnd();
+        return;
+      }
       progress.set(0);
       running.set(true);
       UIOnStart();
@@ -77,18 +88,26 @@ export const useAnimationLifecycle = ({
           cancelAnimation(progress);
           progress.set(0);
           progress.set(
-            withTiming(1, { duration, easing: Easing.linear }, (finished) => {
-              'worklet';
-              if (!finished || !infinite) return;
-              repeatAnimation();
-            })
+            withTiming(
+              1,
+              {
+                duration,
+                easing: Easing.linear,
+                reduceMotion: ReduceMotion.Never,
+              },
+              (finished) => {
+                'worklet';
+                if (!finished || !infinite) return;
+                repeatAnimation();
+              }
+            )
           );
         }
       }
 
       const animation = withTiming(
         1,
-        { duration, easing: easingProp },
+        { duration, easing: easingProp, reduceMotion: ReduceMotion.Never },
         (finished) => {
           'worklet';
           if (!finished || !infinite) {
@@ -99,7 +118,9 @@ export const useAnimationLifecycle = ({
         }
       );
 
-      progress.set(delay > 0 ? withDelay(delay, animation) : animation);
+      progress.set(
+        delay > 0 ? withDelay(delay, animation, ReduceMotion.Never) : animation
+      );
     },
     [
       progress,
@@ -110,11 +131,13 @@ export const useAnimationLifecycle = ({
       infinite,
       duration,
       easingProp,
+      disabled,
     ]
   );
 
   const resume = useCallback(() => {
     'worklet';
+    if (disabled) return;
     if (running.get()) return;
     running.set(true);
 
@@ -128,26 +151,51 @@ export const useAnimationLifecycle = ({
         cancelAnimation(progress);
         progress.set(0);
         progress.set(
-          withTiming(1, { duration, easing: Easing.linear }, (finished) => {
-            'worklet';
-            if (!finished || !infinite) return;
-            repeatAnimation();
-          })
+          withTiming(
+            1,
+            {
+              duration,
+              easing: Easing.linear,
+              reduceMotion: ReduceMotion.Never,
+            },
+            (finished) => {
+              'worklet';
+              if (!finished || !infinite) return;
+              repeatAnimation();
+            }
+          )
         );
       }
     }
 
     progress.set(
-      withTiming(1, { duration: remaining, easing: easingProp }, (finished) => {
-        'worklet';
-        if (!finished || !infinite) {
-          if (finished) UIOnEnd();
-          return;
+      withTiming(
+        1,
+        {
+          duration: remaining,
+          easing: easingProp,
+          reduceMotion: ReduceMotion.Never,
+        },
+        (finished) => {
+          'worklet';
+          if (!finished || !infinite) {
+            if (finished) UIOnEnd();
+            return;
+          }
+          repeatAnimation();
         }
-        repeatAnimation();
-      })
+      )
     );
-  }, [running, progress, duration, UIOnEnd, onCycleEnd, infinite, easingProp]);
+  }, [
+    running,
+    progress,
+    duration,
+    UIOnEnd,
+    onCycleEnd,
+    infinite,
+    easingProp,
+    disabled,
+  ]);
 
   return {
     progress,

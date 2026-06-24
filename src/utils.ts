@@ -586,6 +586,7 @@ const calculateGridSpawnPosition = (
 
 export const generateFallingBoxesArray = ({
   count,
+  layoutCount = count,
   sizeVariations,
   sizeColorOverrides,
   parentColorCount,
@@ -608,6 +609,7 @@ export const generateFallingBoxesArray = ({
   continuous,
 }: {
   count: number;
+  layoutCount?: number;
   sizeVariations: number;
   sizeColorOverrides: (ColorRange | null)[];
   parentColorCount: number;
@@ -657,13 +659,15 @@ export const generateFallingBoxesArray = ({
   const phaseOffsets = continuous ? generatePhaseOffsets(count) : [];
 
   for (let i = 0; i < count; i++) {
+    const layoutIndex =
+      count === layoutCount ? i : Math.floor((i * layoutCount) / count);
     // Grid position (same layout logic as before)
-    const rowIndex = Math.floor(i / columnsNum);
+    const rowIndex = Math.floor(layoutIndex / columnsNum);
     const spawnX = calculateGridSpawnPosition(
-      i,
+      layoutIndex,
       columnsNum,
       rowsNum,
-      count,
+      layoutCount,
       containerWidth,
       maxFlakeWidth,
       columnWidth
