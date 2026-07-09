@@ -60,7 +60,7 @@
     "@react-native/babel-preset": "0.85.3",
     "@react-native/jest-preset": "0.85.3",
     "@release-it/conventional-changelog": "^10.0.6",
-    "@shopify/react-native-skia": "2.6.2",
+    "@shopify/react-native-skia": "^2.6.9",
     "@types/jest": "^30.0.0",
     "@types/react": "^19.2.0",
     "commitlint": "^20.5.0",
