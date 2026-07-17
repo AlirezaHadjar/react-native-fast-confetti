@@ -2,15 +2,15 @@ import { useCallback, useLayoutEffect } from 'react';
 import {
   cancelAnimation,
   Easing,
-  ReduceMotion,
-  type EasingFunction,
-  type EasingFunctionFactory,
   Extrapolation,
   interpolate,
+  ReduceMotion,
   useDerivedValue,
   useSharedValue,
   withDelay,
   withTiming,
+  type EasingFunction,
+  type EasingFunctionFactory,
 } from 'react-native-reanimated';
 import { useAnimationCallbacks } from './useAnimationCallbacks';
 
@@ -49,19 +49,13 @@ export const useAnimationLifecycle = ({
 
   useLayoutEffect(() => {
     return () => {
-      // Stop the UI-thread animation before React tears down the Skia canvas:
-      // an in-flight withTiming otherwise keeps driving Atlas renders during
-      // unmount and races the surface destruction (native crashes on both
-      // platforms: GrResourceCache EXC_BREAKPOINT on iOS, JsiSkSurface::flush
-      // SIGTRAP on Android).
       // A layout effect is required: its cleanup runs in React's deletion
       // phase BEFORE host views are removed, whereas a passive useEffect
       // cleanup would run after the canvas is already destroyed.
       running.set(false);
       cancelAnimation(progress);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [progress, running]);
 
   const opacity = useDerivedValue(() => {
     if (!fadeOutOnEnd) return 1;
