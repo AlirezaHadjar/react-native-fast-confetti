@@ -54,7 +54,7 @@
         "expo-status-bar": "~56.0.4",
         "react": "19.2.3",
         "react-native": "0.85.3",
-        "react-native-fast-confetti": "2.0.0",
+        "react-native-fast-confetti": "2.0.2",
         "react-native-reanimated": "4.3.1",
         "react-native-safe-area-context": "~5.7.0",
         "react-native-screens": "4.25.2",
@@ -2080,7 +2080,7 @@
 
     "react-native-element-dropdown": ["react-native-element-dropdown@2.12.4", "", { "dependencies": { "lodash": "^4.17.21" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-abZc5SVji9FIt7fjojRYrbuvp03CoeZJrgvezQoDoSOrpiTqkX69ix5m+j06W2AVncA0VWvbT+vCMam8SoVadw=="],
 
-    "react-native-fast-confetti": ["react-native-fast-confetti@2.0.0", "", { "peerDependencies": { "@shopify/react-native-skia": "*", "react": "*", "react-native": "*", "react-native-reanimated": "*", "react-native-worklets": "*" } }, "sha512-lB2/pqj+IEpoQkDZNUvRGJDLq1pt+zZygaYFf6uiQt49wC8NRiw5zb1uAuic19btHZ82cXBuqDZi1htg2cmZTQ=="],
+    "react-native-fast-confetti": ["react-native-fast-confetti@2.0.2", "", { "peerDependencies": { "@shopify/react-native-skia": ">=2.0.0 <3", "react": "*", "react-native": "*", "react-native-reanimated": ">=4.1.0 <5", "react-native-worklets": ">=0.7.0 <1" } }, "sha512-g/so5kYCQFMFNuD3ui10hMCXZTA8pPzOhwUJgzfslxI2WHuYb4SjdOxV0I9xPv7ts8Sqch6bS7oCJZMX2DM0Yw=="],
 
     "react-native-fast-confetti-example": ["react-native-fast-confetti-example@workspace:example"],
 
