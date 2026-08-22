@@ -90,7 +90,7 @@ encoded its signal event.
 - React Native Worklets: 0.11.4
 - Kitchen-sink app: `kitchen-sink/ios/Confetti.xcworkspace`
 - Renderer: WebGPU
-- Particle count: 20,000 (`PERFORMANCE_PARTICLE_COUNT`)
+- Particle count: 20,000 (`PARTICLE_PRESSURE_MODE` enabled)
 - Target: physical iPhone connected to Xcode
 - Scheme: `Confetti`, Debug configuration
 
@@ -102,9 +102,10 @@ does not crash.
 ## Reproduction procedure
 
 To reproduce the original bug, use an unpatched copy of
-`react-native-webgpu@0.8.4`. Do not remove the patch from this working tree just
-to reproduce it; use a disposable worktree or a clean checkout of commit
-`86197f0` instead.
+`react-native-webgpu@0.8.4` and set `PARTICLE_PRESSURE_MODE` to `true` in
+`kitchen-sink/src/constants/config.ts`. Do not remove the patch from this
+working tree just to reproduce it; use a disposable worktree or a clean
+checkout of commit `86197f0` instead.
 
 1. Install dependencies in the unpatched checkout.
 2. Open `kitchen-sink/ios/Confetti.xcworkspace` in Xcode.

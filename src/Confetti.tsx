@@ -301,7 +301,11 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       if (continuous) {
         const elapsed = cycleCount.get() + globalP;
         const pieceElapsed = elapsed - piece.phaseOffset;
-        p = pieceElapsed <= 0 ? 0 : pieceElapsed % 1.0;
+        if (pieceElapsed < 0) {
+          val.set(0, 0, -10000, -10000);
+          return;
+        }
+        p = pieceElapsed % 1.0;
       } else {
         p = globalP;
       }

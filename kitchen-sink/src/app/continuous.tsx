@@ -8,7 +8,7 @@ import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
 import {
-  PERFORMANCE_PARTICLE_COUNT,
+  PARTICLE_COUNTS,
   rendererOptions,
   textureOptions,
 } from '../constants/config';
@@ -79,7 +79,7 @@ export default function ContinuousScreen() {
           ref={confettiRef}
           autoplay
           rotation={rotation}
-          count={PERFORMANCE_PARTICLE_COUNT}
+          count={PARTICLE_COUNTS.continuous}
           flipIntensity={config.textureType === 'money' ? 0.1 : 0.85}
         >
           {renderFlakes()}

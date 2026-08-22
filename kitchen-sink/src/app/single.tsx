@@ -8,7 +8,7 @@ import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
 import {
-  PERFORMANCE_PARTICLE_COUNT,
+  PARTICLE_COUNTS,
   rendererOptions,
   textureOptions,
   verticalSpacingOptions,
@@ -91,7 +91,7 @@ export default function SingleScreen() {
           rotation={rotation}
           verticalSpacing={config.verticalSpacing}
           autoplay
-          count={PERFORMANCE_PARTICLE_COUNT}
+          count={PARTICLE_COUNTS.single}
           infinite
           flakeStyle="glossy"
           gravity={1}

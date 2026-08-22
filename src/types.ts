@@ -364,7 +364,7 @@ type BaseConfettiMethods = {
    */
   pause: () => void;
   /**
-   * @description reset the animation and not play it
+   * @description reset, clear, and stop the animation
    */
   reset: () => void;
   /**

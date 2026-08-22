@@ -45,6 +45,7 @@ export const useAnimationLifecycle = ({
 }: UseAnimationLifecycleParams) => {
   const progress = useSharedValue(0);
   const running = useSharedValue(false);
+  const visible = useSharedValue(false);
 
   const { UIOnStart, UIOnEnd } = useAnimationCallbacks(
     onAnimationStart,
@@ -62,9 +63,10 @@ export const useAnimationLifecycle = ({
   }, [progress, running]);
 
   const opacity = useDerivedValue(() => {
+    if (!visible.get()) return 0;
     if (!fadeOutOnEnd) return 1;
     return interpolate(progress.get(), fadeRange, [1, 0], Extrapolation.CLAMP);
-  }, [fadeOutOnEnd, fadeRange]);
+  }, [fadeOutOnEnd, fadeRange, visible]);
 
   const pause = useCallback(() => {
     'worklet';
@@ -75,15 +77,17 @@ export const useAnimationLifecycle = ({
   const reset = useCallback(() => {
     'worklet';
     running.set(false);
+    visible.set(false);
     cancelAnimation(progress);
     progress.set(0);
-  }, [running, progress]);
+  }, [progress, running, visible]);
 
   const runAnimation = useCallback(
     (delay: number = 0, notifyStart = true) => {
       'worklet';
       if (disabled) {
         running.set(false);
+        visible.set(false);
         cancelAnimation(progress);
         progress.set(0);
         if (notifyStart) UIOnStart();
@@ -91,6 +95,7 @@ export const useAnimationLifecycle = ({
         return;
       }
       progress.set(0);
+      visible.set(true);
       running.set(true);
       if (notifyStart) UIOnStart();
 
@@ -146,6 +151,7 @@ export const useAnimationLifecycle = ({
     [
       progress,
       running,
+      visible,
       UIOnStart,
       UIOnEnd,
       onCycleEnd,
@@ -161,6 +167,7 @@ export const useAnimationLifecycle = ({
     'worklet';
     if (disabled) return;
     if (running.get()) return;
+    visible.set(true);
     running.set(true);
 
     const remaining = duration * (1 - progress.get());
@@ -218,6 +225,7 @@ export const useAnimationLifecycle = ({
   }, [
     running,
     progress,
+    visible,
     duration,
     UIOnEnd,
     onCycleEnd,

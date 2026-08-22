@@ -8,7 +8,7 @@ import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
 import {
-  PERFORMANCE_PARTICLE_COUNT,
+  PARTICLE_COUNTS,
   rendererOptions,
   textureOptions,
 } from '../constants/config';
@@ -93,7 +93,7 @@ export default function CannonScreen() {
         >
           <CannonConfetti.Origin
             position="bottom-left"
-            count={PERFORMANCE_PARTICLE_COUNT}
+            count={PARTICLE_COUNTS.cannonOrigin}
             initialSpeed={3}
             depth={{ min: 1, max: 1.1 }}
           >
@@ -101,7 +101,7 @@ export default function CannonScreen() {
           </CannonConfetti.Origin>
           <CannonConfetti.Origin
             position="bottom-right"
-            count={PERFORMANCE_PARTICLE_COUNT}
+            count={PARTICLE_COUNTS.cannonOrigin}
             initialSpeed={3}
             depth={{ min: 1, max: 1.1 }}
           >
@@ -109,7 +109,7 @@ export default function CannonScreen() {
           </CannonConfetti.Origin>
           <CannonConfetti.Origin
             position="bottom-center"
-            count={PERFORMANCE_PARTICLE_COUNT}
+            count={PARTICLE_COUNTS.cannonOrigin}
             initialSpeed={4}
             target={'center'}
           >

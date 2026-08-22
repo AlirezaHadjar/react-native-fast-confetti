@@ -220,7 +220,7 @@ ref.current?.reset();
 | `restart` | Start the animation from the beginning. |
 | `pause`   | Pause the animation.                    |
 | `resume`  | Resume from where it paused.            |
-| `reset`   | Reset and stop the animation.           |
+| `reset`   | Reset, clear, and stop the animation.   |
 
 `restart` accepts an optional options object:
 

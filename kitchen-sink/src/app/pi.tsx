@@ -8,7 +8,7 @@ import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
 import {
-  PERFORMANCE_PARTICLE_COUNT,
+  PARTICLE_COUNTS,
   rendererOptions,
   textureOptions,
 } from '../constants/config';
@@ -81,13 +81,13 @@ export default function PIScreen() {
         <PIConfetti key={confettiKey} ref={piConfettiRef} rotation={rotation}>
           <PIConfetti.Origin
             blastPosition={{ x: width / 2, y: 450 }}
-            count={PERFORMANCE_PARTICLE_COUNT}
+            count={PARTICLE_COUNTS.piOrigin}
           >
             {renderFlakes()}
           </PIConfetti.Origin>
           <PIConfetti.Origin
             blastPosition={{ x: width / 2, y: 150 }}
-            count={PERFORMANCE_PARTICLE_COUNT}
+            count={PARTICLE_COUNTS.piOrigin}
             delay={300}
           >
             {renderFlakes()}

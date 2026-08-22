@@ -262,12 +262,8 @@ export const gpuHashU32 = tgpu.fn(
   'use gpu';
 
   let x = value;
-  x =
-    (x ^ std.bitShiftRight(x, d.u32(16))) *
-    d.u32(0x7feb352d);
-  x =
-    (x ^ std.bitShiftRight(x, d.u32(15))) *
-    d.u32(0x846ca68b);
+  x = (x ^ std.bitShiftRight(x, d.u32(16))) * d.u32(0x7feb352d);
+  x = (x ^ std.bitShiftRight(x, d.u32(15))) * d.u32(0x846ca68b);
   return x ^ std.bitShiftRight(x, d.u32(16));
 });
 
@@ -314,10 +310,7 @@ export const confettiInit = tgpu.computeFn({
   const infinite = u.seedAndFlags.z !== d.u32(0);
   const layoutCount = d.u32(std.max(u.viewportAndLayout.w, 1));
   const layoutIndex = d.u32(
-    std.div(
-      (idx + d.u32(1)) * layoutCount + count - d.u32(1),
-      count
-    ) - 1
+    std.div((idx + d.u32(1)) * layoutCount + count - d.u32(1), count) - 1
   );
 
   const columns = d.u32(std.max(u.grid.x, 1));
@@ -333,8 +326,7 @@ export const confettiInit = tgpu.computeFn({
       (d.f32(itemsInLastRow) + 1);
     const positionInLastRow = layoutIndex - previousRows;
     x =
-      lastRowSpacing +
-      d.f32(positionInLastRow) * (u.spawn.z + lastRowSpacing);
+      lastRowSpacing + d.f32(positionInLastRow) * (u.spawn.z + lastRowSpacing);
   }
 
   const yJitter = gpuRandomRange(
@@ -352,17 +344,10 @@ export const confettiInit = tgpu.computeFn({
     u.depthAndWobble.x,
     u.depthAndWobble.y
   );
-  const perspectiveZ =
-    u.spawn.w / std.max(depthScale, 0.0001) - u.spawn.w;
+  const perspectiveZ = u.spawn.w / std.max(depthScale, 0.0001) - u.spawn.w;
   const z =
     perspectiveZ +
-    gpuRandomRange(
-      layoutIndex,
-      d.u32(2),
-      seed,
-      u.zAndSizes.x,
-      u.zAndSizes.y
-    );
+    gpuRandomRange(layoutIndex, d.u32(2), seed, u.zAndSizes.x, u.zAndSizes.y);
 
   const initialVy = std.select(
     gpuRandomRange(layoutIndex, d.u32(3), seed, 0, 0.4) * u.physics.y,
@@ -376,21 +361,11 @@ export const confettiInit = tgpu.computeFn({
 
   const safeTime = std.max(u.physics.x, 0.0001);
   const tumbleMag =
-    gpuRandomRange(
-      layoutIndex,
-      d.u32(6),
-      seed,
-      u.rotation.x,
-      u.rotation.y
-    ) / safeTime;
+    gpuRandomRange(layoutIndex, d.u32(6), seed, u.rotation.x, u.rotation.y) /
+    safeTime;
   const twistMag =
-    gpuRandomRange(
-      layoutIndex,
-      d.u32(7),
-      seed,
-      u.rotation.z,
-      u.rotation.w
-    ) / safeTime;
+    gpuRandomRange(layoutIndex, d.u32(7), seed, u.rotation.z, u.rotation.w) /
+    safeTime;
   const axisTheta = gpuRandom01(layoutIndex, d.u32(8), seed) * 6.28318530718;
   const tumbleX = std.cos(axisTheta) * tumbleMag;
   const tumbleY = std.sin(axisTheta) * tumbleMag;
@@ -427,8 +402,7 @@ export const confettiInit = tgpu.computeFn({
   const sizeIndex = std.min(
     d.u32(
       std.round(
-        gpuRandom01(layoutIndex, d.u32(14), seed) *
-          d.f32(sizeCount - d.u32(1))
+        gpuRandom01(layoutIndex, d.u32(14), seed) * d.f32(sizeCount - d.u32(1))
       )
     ),
     sizeCount - d.u32(1)
@@ -882,7 +856,13 @@ export const confettiVertex = tgpu.vertexFn({
   let centerWorld = d.vec3f(interpolatedPos);
   centerWorld.x = spawn.pos0.x + (centerWorld.x - spawn.pos0.x) * lateralDamp;
 
-  const centerScreen = project(centerWorld);
+  // Simulation positions are screen-space, matching the Skia renderer and the
+  // public `depth` contract (a perspective scale range). Project only the 3D
+  // geometry around the particle center. Projecting the center itself pulled
+  // above-screen reset positions toward the viewport center and made them
+  // visible, while also making recycle thresholds disagree with rendering.
+  const projectedCenter = project(centerWorld);
+  const centerScreen = d.vec2f(centerWorld.x, centerWorld.y);
   const perspectiveScale =
     u.focalLength / std.max(centerWorld.z + u.focalLength, 1);
 
@@ -896,9 +876,9 @@ export const confettiVertex = tgpu.vertexFn({
   );
   const axisZWorld = qRot(interpolatedQuat, d.vec3f(0, 0, zBend * appearScale));
 
-  let axisXScreen = project(centerWorld + axisXWorld) - centerScreen;
-  let axisYScreen = project(centerWorld + axisYWorld) - centerScreen;
-  const bendScreen = project(centerWorld + axisZWorld) - centerScreen;
+  let axisXScreen = project(centerWorld + axisXWorld) - projectedCenter;
+  let axisYScreen = project(centerWorld + axisYWorld) - projectedCenter;
+  const bendScreen = project(centerWorld + axisZWorld) - projectedCenter;
 
   const yDir0 = normalizeOr2(axisYScreen, d.vec2f(0, 1));
   const xFallback = d.vec2f(-yDir0.y, yDir0.x);
@@ -925,10 +905,16 @@ export const confettiVertex = tgpu.vertexFn({
     const velDir = rt.vel / speed;
     const stretch = ((u.motionBlurAmount * std.min(speed, 1200)) / 1200) * 0.6;
     const blurWorld = centerWorld + velDir * ((v0 - 0.5) * height * stretch);
-    screen = screen + (project(blurWorld) - centerScreen);
+    screen = screen + (project(blurWorld) - projectedCenter);
   }
 
-  const clip = toClip(screen);
+  // Continuous particles carry a negative lifetime until their phase begins.
+  // Keep their degenerate geometry outside clip space instead of drawing the
+  // entire pending population at its spawn row.
+  let clip = toClip(screen);
+  if (interpolatedLife < 0) {
+    clip = d.vec2f(2, 2);
+  }
   const N = qRot(interpolatedQuat, nBody);
   const V = d.vec3f(0, 0, -1);
   let rim = d.f32(0);

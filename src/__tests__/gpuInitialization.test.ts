@@ -13,7 +13,7 @@ import {
   toInitSizeInputs,
 } from '../webgpu/resourcePacking';
 import { burstConfettiInit } from '../webgpu/shaders/burstConfetti';
-import { confettiInit } from '../webgpu/shaders/confetti';
+import { confettiInit, confettiVertex } from '../webgpu/shaders/confetti';
 
 const sizes: SizeVariation[] = [
   {
@@ -165,11 +165,13 @@ describe('GPU-native particle initialization', () => {
   it('resolves both initialization kernels to WGSL', () => {
     const fallingWGSL = tgpu.resolve([confettiInit]);
     const burstWGSL = tgpu.resolve([burstConfettiInit]);
+    const fallingVertexWGSL = tgpu.resolve([confettiVertex]);
 
     expect(fallingWGSL).toContain('@compute @workgroup_size(64)');
     expect(fallingWGSL).toContain('fn confettiInit');
     expect(fallingWGSL).toContain('let phaseBin');
     expect(burstWGSL).toContain('@compute @workgroup_size(64)');
     expect(burstWGSL).toContain('fn burstConfettiInit');
+    expect(fallingVertexWGSL).toContain('@vertex');
   });
 });

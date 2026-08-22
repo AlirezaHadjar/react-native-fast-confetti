@@ -14,12 +14,10 @@ import {
 } from '../../../src/gpu';
 import { ModeCard } from '../components/ModeCard';
 import { colors } from '../constants/colors';
-import { type RendererType } from '../constants/config';
+import { PARTICLE_COUNTS, type RendererType } from '../constants/config';
 import { useRenderer } from '../hooks/useRenderer';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-const MENU_ITEM_FLAKE_COUNT = 20000;
 
 const PADDING = 16;
 const ITEM_HEIGHT = 140;
@@ -50,7 +48,7 @@ const createModes = (renderer: RendererType) => {
       render: () => (
         <Confetti
           autoplay
-          count={MENU_ITEM_FLAKE_COUNT}
+          count={PARTICLE_COUNTS.menu.single}
           containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
           verticalSpacing={50}
           infinite
@@ -68,7 +66,7 @@ const createModes = (renderer: RendererType) => {
       render: () => (
         <ContinuousConfetti
           autoplay
-          count={MENU_ITEM_FLAKE_COUNT}
+          count={PARTICLE_COUNTS.menu.continuous}
           containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
           verticalSpacing={120}
           flakeStyle="glossy"
@@ -92,7 +90,7 @@ const createModes = (renderer: RendererType) => {
         >
           <PIConfetti.Origin
             blastPosition="center"
-            count={MENU_ITEM_FLAKE_COUNT}
+            count={PARTICLE_COUNTS.menu.piOrigin}
             initialSpeed={4}
           >
             {previewFlakes(PIConfetti.Flake)}
@@ -118,7 +116,7 @@ const createModes = (renderer: RendererType) => {
         >
           <CannonConfetti.Origin
             position="bottom-left"
-            count={MENU_ITEM_FLAKE_COUNT}
+            count={PARTICLE_COUNTS.menu.cannonOrigin}
             initialSpeed={6}
             spread={Math.PI / 3}
             depth={{ min: 1, max: 1.1 }}
@@ -127,7 +125,7 @@ const createModes = (renderer: RendererType) => {
           </CannonConfetti.Origin>
           <CannonConfetti.Origin
             position="bottom-right"
-            count={MENU_ITEM_FLAKE_COUNT}
+            count={PARTICLE_COUNTS.menu.cannonOrigin}
             initialSpeed={6}
             spread={Math.PI / 3}
             depth={{ min: 1, max: 1.1 }}
@@ -136,7 +134,7 @@ const createModes = (renderer: RendererType) => {
           </CannonConfetti.Origin>
           <CannonConfetti.Origin
             position="bottom-center"
-            count={MENU_ITEM_FLAKE_COUNT}
+            count={PARTICLE_COUNTS.menu.cannonOrigin}
             initialSpeed={4}
             spread={Math.PI / 3}
           >

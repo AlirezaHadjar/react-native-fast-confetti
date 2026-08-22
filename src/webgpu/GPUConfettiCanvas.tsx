@@ -582,7 +582,8 @@ const GPUConfettiRenderer = ({
       if (!activeRawFrameState) return null;
 
       const isRunning = running.get();
-      if (!isRunning && !needsRender.get()) {
+      const wasRunningBeforeFrame = wasRunning.get();
+      if (!isRunning && !wasRunningBeforeFrame && !needsRender.get()) {
         wasRunning.set(false);
         lastFrameTimestampMs.set(0);
         return null;
@@ -590,7 +591,7 @@ const GPUConfettiRenderer = ({
 
       const previousTimestamp = lastFrameTimestampMs.get();
       const timestampDelta =
-        isRunning && wasRunning.get() && previousTimestamp > 0
+        isRunning && wasRunningBeforeFrame && previousTimestamp > 0
           ? Math.max((timestamp - previousTimestamp) / 1000, 0)
           : 0;
       // Treat suspension/background gaps as a pause. Short render stalls retain
