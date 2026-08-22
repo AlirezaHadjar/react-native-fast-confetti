@@ -1,11 +1,11 @@
 import React from 'react';
-import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
+import type { SharedValue } from 'react-native-reanimated';
 import {
   Skia,
   useTexture,
+  useRectBuffer,
   Group,
   RoundedRect,
-  rect,
   vec,
   LinearGradient,
   ImageSVG,
@@ -26,7 +26,12 @@ function renderAtlasCell(
 
   // If this size has a texture AND this is its dedicated color row, render texture
   const range = sizeColorOverrides[sizeIndex];
-  if (size.texture && range && range.count === 1 && range.start === colorIndex) {
+  if (
+    size.texture &&
+    range &&
+    range.count === 1 &&
+    range.start === colorIndex
+  ) {
     if (size.texture.type === 'svg') {
       return (
         <ImageSVG
@@ -121,7 +126,7 @@ export const useConfettiLogic = <T extends MinimalBox>({
   boxes: SharedValue<T[]>;
   sizeVariations: SizeVariation[];
   sizeColorOverrides: (ColorRange | null)[];
-  count?: number;
+  count: number;
 }) => {
   const maxWidth = Math.max(...sizeVariations.map((size) => size.width));
   const maxHeight = Math.max(...sizeVariations.map((size) => size.height));
@@ -133,7 +138,13 @@ export const useConfettiLogic = <T extends MinimalBox>({
           const cellX = sizeIndex * maxWidth;
           const cellY = colorIndex * maxHeight;
           return renderAtlasCell(
-            color, colorIndex, size, sizeIndex, cellX, cellY, sizeColorOverrides
+            color,
+            colorIndex,
+            size,
+            sizeIndex,
+            cellX,
+            cellY,
+            sizeColorOverrides
           );
         });
       })}
@@ -144,29 +155,25 @@ export const useConfettiLogic = <T extends MinimalBox>({
     }
   );
 
-  const sprites = useDerivedValue(() => {
+  const sprites = useRectBuffer(count, (value, index) => {
+    'worklet';
     const current = boxes.get();
-    const n = count ?? current.length;
-    const result = new Array(n);
-    for (let i = 0; i < n; i++) {
-      const box = current[i];
-      if (!box) {
-        result[i] = rect(0, 0, 0, 0);
-        continue;
-      }
-      const size = sizeVariations[box.sizeIndex];
-      if (!size) {
-        result[i] = rect(0, 0, 0, 0);
-        continue;
-      }
-      result[i] = rect(
-        box.sizeIndex * maxWidth,
-        box.colorIndex * maxHeight,
-        size.width,
-        size.height
-      );
+    const box = current[index];
+    if (!box) {
+      value.setXYWH(0, 0, 0, 0);
+      return;
     }
-    return result;
+    const size = sizeVariations[box.sizeIndex];
+    if (!size) {
+      value.setXYWH(0, 0, 0, 0);
+      return;
+    }
+    value.setXYWH(
+      box.sizeIndex * maxWidth,
+      box.colorIndex * maxHeight,
+      size.width,
+      size.height
+    );
   });
 
   return {

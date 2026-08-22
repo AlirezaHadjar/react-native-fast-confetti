@@ -1,4 +1,8 @@
 module.exports = {
+  plugins: [
+    'unplugin-typegpu/babel',
+    '@babel/plugin-transform-class-static-block',
+  ],
   overrides: [
     {
       exclude: /\/node_modules\//,
