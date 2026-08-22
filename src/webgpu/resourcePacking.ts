@@ -1,4 +1,7 @@
-import type { SizeVariation } from '../hooks/useConfettiFlakes';
+import type {
+  ColorRange,
+  SizeVariation,
+} from '../hooks/useConfettiFlakes';
 import type { Spawn } from './utils';
 
 export const SIZE_FLAG_GLOSSY = 1 << 0;
@@ -37,6 +40,52 @@ export const toSizeInputs = (
   sizes.map((size, index) => ({
     dims: [size.width, size.height, size.radius, flags[index] ?? 0] as const,
   }));
+
+export const toInitSizeInputs = (
+  sizes: SizeVariation[],
+  flags: number[],
+  colorOverrides: (ColorRange | null)[],
+  parentColorCount: number
+) =>
+  sizes.map((_, index) => {
+    const range = colorOverrides[index];
+    return {
+      selection: [
+        range?.start ?? 0,
+        Math.max(1, range?.count ?? parentColorCount),
+        flags[index] ?? 0,
+        0,
+      ] as const,
+    };
+  });
+
+const greatestCommonDivisor = (left: number, right: number) => {
+  let a = Math.abs(Math.trunc(left));
+  let b = Math.abs(Math.trunc(right));
+  while (b !== 0) {
+    const remainder = a % b;
+    a = b;
+    b = remainder;
+  }
+  return a;
+};
+
+/**
+ * Creates a cheap bijection over particle indices. The init shader uses it to
+ * preserve one continuous-confetti phase in every stratum without uploading
+ * a count-sized shuffled phase array from JavaScript.
+ */
+export const createPhasePermutation = (count: number, seed: number) => {
+  const normalizedCount = Math.max(1, Math.trunc(count));
+  const mixedSeed = Math.imul((seed >>> 0) ^ 0x9e3779b9, 0x85ebca6b) >>> 0;
+  let stride = (mixedSeed % 251) | 1;
+  while (greatestCommonDivisor(stride, normalizedCount) !== 1) {
+    stride += 2;
+  }
+  const offset =
+    (Math.imul((seed + 1) >>> 0, 0xc2b2ae35) >>> 0) % normalizedCount;
+  return { stride, offset };
+};
 
 export const toSpawnInputs = (spawns: Spawn[]) =>
   spawns.map((spawn) => ({

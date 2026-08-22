@@ -2,9 +2,15 @@ import {
   d,
   std,
   tgpu,
+  type TgpuComputePipeline,
   type TgpuRenderPipeline,
   type TgpuRoot,
 } from 'typegpu';
+import {
+  InitSizeSchema,
+  gpuRandom01,
+  gpuRandomRange,
+} from './confetti';
 
 export const BURST_VERTS_PER_FLAKE = 6;
 const SIZE_FLAG_TEXTURED = 1 << 1;
@@ -35,6 +41,20 @@ export const BurstParticleSchema = d.struct({
   indices: d.vec4f,
 });
 
+export const BurstInitUniformsSchema = d.struct({
+  counts: d.vec4u,
+  globals: d.vec4f,
+});
+
+export const BurstOriginSchema = d.struct({
+  originAndCount: d.vec4f,
+  targetStartAndMode: d.vec4f,
+  motion: d.vec4f,
+  selection: d.vec4f,
+  rotation: d.vec4f,
+  depth: d.vec4f,
+});
+
 export const BurstSizeSchema = d.struct({
   dims: d.vec4f,
 });
@@ -51,6 +71,34 @@ export const BurstSizeArraySchema = (count: number) =>
   d.arrayOf(BurstSizeSchema, count);
 export const BurstPaletteArraySchema = (count: number) =>
   d.arrayOf(BurstPaletteColorSchema, count);
+export const BurstOriginArraySchema = (count: number) =>
+  d.arrayOf(BurstOriginSchema, count);
+export const BurstInitSizeArraySchema = (count: number) =>
+  d.arrayOf(InitSizeSchema, count);
+
+export const burstInitLayout = tgpu
+  .bindGroupLayout({
+    uniforms: {
+      uniform: BurstInitUniformsSchema,
+      visibility: ['compute'],
+    },
+    particles: {
+      storage: d.arrayOf(BurstParticleSchema),
+      access: 'mutable',
+      visibility: ['compute'],
+    },
+    origins: {
+      storage: d.arrayOf(BurstOriginSchema),
+      access: 'readonly',
+      visibility: ['compute'],
+    },
+    sizes: {
+      storage: d.arrayOf(InitSizeSchema),
+      access: 'readonly',
+      visibility: ['compute'],
+    },
+  })
+  .$idx(0);
 
 export const burstRenderLayout = tgpu
   .bindGroupLayout({
@@ -89,6 +137,190 @@ export const burstRenderLayout = tgpu
     },
   })
   .$idx(0);
+
+export const burstConfettiInit = tgpu.computeFn({
+  in: {
+    gid: d.builtin.globalInvocationId,
+  },
+  workgroupSize: [64],
+})(({ gid }) => {
+  'use gpu';
+
+  const idx = gid.x;
+  const count = std.arrayLength(burstInitLayout.$.particles);
+  if (idx >= count) {
+    return;
+  }
+
+  const u = burstInitLayout.$.uniforms;
+  const seed = u.counts.x;
+  const layoutCount = std.max(u.counts.y, d.u32(1));
+  const originCount = std.max(u.counts.z, d.u32(1));
+  const layoutIndex = d.u32(
+    std.div(
+      (idx + d.u32(1)) * layoutCount + count - d.u32(1),
+      count
+    ) - 1
+  );
+
+  let low = d.u32(0);
+  let high = originCount;
+  for (const step of std.range(16)) {
+    if (step < 16 && low < high) {
+      const mid = d.u32(std.floor((d.f32(low) + d.f32(high)) * 0.5));
+      const candidate = burstInitLayout.$.origins[mid]!;
+      const start = d.u32(candidate.targetStartAndMode.z);
+      const end = start + d.u32(candidate.originAndCount.w);
+      if (layoutIndex < start) {
+        high = mid;
+      } else if (layoutIndex >= end) {
+        low = mid + d.u32(1);
+      } else {
+        low = mid;
+        high = mid;
+      }
+    }
+  }
+
+  const originIndex = std.min(low, originCount - d.u32(1));
+  const origin = burstInitLayout.$.origins[originIndex]!;
+  const originStart = d.u32(origin.targetStartAndMode.z);
+  const localIndex = layoutIndex - originStart;
+  const mode = origin.targetStartAndMode.w;
+  const halfSpread = origin.motion.x * 0.5;
+
+  let angle = d.f32(0);
+  if (mode < 0.5) {
+    const turns = d.f32(localIndex) * (137.5 / 360);
+    const centeredDegrees = std.fract(turns) * 360 - 180;
+    angle =
+      -1.57079632679 +
+      centeredDegrees * (halfSpread / 180);
+  } else {
+    const targetDelta =
+      origin.targetStartAndMode.xy - origin.originAndCount.xy;
+    const baseAngle = std.atan2(targetDelta.y, targetDelta.x);
+    angle =
+      baseAngle +
+      gpuRandomRange(
+        layoutIndex,
+        d.u32(0),
+        seed,
+        -halfSpread,
+        halfSpread
+      );
+  }
+
+  const speedMultiplier = gpuRandomRange(
+    layoutIndex,
+    d.u32(1),
+    seed,
+    origin.motion.z,
+    origin.motion.w
+  );
+  const depthScale = gpuRandomRange(
+    layoutIndex,
+    d.u32(2),
+    seed,
+    origin.depth.x,
+    origin.depth.y
+  );
+  const speed =
+    origin.motion.y * u.globals.x * speedMultiplier * depthScale;
+  const velocity = d.vec2f(speed * std.cos(angle), speed * std.sin(angle));
+  const launchDelay = gpuRandomRange(
+    layoutIndex,
+    d.u32(3),
+    seed,
+    0,
+    u.globals.y
+  );
+  const maxRotationX = gpuRandomRange(
+    layoutIndex,
+    d.u32(4),
+    seed,
+    origin.rotation.x,
+    origin.rotation.y
+  );
+  const maxRotationZ = gpuRandomRange(
+    layoutIndex,
+    d.u32(5),
+    seed,
+    origin.rotation.z,
+    origin.rotation.w
+  );
+  const rotationDirection = std.select(
+    d.f32(-1),
+    d.f32(1),
+    gpuRandom01(layoutIndex, d.u32(6), seed) >= 0.5
+  );
+  const initialRotation = gpuRandomRange(
+    layoutIndex,
+    d.u32(7),
+    seed,
+    0.31415926535,
+    3.14159265359
+  );
+
+  const sizeStart = d.u32(std.max(origin.selection.z, 0));
+  const sizeCount = d.u32(std.max(origin.selection.w, 1));
+  const sizeIndex =
+    sizeStart +
+    std.min(
+      d.u32(
+        std.round(
+          gpuRandom01(layoutIndex, d.u32(8), seed) *
+            d.f32(sizeCount - d.u32(1))
+        )
+      ),
+      sizeCount - d.u32(1)
+    );
+  const sizeSelection = burstInitLayout.$.sizes[sizeIndex]!.selection;
+  const colorStart = d.u32(std.max(sizeSelection.x, 0));
+  const colorCount = d.u32(std.max(sizeSelection.y, 1));
+  const colorIndex =
+    colorStart +
+    std.min(
+      d.u32(
+        std.round(
+          gpuRandom01(layoutIndex, d.u32(9), seed) *
+            d.f32(colorCount - d.u32(1))
+        )
+      ),
+      colorCount - d.u32(1)
+    );
+  const sizeFlags = d.u32(sizeSelection.z);
+  const isTextured = std.select(
+    d.f32(0),
+    d.f32(1),
+    (sizeFlags & d.u32(SIZE_FLAG_TEXTURED)) !== d.u32(0)
+  );
+
+  burstInitLayout.$.particles[idx] = BurstParticleSchema({
+    originAndTiming: d.vec4f(
+      origin.originAndCount.xy,
+      std.select(d.f32(0), origin.originAndCount.z, mode < 0.5),
+      launchDelay
+    ),
+    velocityAndDepth: d.vec4f(
+      velocity,
+      depthScale,
+      initialRotation
+    ),
+    rotationAndMeta: d.vec4f(
+      maxRotationX,
+      maxRotationZ,
+      rotationDirection,
+      mode
+    ),
+    indices: d.vec4f(
+      d.f32(sizeIndex),
+      d.f32(colorIndex),
+      isTextured,
+      std.select(d.f32(originIndex), speedMultiplier, mode < 0.5)
+    ),
+  });
+});
 
 const toClip = tgpu.fn([d.vec2f], d.vec2f)((screen) => {
   'use gpu';
@@ -289,6 +521,7 @@ export const burstConfettiFragment = tgpu.fragmentFn({
 });
 
 export type BurstConfettiPipelines = {
+  initPipeline: TgpuComputePipeline;
   renderPipeline: TgpuRenderPipeline;
 };
 
@@ -296,6 +529,9 @@ export const createBurstConfettiPipelines = (
   root: TgpuRoot,
   presentationFormat: GPUTextureFormat
 ): BurstConfettiPipelines => ({
+  initPipeline: root.createComputePipeline({
+    compute: burstConfettiInit,
+  }),
   renderPipeline: root.createRenderPipeline({
     vertex: burstConfettiVertex,
     fragment: burstConfettiFragment,

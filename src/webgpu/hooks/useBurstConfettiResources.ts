@@ -1,42 +1,49 @@
 import { tgpu } from 'typegpu';
 
-import type { SizeVariation } from '../../hooks/useConfettiFlakes';
+import type {
+  ColorRange,
+  SizeVariation,
+} from '../../hooks/useConfettiFlakes';
 import {
   createShapeMasksTexture,
   rasterizeFlakeTextures,
   toPaletteInputs,
 } from './useConfettiResources';
-import type { BurstParticle } from '../burstResourcePacking';
 import { toBurstSizeInputs } from '../burstResourcePacking';
-import { computeSizeFlags } from '../resourcePacking';
 import {
+  computeSizeFlags,
+  toInitSizeInputs,
+} from '../resourcePacking';
+import {
+  BurstInitSizeArraySchema,
+  BurstInitUniformsSchema,
+  BurstOriginArraySchema,
   BurstPaletteArraySchema,
   BurstParticleArraySchema,
   BurstSizeArraySchema,
   BurstUniformsSchema,
+  burstInitLayout,
   burstRenderLayout,
 } from '../shaders/burstConfetti';
 
 export type BurstConfettiResourcesInput = {
   device: GPUDevice;
-  particles: BurstParticle[];
+  count: number;
+  originCount: number;
   sizeVariations: SizeVariation[];
   allColors: string[];
+  colorOverrides: (ColorRange | null)[];
+  parentColorCount: number;
 };
-
-const toBurstParticleInputs = (particles: BurstParticle[]) =>
-  particles.map((particle) => ({
-    originAndTiming: particle.originAndTiming,
-    velocityAndDepth: particle.velocityAndDepth,
-    rotationAndMeta: particle.rotationAndMeta,
-    indices: particle.indices,
-  }));
 
 const createBurstConfettiResourcesImpl = async ({
   device,
-  particles,
+  count,
+  originCount,
   sizeVariations,
   allColors,
+  colorOverrides,
+  parentColorCount,
 }: BurstConfettiResourcesInput) => {
   const root = tgpu.initFromDevice({ device, unstable_names: 'strict' });
   const maxFlakeWidth = Math.max(...sizeVariations.map((s) => s.width));
@@ -44,9 +51,19 @@ const createBurstConfettiResourcesImpl = async ({
   const sizeFlags = computeSizeFlags(sizeVariations);
 
   const uniforms = root.createUniform(BurstUniformsSchema);
-  const particlesBuffer = root.createReadonly(
-    BurstParticleArraySchema(particles.length),
-    toBurstParticleInputs(particles)
+  const initUniforms = root.createUniform(BurstInitUniformsSchema);
+  const particlesBuffer = root.createMutable(BurstParticleArraySchema(count));
+  const originsBuffer = root.createReadonly(
+    BurstOriginArraySchema(originCount)
+  );
+  const initSizesBuffer = root.createReadonly(
+    BurstInitSizeArraySchema(sizeVariations.length),
+    toInitSizeInputs(
+      sizeVariations,
+      sizeFlags,
+      colorOverrides,
+      parentColorCount
+    )
   );
   const sizesBuffer = root.createReadonly(
     BurstSizeArraySchema(sizeVariations.length),
@@ -95,6 +112,13 @@ const createBurstConfettiResourcesImpl = async ({
     addressModeV: 'clamp-to-edge',
   });
 
+  const initBindGroup = root.createBindGroup(burstInitLayout, {
+    uniforms: initUniforms.buffer,
+    particles: particlesBuffer.buffer,
+    origins: originsBuffer.buffer,
+    sizes: initSizesBuffer.buffer,
+  });
+
   const renderBindGroup = root.createBindGroup(burstRenderLayout, {
     uniforms: uniforms.buffer,
     particles: particlesBuffer.buffer,
@@ -109,14 +133,23 @@ const createBurstConfettiResourcesImpl = async ({
     root,
     device,
     uniforms,
+    initUniforms,
     particlesBuffer,
+    originsBuffer,
+    initSizesBuffer,
     sizesBuffer,
     paletteBuffer,
+    initBindGroup,
     renderBindGroup,
     texturesArray,
     shapeMasksArray,
     sampler,
-    count: particles.length,
+    count,
+    originCount,
+    sizeVariations,
+    allColors,
+    colorOverrides,
+    parentColorCount,
   };
 };
 
@@ -125,15 +158,3 @@ export type BurstConfettiResources = Awaited<
 >;
 
 export const createBurstConfettiResources = createBurstConfettiResourcesImpl;
-
-export const updateBurstConfettiParticles = (
-  resources: BurstConfettiResources,
-  particles: BurstParticle[]
-): boolean => {
-  if (particles.length !== resources.count) {
-    return false;
-  }
-
-  resources.particlesBuffer.write(toBurstParticleInputs(particles));
-  return true;
-};

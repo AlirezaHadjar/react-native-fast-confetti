@@ -1,24 +1,29 @@
 import { Skia, ImageFormat } from '@shopify/react-native-skia';
 import { tgpu } from 'typegpu';
 
-import type { SizeVariation } from '../../hooks/useConfettiFlakes';
-import type { Spawn } from '../utils';
+import type {
+  ColorRange,
+  SizeVariation,
+} from '../../hooks/useConfettiFlakes';
 import {
   computeSizeFlags,
   SIZE_FLAG_SHAPE_MASK,
-  toRuntimeInputs,
+  toInitSizeInputs,
   toSizeInputs,
-  toSpawnInputs,
 } from '../resourcePacking';
 import {
   ComputeSpawnsSchema,
+  InitSizeArraySchema,
+  InitUniformsSchema,
   PaletteArraySchema,
   RuntimeArraySchema,
   SizeArraySchema,
   UniformsSchema,
   computeLayout,
+  initLayout,
   renderLayout,
 } from '../shaders/confetti';
+import type { FixedLengthArray } from '../../typeHelpers';
 
 // `createImageBitmap` is installed on globalThis by react-native-webgpu.
 export type NativeImageBitmap = unknown;
@@ -27,7 +32,7 @@ declare const createImageBitmap: (
   source: ArrayBuffer | ArrayBufferView
 ) => Promise<NativeImageBitmap>;
 
-const HEX_TO_RGBA = (hex: string): [number, number, number, number] => {
+const HEX_TO_RGBA = (hex: string): FixedLengthArray<number, 4> => {
   const c = Skia.Color(hex);
   return [c[0] ?? 0, c[1] ?? 0, c[2] ?? 0, c[3] ?? 1];
 };
@@ -189,8 +194,8 @@ export type ConfettiResourcesInput = {
   count: number;
   sizeVariations: SizeVariation[];
   allColors: string[];
-  spawns: Spawn[];
-  cycleDuration: number;
+  colorOverrides: (ColorRange | null)[];
+  parentColorCount: number;
 };
 
 const createConfettiResourcesImpl = async ({
@@ -198,8 +203,8 @@ const createConfettiResourcesImpl = async ({
   count,
   sizeVariations,
   allColors,
-  spawns,
-  cycleDuration,
+  colorOverrides,
+  parentColorCount,
 }: ConfettiResourcesInput) => {
   const root = tgpu.initFromDevice({ device, unstable_names: 'strict' });
   const maxFlakeWidth = Math.max(...sizeVariations.map((s) => s.width));
@@ -208,17 +213,21 @@ const createConfettiResourcesImpl = async ({
   const sizeFlags = computeSizeFlags(sizeVariations);
 
   const uniforms = root.createUniform(UniformsSchema);
-  const spawnsBuffer = root.createReadonly(
-    ComputeSpawnsSchema(count),
-    toSpawnInputs(spawns)
-  );
-  const runtimeBuffer = root.createMutable(
-    RuntimeArraySchema(count),
-    toRuntimeInputs(spawns, cycleDuration)
-  );
+  const initUniforms = root.createUniform(InitUniformsSchema);
+  const spawnsBuffer = root.createMutable(ComputeSpawnsSchema(count));
+  const runtimeBuffer = root.createMutable(RuntimeArraySchema(count));
   const sizesBuffer = root.createReadonly(
     SizeArraySchema(sizeVariations.length),
     toSizeInputs(sizeVariations, sizeFlags)
+  );
+  const initSizesBuffer = root.createReadonly(
+    InitSizeArraySchema(sizeVariations.length),
+    toInitSizeInputs(
+      sizeVariations,
+      sizeFlags,
+      colorOverrides,
+      parentColorCount
+    )
   );
   const paletteBuffer = root.createReadonly(
     PaletteArraySchema(Math.max(1, allColors.length)),
@@ -265,6 +274,13 @@ const createConfettiResourcesImpl = async ({
     addressModeV: 'clamp-to-edge',
   });
 
+  const initBindGroup = root.createBindGroup(initLayout, {
+    uniforms: initUniforms.buffer,
+    spawns: spawnsBuffer.buffer,
+    runtime: runtimeBuffer.buffer,
+    sizes: initSizesBuffer.buffer,
+  });
+
   const computeBindGroup = root.createBindGroup(computeLayout, {
     uniforms: uniforms.buffer,
     spawns: spawnsBuffer.buffer,
@@ -285,17 +301,23 @@ const createConfettiResourcesImpl = async ({
     root,
     device,
     uniforms,
+    initUniforms,
     spawnsBuffer,
     runtimeBuffer,
     sizesBuffer,
+    initSizesBuffer,
     paletteBuffer,
+    initBindGroup,
     computeBindGroup,
     renderBindGroup,
     texturesArray,
     shapeMasksArray,
     sampler,
     count,
-    cycleDuration,
+    sizeVariations,
+    allColors,
+    colorOverrides,
+    parentColorCount,
     maxFlakeWidth,
     maxFlakeHeight,
   };
@@ -306,18 +328,3 @@ export type ConfettiResources = Awaited<
 >;
 
 export const createConfettiResources = createConfettiResourcesImpl;
-
-export const updateConfettiRuntimeResources = (
-  resources: ConfettiResources,
-  spawns: Spawn[],
-  cycleDuration: number
-): boolean => {
-  if (spawns.length !== resources.count) {
-    return false;
-  }
-
-  resources.spawnsBuffer.write(toSpawnInputs(spawns));
-  resources.runtimeBuffer.write(toRuntimeInputs(spawns, cycleDuration));
-  resources.cycleDuration = cycleDuration;
-  return true;
-};

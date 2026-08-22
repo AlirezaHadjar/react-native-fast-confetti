@@ -1,3 +1,5 @@
+import type { FixedLengthArray } from './typeHelpers';
+
 export type PlateParams = {
   Cn: number; // normal drag coefficient
   Ct: number; // tangential drag coefficient
@@ -17,7 +19,7 @@ function computeForces(
   theta: number,
   omega: number,
   p: PlateParams,
-  out: [number, number, number]
+  out: FixedLengthArray<number, 3>
 ): void {
   'worklet';
   const sinT = Math.sin(theta);
@@ -70,7 +72,7 @@ export function integrateTrajectory(
   output[outputOffset + 1] = y;
   output[outputOffset + 2] = theta;
 
-  const forces: [number, number, number] = [0, 0, 0];
+  const forces: FixedLengthArray<number, 3> = [0, 0, 0];
 
   for (let i = 1; i <= sampleCount; i++) {
     // --- k1 = derivatives(state) ---

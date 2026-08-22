@@ -25,10 +25,7 @@ import { useCannonOrigins } from '../hooks/useCannonOrigins';
 import { useContainerDimensions } from '../hooks/useContainerDimensions';
 import { useTextureProps } from '../hooks/useTextureProps';
 import { useReduceMotionFactor } from '../hooks/useReduceMotionFactor';
-import {
-  isReduceMotionPieceVisible,
-  scaleValueForMotion,
-} from '../reduceMotion';
+import { scaleValueForMotion } from '../reduceMotion';
 import type {
   CannonConfettiMethods,
   CannonConfettiRestartOptions,
@@ -37,11 +34,10 @@ import type {
 } from '../types';
 import {
   estimateCannonDuration,
-  generateCannonBoxesArray,
   resolveNamedPosition,
   type CannonConfig,
 } from '../utils';
-import { toCannonBurstParticles } from './burstResourcePacking';
+import { toCannonBurstOrigins } from './burstResourcePacking';
 import { GPUBurstConfettiCanvas } from './GPUBurstConfettiCanvas';
 import type { GPUCannonConfettiProps } from './types';
 
@@ -109,7 +105,6 @@ const CannonConfettiInner = forwardRef<
       allColors,
       sizeVariations,
       colorOverrides,
-      sizeIsTextured,
       parentColorCount,
       totalCount,
       visibleCount,
@@ -180,41 +175,31 @@ const CannonConfettiInner = forwardRef<
         disabled: visibleCount === 0,
       });
 
-    const boxes = useMemo(() => {
-      void restartState.seed;
-      if (!ready || totalCount <= 0) return [];
-      return generateCannonBoxesArray({
-        cannonConfigs: currentCannonConfigs,
-        cannonsPositions: currentCannonsPositions,
+    const initialization = useMemo(
+      () => ({
+        seed: restartState.seed,
+        layoutCount: totalCount,
         containerHeight,
         launchDelayMax,
-        sizeColorOverrides: colorOverrides,
-        parentColorCount,
-        sizeIsTextured,
-      });
-    }, [
-      restartState.seed,
-      ready,
-      totalCount,
-      currentCannonConfigs,
-      currentCannonsPositions,
-      containerHeight,
-      launchDelayMax,
-      colorOverrides,
-      parentColorCount,
-      sizeIsTextured,
-    ]);
-
-    const particles = useMemo(() => {
-      const allParticles = toCannonBurstParticles(
-        boxes,
-        currentCannonsPositions
-      );
-      if (visibleCount >= totalCount) return allParticles;
-      return allParticles.filter((_, index) =>
-        isReduceMotionPieceVisible(index, totalCount, visibleCount)
-      );
-    }, [boxes, currentCannonsPositions, totalCount, visibleCount]);
+        origins:
+          ready && totalCount > 0
+            ? toCannonBurstOrigins(
+                currentCannonConfigs,
+                currentCannonsPositions
+              )
+            : [],
+      }),
+      [
+        restartState.seed,
+        totalCount,
+        containerHeight,
+        launchDelayMax,
+        ready,
+        currentCannonConfigs,
+        currentCannonsPositions,
+      ]
+    );
+    const renderCount = ready && reduceMotionReady ? visibleCount : 0;
 
     const requestStart = useCallback((delay = 0) => {
       setStartRequest((request) => ({
@@ -302,7 +287,7 @@ const CannonConfettiInner = forwardRef<
         !ready ||
         !reduceMotionReady ||
         !rendererReady ||
-        particles.length === 0
+        renderCount === 0
       )
         return;
       if (!autoplay) return;
@@ -310,7 +295,7 @@ const CannonConfettiInner = forwardRef<
       runOnUI(runAnimation)(autoStartDelay);
     }, [
       ready,
-      particles.length,
+      renderCount,
       autoplay,
       autoStartDelay,
       running,
@@ -325,7 +310,7 @@ const CannonConfettiInner = forwardRef<
         !ready ||
         !reduceMotionReady ||
         !rendererReady ||
-        particles.length === 0
+        renderCount === 0
       )
         return;
       runOnUI(runAnimation)(startRequest.delay);
@@ -333,7 +318,7 @@ const CannonConfettiInner = forwardRef<
       startRequest,
       ready,
       reduceMotionReady,
-      particles.length,
+      renderCount,
       rendererReady,
       runAnimation,
     ]);
@@ -342,9 +327,12 @@ const CannonConfettiInner = forwardRef<
       <GPUBurstConfettiCanvas
         containerStyle={containerStyle}
         onContainerLayout={onContainerLayout}
-        particles={particles}
+        count={renderCount}
+        initialization={initialization}
         sizeVariations={sizeVariations}
         allColors={allColors}
+        colorOverrides={colorOverrides}
+        parentColorCount={parentColorCount}
         totalDuration={duration}
         flightDuration={duration}
         progress={progress}

@@ -22,10 +22,7 @@ import { useContainerDimensions } from '../hooks/useContainerDimensions';
 import { usePIOrigins } from '../hooks/usePIOrigins';
 import { useTextureProps } from '../hooks/useTextureProps';
 import { useReduceMotionFactor } from '../hooks/useReduceMotionFactor';
-import {
-  isReduceMotionPieceVisible,
-  scaleValueForMotion,
-} from '../reduceMotion';
+import { scaleValueForMotion } from '../reduceMotion';
 import type {
   PIConfettiMethods,
   PIConfettiRestartOptions,
@@ -33,12 +30,9 @@ import type {
 } from '../types';
 import {
   estimatePIDuration,
-  generatePIBoxesArray,
   resolveNamedPosition,
 } from '../utils';
-import {
-  toPIBurstParticles,
-} from './burstResourcePacking';
+import { toPIBurstOrigins } from './burstResourcePacking';
 import { GPUBurstConfettiCanvas } from './GPUBurstConfettiCanvas';
 import type { GPUPIConfettiProps } from './types';
 
@@ -103,7 +97,6 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
       allColors,
       sizeVariations,
       colorOverrides,
-      sizeIsTextured,
       parentColorCount,
       totalCount,
       visibleCount,
@@ -172,38 +165,33 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
         disabled: visibleCount === 0,
       });
 
-    const boxes = useMemo(() => {
-      void restartState.seed;
-      if (!ready || totalCount <= 0) return [];
-      return generatePIBoxesArray({
-        piConfigs,
-        originDelays: currentOriginDelays,
+    const initialization = useMemo(
+      () => ({
+        seed: restartState.seed,
+        layoutCount: totalCount,
         containerHeight,
         launchDelayMax,
-        sizeColorOverrides: colorOverrides,
-        parentColorCount,
-        sizeIsTextured,
-      });
-    }, [
-      restartState.seed,
-      ready,
-      totalCount,
-      piConfigs,
-      currentOriginDelays,
-      containerHeight,
-      launchDelayMax,
-      colorOverrides,
-      parentColorCount,
-      sizeIsTextured,
-    ]);
-
-    const particles = useMemo(() => {
-      const allParticles = toPIBurstParticles(boxes, currentBlastPositions);
-      if (visibleCount >= totalCount) return allParticles;
-      return allParticles.filter((_, index) =>
-        isReduceMotionPieceVisible(index, totalCount, visibleCount)
-      );
-    }, [boxes, currentBlastPositions, totalCount, visibleCount]);
+        origins:
+          ready && totalCount > 0
+            ? toPIBurstOrigins(
+                piConfigs,
+                currentBlastPositions,
+                currentOriginDelays
+              )
+            : [],
+      }),
+      [
+        restartState.seed,
+        totalCount,
+        containerHeight,
+        launchDelayMax,
+        ready,
+        piConfigs,
+        currentBlastPositions,
+        currentOriginDelays,
+      ]
+    );
+    const renderCount = ready && reduceMotionReady ? visibleCount : 0;
 
     const requestStart = useCallback((delay = 0) => {
       setStartRequest((request) => ({
@@ -249,7 +237,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
         !ready ||
         !reduceMotionReady ||
         !rendererReady ||
-        particles.length === 0
+        renderCount === 0
       )
         return;
       if (!autoplay) return;
@@ -257,7 +245,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
       runOnUI(runAnimation)(autoStartDelay);
     }, [
       ready,
-      particles.length,
+      renderCount,
       autoplay,
       autoStartDelay,
       running,
@@ -272,7 +260,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
         !ready ||
         !reduceMotionReady ||
         !rendererReady ||
-        particles.length === 0
+        renderCount === 0
       )
         return;
       runOnUI(runAnimation)(startRequest.delay);
@@ -280,7 +268,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
       startRequest,
       ready,
       reduceMotionReady,
-      particles.length,
+      renderCount,
       rendererReady,
       runAnimation,
     ]);
@@ -289,9 +277,12 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
       <GPUBurstConfettiCanvas
         containerStyle={containerStyle}
         onContainerLayout={onContainerLayout}
-        particles={particles}
+        count={renderCount}
+        initialization={initialization}
         sizeVariations={sizeVariations}
         allColors={allColors}
+        colorOverrides={colorOverrides}
+        parentColorCount={parentColorCount}
         totalDuration={totalDuration}
         flightDuration={flightDuration}
         progress={progress}

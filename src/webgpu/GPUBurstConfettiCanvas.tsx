@@ -4,11 +4,13 @@ import { PixelRatio, StyleSheet, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import { Canvas, type CanvasRef } from 'react-native-webgpu';
 
-import type { SizeVariation } from '../hooks/useConfettiFlakes';
-import type { BurstParticle } from './burstResourcePacking';
+import type {
+  ColorRange,
+  SizeVariation,
+} from '../hooks/useConfettiFlakes';
+import type { GPUBurstInitialization } from './burstResourcePacking';
 import {
   createBurstConfettiResources,
-  updateBurstConfettiParticles,
   type BurstConfettiResources,
 } from './hooks/useBurstConfettiResources';
 import {
@@ -34,9 +36,12 @@ type BooleanValue = {
 type Props = {
   containerStyle?: StyleProp<ViewStyle>;
   onContainerLayout: (e: LayoutChangeEvent) => void;
-  particles: BurstParticle[];
+  count: number;
+  initialization: GPUBurstInitialization;
   sizeVariations: SizeVariation[];
   allColors: string[];
+  colorOverrides: (ColorRange | null)[];
+  parentColorCount: number;
   totalDuration: number;
   flightDuration: number;
   progress: NumericValue;
@@ -56,19 +61,55 @@ type RawFrameState = {
   device: GPUDevice;
   context: GPUCanvasContext & { present?: () => void };
   uniformBuffer: GPUBuffer;
+  initPipeline: GPUComputePipeline;
   renderPipeline: GPURenderPipeline;
+  initBindGroup: GPUBindGroup;
   renderBindGroup: GPUBindGroup;
+  workgroupCount: number;
   count: number;
   viewportWidth: number;
   viewportHeight: number;
 };
 
+const initializeParticles = (
+  state: RawFrameState,
+  resources: BurstConfettiResources,
+  initialization: GPUBurstInitialization
+) => {
+  resources.originsBuffer.write(initialization.origins);
+  resources.initUniforms.write({
+    counts: [
+      initialization.seed >>> 0,
+      initialization.layoutCount,
+      initialization.origins.length,
+      0,
+    ],
+    globals: [
+      initialization.containerHeight,
+      initialization.launchDelayMax,
+      0,
+      0,
+    ],
+  });
+
+  const encoder = state.device.createCommandEncoder();
+  const pass = encoder.beginComputePass();
+  pass.setPipeline(state.initPipeline);
+  pass.setBindGroup(0, state.initBindGroup);
+  pass.dispatchWorkgroups(state.workgroupCount);
+  pass.end();
+  state.device.queue.submit([encoder.finish()]);
+};
+
 export const GPUBurstConfettiCanvas = ({
   containerStyle,
   onContainerLayout,
-  particles,
+  count,
+  initialization,
   sizeVariations,
   allColors,
+  colorOverrides,
+  parentColorCount,
   totalDuration,
   flightDuration,
   progress,
@@ -94,21 +135,22 @@ export const GPUBurstConfettiCanvas = ({
   const uniformDataRef = useRef(
     new Float32Array(BURST_UNIFORMS_BYTES / Float32Array.BYTES_PER_ELEMENT)
   );
-  const latestParticlesRef = useRef<BurstParticle[]>([]);
+  const initializedRef = useRef<{
+    state: RawFrameState;
+    initialization: GPUBurstInitialization;
+  } | null>(null);
+  const latestInitializationRef = useRef(initialization);
   const lastRenderedProgress = useSharedValue(Number.NaN);
   const surfaceReady = useSharedValue(false);
 
-  const count = particles.length;
-  const hasParticles = count > 0;
   const reportReady = useCallback(() => onReadyChange(true), [onReadyChange]);
 
   useEffect(() => {
-    latestParticlesRef.current = particles;
-  }, [particles]);
+    latestInitializationRef.current = initialization;
+  }, [initialization]);
 
   useEffect(() => {
-    const currentParticles = latestParticlesRef.current;
-    if (!device || currentParticles.length === 0) {
+    if (!device || count <= 0 || initialization.origins.length === 0) {
       return;
     }
     onReadyChange(false);
@@ -116,9 +158,12 @@ export const GPUBurstConfettiCanvas = ({
     (async () => {
       const res = await createBurstConfettiResources({
         device,
-        particles: currentParticles,
+        count,
+        originCount: initialization.origins.length,
         sizeVariations,
         allColors,
+        colorOverrides,
+        parentColorCount,
       });
       if (cancelled) {
         return;
@@ -128,15 +173,30 @@ export const GPUBurstConfettiCanvas = ({
     return () => {
       cancelled = true;
     };
-  }, [device, count, sizeVariations, allColors, hasParticles, onReadyChange]);
-
-  useEffect(() => {
-    if (!resources || particles.length === 0) return;
-    updateBurstConfettiParticles(resources, particles);
-  }, [resources, particles]);
+  }, [
+    device,
+    count,
+    initialization.origins.length,
+    sizeVariations,
+    allColors,
+    colorOverrides,
+    parentColorCount,
+    onReadyChange,
+  ]);
 
   useEffect(() => {
     if (!device || !resources) {
+      return;
+    }
+    if (
+      resources.device !== device ||
+      resources.count !== count ||
+      resources.originCount !== initialization.origins.length ||
+      resources.sizeVariations !== sizeVariations ||
+      resources.allColors !== allColors ||
+      resources.colorOverrides !== colorOverrides ||
+      resources.parentColorCount !== parentColorCount
+    ) {
       return;
     }
     if (viewportWidth <= 0 || viewportHeight <= 0) {
@@ -153,21 +213,35 @@ export const GPUBurstConfettiCanvas = ({
     const dpr = PixelRatio.get();
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
 
-    const { renderPipeline } = createBurstConfettiPipelines(
+    const { initPipeline, renderPipeline } = createBurstConfettiPipelines(
       resources.root,
       presentationFormat
     );
 
-    setRawFrameState({
+    const nextRawFrameState: RawFrameState = {
       device,
       context,
       uniformBuffer: resources.uniforms.buffer.buffer,
+      initPipeline: resources.root.unwrap(initPipeline),
       renderPipeline: resources.root.unwrap(renderPipeline),
+      initBindGroup: resources.root.unwrap(resources.initBindGroup),
       renderBindGroup: resources.root.unwrap(resources.renderBindGroup),
+      workgroupCount: Math.ceil(count / 64),
       count,
       viewportWidth,
       viewportHeight,
-    });
+    };
+    const currentInitialization = latestInitializationRef.current;
+    initializeParticles(
+      nextRawFrameState,
+      resources,
+      currentInitialization
+    );
+    initializedRef.current = {
+      state: nextRawFrameState,
+      initialization: currentInitialization,
+    };
+    setRawFrameState(nextRawFrameState);
     configureCanvasSurface(
       context,
       device,
@@ -187,6 +261,11 @@ export const GPUBurstConfettiCanvas = ({
     lastRenderedProgress,
     surfaceReady,
     reportReady,
+    initialization.origins.length,
+    sizeVariations,
+    allColors,
+    colorOverrides,
+    parentColorCount,
   ]);
 
   const activeRawFrameState =
@@ -196,6 +275,47 @@ export const GPUBurstConfettiCanvas = ({
     rawFrameState.viewportHeight === viewportHeight
       ? rawFrameState
       : null;
+
+  useEffect(() => {
+    if (!activeRawFrameState || !resources) return;
+    if (
+      resources.count !== count ||
+      resources.originCount !== initialization.origins.length ||
+      resources.sizeVariations !== sizeVariations ||
+      resources.allColors !== allColors ||
+      resources.colorOverrides !== colorOverrides ||
+      resources.parentColorCount !== parentColorCount
+    ) {
+      return;
+    }
+    const initialized = initializedRef.current;
+    if (
+      initialized?.state === activeRawFrameState &&
+      initialized.initialization === initialization
+    ) {
+      return;
+    }
+
+    onReadyChange(false);
+    initializeParticles(activeRawFrameState, resources, initialization);
+    initializedRef.current = {
+      state: activeRawFrameState,
+      initialization,
+    };
+    lastRenderedProgress.set(Number.NaN);
+    onReadyChange(true);
+  }, [
+    activeRawFrameState,
+    resources,
+    count,
+    initialization,
+    sizeVariations,
+    allColors,
+    colorOverrides,
+    parentColorCount,
+    lastRenderedProgress,
+    onReadyChange,
+  ]);
 
   const shouldScheduleFrame = useCallback(() => {
     'worklet';

@@ -16,6 +16,7 @@ import {
   DEFAULT_Z_RANGE,
 } from './constants';
 import type { ColorRange } from '../hooks/useConfettiFlakes';
+import type { FixedLengthArray } from '../typeHelpers';
 import type { Range, Rotation } from '../types';
 
 export const getRandomValue = (min: number, max: number): number => {
@@ -153,7 +154,7 @@ const calculateGridSpawnX = (
   return (i % columnsNum) * columnWidth;
 };
 
-const randomUnitQuat = (): [number, number, number, number] => {
+const randomUnitQuat = (): FixedLengthArray<number, 4> => {
   // Shoemake uniform quaternion on S^3.
   const u1 = Math.random();
   const u2 = Math.random();
@@ -169,12 +170,12 @@ const randomUnitQuat = (): [number, number, number, number] => {
 };
 
 export type Spawn = {
-  pos0: [number, number, number];
-  vel0: [number, number, number];
-  quat0: [number, number, number, number];
-  omega0: [number, number, number];
-  drag: [number, number, number, number];
-  meta: [number, number, number, number];
+  pos0: FixedLengthArray<number, 3>;
+  vel0: FixedLengthArray<number, 3>;
+  quat0: FixedLengthArray<number, 4>;
+  omega0: FixedLengthArray<number, 3>;
+  drag: FixedLengthArray<number, 4>;
+  meta: FixedLengthArray<number, 4>;
 };
 
 export const generateSpawnsArray = ({
@@ -222,7 +223,7 @@ export const generateSpawnsArray = ({
   gravity: number;
   infinite?: boolean;
   continuous?: boolean;
-  zRange?: [number, number];
+  zRange?: FixedLengthArray<number, 2>;
 }): Spawn[] => {
   const xRot = resolveRange(rotation?.x, DEFAULT_CONFETTI_ROTATION.x);
   const zRot = resolveRange(rotation?.z, DEFAULT_CONFETTI_ROTATION.z);
@@ -300,4 +301,3 @@ export const generateSpawnsArray = ({
 
   return spawns;
 };
-

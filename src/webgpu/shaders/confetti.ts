@@ -73,6 +73,23 @@ export const RuntimeSchema = d.struct({
   omega: d.vec3f,
 });
 
+export const InitUniformsSchema = d.struct({
+  viewportAndLayout: d.vec4f,
+  grid: d.vec4f,
+  spawn: d.vec4f,
+  rotation: d.vec4f,
+  depthAndWobble: d.vec4f,
+  physics: d.vec4f,
+  dynamics: d.vec4f,
+  zAndSizes: d.vec4f,
+  seedAndFlags: d.vec4u,
+  phasePermutation: d.vec4u,
+});
+
+export const InitSizeSchema = d.struct({
+  selection: d.vec4f,
+});
+
 export const SizeSchema = d.struct({
   dims: d.vec4f,
 });
@@ -83,6 +100,7 @@ export const SPAWN_BYTES = d.sizeOf(SpawnSchema);
 export const RUNTIME_BYTES = d.sizeOf(RuntimeSchema);
 export const SIZE_META_BYTES = d.sizeOf(SizeSchema);
 export const UNIFORMS_BYTES = d.sizeOf(UniformsSchema);
+export const INIT_UNIFORMS_BYTES = d.sizeOf(InitUniformsSchema);
 
 export const ComputeSpawnsSchema = (count: number) =>
   d.arrayOf(SpawnSchema, count);
@@ -91,6 +109,32 @@ export const RuntimeArraySchema = (count: number) =>
 export const SizeArraySchema = (count: number) => d.arrayOf(SizeSchema, count);
 export const PaletteArraySchema = (count: number) =>
   d.arrayOf(PaletteColorSchema, count);
+export const InitSizeArraySchema = (count: number) =>
+  d.arrayOf(InitSizeSchema, count);
+
+export const initLayout = tgpu
+  .bindGroupLayout({
+    uniforms: {
+      uniform: InitUniformsSchema,
+      visibility: ['compute'],
+    },
+    spawns: {
+      storage: d.arrayOf(SpawnSchema),
+      access: 'mutable',
+      visibility: ['compute'],
+    },
+    runtime: {
+      storage: d.arrayOf(RuntimeSchema),
+      access: 'mutable',
+      visibility: ['compute'],
+    },
+    sizes: {
+      storage: d.arrayOf(InitSizeSchema),
+      access: 'readonly',
+      visibility: ['compute'],
+    },
+  })
+  .$idx(0);
 
 export const computeLayout = tgpu
   .bindGroupLayout({
@@ -209,6 +253,234 @@ const hash13 = tgpu.fn(
   let q = std.fract(p * 0.1031);
   q = q + std.dot(q, q.zyx + 31.32);
   return std.fract((q.x + q.y) * q.z);
+});
+
+export const gpuHashU32 = tgpu.fn(
+  [d.u32],
+  d.u32
+)((value) => {
+  'use gpu';
+
+  let x = value;
+  x =
+    (x ^ std.bitShiftRight(x, d.u32(16))) *
+    d.u32(0x7feb352d);
+  x =
+    (x ^ std.bitShiftRight(x, d.u32(15))) *
+    d.u32(0x846ca68b);
+  return x ^ std.bitShiftRight(x, d.u32(16));
+});
+
+export const gpuRandom01 = tgpu.fn(
+  [d.u32, d.u32, d.u32],
+  d.f32
+)((index, lane, seed) => {
+  'use gpu';
+
+  const mixed =
+    index * d.u32(0x9e3779b9) +
+    lane * d.u32(0x85ebca6b) +
+    seed * d.u32(0xc2b2ae35);
+  const top24 = std.bitShiftRight(gpuHashU32(mixed), d.u32(8));
+  return d.f32(top24) * (1 / 16777216);
+});
+
+export const gpuRandomRange = tgpu.fn(
+  [d.u32, d.u32, d.u32, d.f32, d.f32],
+  d.f32
+)((index, lane, seed, min, max) => {
+  'use gpu';
+
+  return min + gpuRandom01(index, lane, seed) * (max - min);
+});
+
+export const confettiInit = tgpu.computeFn({
+  in: {
+    gid: d.builtin.globalInvocationId,
+  },
+  workgroupSize: [64],
+})(({ gid }) => {
+  'use gpu';
+
+  const idx = gid.x;
+  const count = std.arrayLength(initLayout.$.runtime);
+  if (idx >= count) {
+    return;
+  }
+
+  const u = initLayout.$.uniforms;
+  const seed = u.seedAndFlags.x;
+  const continuous = u.seedAndFlags.y !== d.u32(0);
+  const infinite = u.seedAndFlags.z !== d.u32(0);
+  const layoutCount = d.u32(std.max(u.viewportAndLayout.w, 1));
+  const layoutIndex = d.u32(
+    std.div(
+      (idx + d.u32(1)) * layoutCount + count - d.u32(1),
+      count
+    ) - 1
+  );
+
+  const columns = d.u32(std.max(u.grid.x, 1));
+  const rows = d.u32(std.max(u.grid.y, 1));
+  const rowIndex = d.u32(std.div(layoutIndex, columns));
+  const columnIndex = layoutIndex - rowIndex * columns;
+  let x = d.f32(columnIndex) * u.grid.z;
+  if (rowIndex === rows - d.u32(1)) {
+    const previousRows = (rows - d.u32(1)) * columns;
+    const itemsInLastRow = std.max(layoutCount - previousRows, d.u32(1));
+    const lastRowSpacing =
+      (u.viewportAndLayout.x - d.f32(itemsInLastRow) * u.spawn.z) /
+      (d.f32(itemsInLastRow) + 1);
+    const positionInLastRow = layoutIndex - previousRows;
+    x =
+      lastRowSpacing +
+      d.f32(positionInLastRow) * (u.spawn.z + lastRowSpacing);
+  }
+
+  const yJitter = gpuRandomRange(
+    layoutIndex,
+    d.u32(0),
+    seed,
+    -u.spawn.y * 0.5,
+    u.spawn.y * 0.5
+  );
+  const y = d.f32(rowIndex) * u.grid.w + u.spawn.x + yJitter;
+  const depthScale = gpuRandomRange(
+    layoutIndex,
+    d.u32(1),
+    seed,
+    u.depthAndWobble.x,
+    u.depthAndWobble.y
+  );
+  const perspectiveZ =
+    u.spawn.w / std.max(depthScale, 0.0001) - u.spawn.w;
+  const z =
+    perspectiveZ +
+    gpuRandomRange(
+      layoutIndex,
+      d.u32(2),
+      seed,
+      u.zAndSizes.x,
+      u.zAndSizes.y
+    );
+
+  const initialVy = std.select(
+    gpuRandomRange(layoutIndex, d.u32(3), seed, 0, 0.4) * u.physics.y,
+    u.dynamics.x * gpuRandomRange(layoutIndex, d.u32(3), seed, 0.95, 1.05),
+    infinite
+  );
+  const initialVx =
+    gpuRandomRange(layoutIndex, d.u32(4), seed, -0.15, 0.15) * u.physics.y;
+  const initialVz =
+    gpuRandomRange(layoutIndex, d.u32(5), seed, -0.05, 0.05) * u.physics.y;
+
+  const safeTime = std.max(u.physics.x, 0.0001);
+  const tumbleMag =
+    gpuRandomRange(
+      layoutIndex,
+      d.u32(6),
+      seed,
+      u.rotation.x,
+      u.rotation.y
+    ) / safeTime;
+  const twistMag =
+    gpuRandomRange(
+      layoutIndex,
+      d.u32(7),
+      seed,
+      u.rotation.z,
+      u.rotation.w
+    ) / safeTime;
+  const axisTheta = gpuRandom01(layoutIndex, d.u32(8), seed) * 6.28318530718;
+  const tumbleX = std.cos(axisTheta) * tumbleMag;
+  const tumbleY = std.sin(axisTheta) * tumbleMag;
+  const twistSign = std.select(
+    d.f32(-1),
+    d.f32(1),
+    gpuRandom01(layoutIndex, d.u32(9), seed) >= 0.5
+  );
+  const twistZ = twistSign * twistMag;
+
+  const u1 = gpuRandom01(layoutIndex, d.u32(10), seed);
+  const u2 = gpuRandom01(layoutIndex, d.u32(11), seed);
+  const u3 = gpuRandom01(layoutIndex, d.u32(12), seed);
+  const s1 = std.sqrt(std.max(1 - u1, 0));
+  const s2 = std.sqrt(std.max(u1, 0));
+  const quat = d.vec4f(
+    s1 * std.sin(6.28318530718 * u2),
+    s1 * std.cos(6.28318530718 * u2),
+    s2 * std.sin(6.28318530718 * u3),
+    s2 * std.cos(6.28318530718 * u3)
+  );
+
+  const wobble = gpuRandomRange(
+    layoutIndex,
+    d.u32(13),
+    seed,
+    u.depthAndWobble.z,
+    u.depthAndWobble.w
+  );
+  const cnScaled = u.physics.z * (1 + wobble * 4);
+  const ctScaled = u.physics.w * (1 + wobble * 4);
+
+  const sizeCount = d.u32(std.max(u.zAndSizes.z, 1));
+  const sizeIndex = std.min(
+    d.u32(
+      std.round(
+        gpuRandom01(layoutIndex, d.u32(14), seed) *
+          d.f32(sizeCount - d.u32(1))
+      )
+    ),
+    sizeCount - d.u32(1)
+  );
+  const selection = initLayout.$.sizes[sizeIndex]!.selection;
+  const colorStart = d.u32(std.max(selection.x, 0));
+  const colorCount = d.u32(std.max(selection.y, 1));
+  const colorIndex =
+    colorStart +
+    std.min(
+      d.u32(
+        std.round(
+          gpuRandom01(layoutIndex, d.u32(15), seed) *
+            d.f32(colorCount - d.u32(1))
+        )
+      ),
+      colorCount - d.u32(1)
+    );
+  const phaseBin =
+    (layoutIndex * u.phasePermutation.x + u.phasePermutation.y) % layoutCount;
+  const phaseOffset = std.select(
+    d.f32(0),
+    (d.f32(phaseBin) + gpuRandom01(layoutIndex, d.u32(16), seed)) /
+      d.f32(layoutCount),
+    continuous
+  );
+
+  const spawn = SpawnSchema({
+    pos0: d.vec3f(x, y, z),
+    vel0: d.vec3f(initialVx, initialVy, initialVz),
+    quat0: quat,
+    omega0: d.vec3f(tumbleX, tumbleY, twistZ),
+    drag: d.vec4f(cnScaled, ctScaled, u.dynamics.y, u.dynamics.z),
+    info: d.vec4f(
+      d.f32(sizeIndex),
+      d.f32(colorIndex),
+      selection.z,
+      phaseOffset
+    ),
+  });
+  const initialLife = -phaseOffset * u.physics.x;
+  initLayout.$.spawns[idx] = SpawnSchema(spawn);
+  initLayout.$.runtime[idx] = RuntimeSchema({
+    pos: d.vec3f(spawn.pos0),
+    life: initialLife,
+    prevPos: d.vec3f(spawn.pos0),
+    prevLife: initialLife,
+    vel: d.vec3f(spawn.vel0),
+    quat: d.vec4f(spawn.quat0),
+    prevQuat: d.vec4f(spawn.quat0),
+    omega: d.vec3f(spawn.omega0),
+  });
 });
 
 const vnoise3 = tgpu.fn(
@@ -898,6 +1170,7 @@ export const confettiFragment = tgpu.fragmentFn({
 });
 
 export type ConfettiPipelines = {
+  initPipeline: TgpuComputePipeline;
   computePipeline: TgpuComputePipeline;
   renderPipeline: TgpuRenderPipeline;
 };
@@ -906,6 +1179,9 @@ export const createConfettiPipelines = (
   root: TgpuRoot,
   presentationFormat: GPUTextureFormat
 ): ConfettiPipelines => ({
+  initPipeline: root.createComputePipeline({
+    compute: confettiInit,
+  }),
   computePipeline: root.createComputePipeline({
     compute: confettiCompute,
   }),

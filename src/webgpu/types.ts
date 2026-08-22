@@ -9,6 +9,7 @@ import type {
   PIConfettiMethods,
   PIConfettiProps,
 } from '../types';
+import type { FixedLengthArray } from '../typeHelpers';
 
 export type GPUTextureMode =
   | 0 // default
@@ -73,7 +74,7 @@ export type GPUConfettiExtraProps = {
    * Optional normalized gravity direction. Use a shared value for sensor-driven gravity.
    * @default [0, 1, 0]
    */
-  gravityDir?: SharedValue<[number, number, number]>;
+  gravityDir?: SharedValue<FixedLengthArray<number, 3>>;
 };
 
 export type GPUConfettiProps = ConfettiProps & GPUConfettiExtraProps;

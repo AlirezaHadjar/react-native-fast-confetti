@@ -5,11 +5,12 @@ import {
   SINGLE_CONFETTI_VISUAL_BUDGET,
   type RgbaFrame,
 } from '../__fixtures__/visualParityHarness';
+import type { FixedLengthArray } from '../typeHelpers';
 
 const createFrame = (
   width: number,
   height: number,
-  pixel: [number, number, number, number]
+  pixel: FixedLengthArray<number, 4>
 ): RgbaFrame => {
   const data = new Uint8Array(width * height * 4);
   for (let offset = 0; offset < data.length; offset += 4) {
@@ -95,4 +96,3 @@ describe('visual parity harness', () => {
     ).toThrow('Frame sizes do not match');
   });
 });
-

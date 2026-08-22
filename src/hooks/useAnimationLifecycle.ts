@@ -13,6 +13,7 @@ import {
   type EasingFunctionFactory,
 } from 'react-native-reanimated';
 import { useAnimationCallbacks } from './useAnimationCallbacks';
+import type { FixedLengthArray } from '../typeHelpers';
 
 type UseAnimationLifecycleParams = {
   duration: number;
@@ -22,7 +23,7 @@ type UseAnimationLifecycleParams = {
   onAnimationStart?: () => void;
   onAnimationEnd?: () => void;
   /** Opacity fade interpolation input range. @default [0.8, 1] */
-  fadeRange?: [number, number];
+  fadeRange?: FixedLengthArray<number, 2>;
   /** Worklet called at the end of each animation cycle (before looping). */
   onCycleEnd?: () => void;
   disabled?: boolean;

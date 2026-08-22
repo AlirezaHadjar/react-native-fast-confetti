@@ -1,3 +1,5 @@
+import type { FixedLengthArray } from '../../typeHelpers';
+
 const identity = (value: number) => value;
 
 export const Easing = {
@@ -13,8 +15,8 @@ export const Extrapolation = {
 
 export const interpolate = (
   value: number,
-  input: [number, number],
-  output: [number, number]
+  input: FixedLengthArray<number, 2>,
+  output: FixedLengthArray<number, 2>
 ) => {
   const [inputMin, inputMax] = input;
   const [outputMin, outputMax] = output;
@@ -37,4 +39,3 @@ export const useSharedValue = <T>(initialValue: T) => {
     value: current,
   };
 };
-

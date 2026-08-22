@@ -11,7 +11,10 @@ import {
 import { scheduleOnRN } from 'react-native-worklets';
 import { Canvas, type CanvasRef } from 'react-native-webgpu';
 
-import type { SizeVariation } from '../hooks/useConfettiFlakes';
+import type {
+  ColorRange,
+  SizeVariation,
+} from '../hooks/useConfettiFlakes';
 import {
   DEFAULT_FADE_START,
   DEFAULT_FOCAL_LENGTH_RATIO,
@@ -19,7 +22,6 @@ import {
 } from './constants';
 import {
   createConfettiResources,
-  updateConfettiRuntimeResources,
   type ConfettiResources,
 } from './hooks/useConfettiResources';
 import {
@@ -41,8 +43,31 @@ import {
   type DedicatedGPUFrameTarget,
 } from './hooks/useDedicatedGPUFrame';
 import { useGPUDevice } from './hooks/useGPUDevice';
-import type { Spawn } from './utils';
 import { configureCanvasSurface } from './configureCanvasSurface';
+import { createPhasePermutation } from './resourcePacking';
+import type {
+  FixedLengthArray,
+  ReadonlyFixedLengthArray,
+} from '../typeHelpers';
+
+export type GPUConfettiInitialization = {
+  seed: number;
+  layoutCount: number;
+  columnsNum: number;
+  rowsNum: number;
+  columnWidth: number;
+  verticalSpacing: number;
+  maxFlakeWidth: number;
+  maxFlakeHeight: number;
+  verticalOffset: number;
+  rotationX: ReadonlyFixedLengthArray<number, 2>;
+  rotationZ: ReadonlyFixedLengthArray<number, 2>;
+  depth: ReadonlyFixedLengthArray<number, 2>;
+  wobble: ReadonlyFixedLengthArray<number, 2>;
+  zRange: ReadonlyFixedLengthArray<number, 2>;
+  cycleDuration: number;
+  gravity: number;
+};
 
 export type GPUConfettiCanvasParams = {
   windStrength: number;
@@ -55,7 +80,7 @@ export type GPUConfettiCanvasParams = {
   iridescence: number;
   textureMode: number;
   easing: EasingFunction | EasingFunctionFactory;
-  gravityDir: SharedValue<[number, number, number]>;
+  gravityDir: SharedValue<FixedLengthArray<number, 3>>;
 };
 
 type Props = {
@@ -64,7 +89,9 @@ type Props = {
   count: number;
   sizeVariations: SizeVariation[];
   allColors: string[];
-  spawns: Spawn[] | null;
+  colorOverrides: (ColorRange | null)[];
+  parentColorCount: number;
+  initialization: GPUConfettiInitialization;
   cycleDuration: number;
   running: SharedValue<boolean>;
   opacity: SharedValue<number>;
@@ -85,15 +112,110 @@ type RawFrameState = {
   device: GPUDevice;
   context: GPUCanvasContext & { present?: () => void };
   uniformBuffer: GPUBuffer;
+  initPipeline: GPUComputePipeline;
   computePipeline: GPUComputePipeline;
   renderPipeline: GPURenderPipeline;
   computeBindGroup: GPUBindGroup;
+  initBindGroup: GPUBindGroup;
   renderBindGroup: GPUBindGroup;
   workgroupCount: number;
   count: number;
   focalLength: number;
   viewportWidth: number;
   viewportHeight: number;
+};
+
+const initializeParticles = (
+  state: RawFrameState,
+  resources: ConfettiResources,
+  initialization: GPUConfettiInitialization,
+  continuous: boolean,
+  infinite: boolean,
+  sizeCount: number
+) => {
+  const scaledGravity = Math.max(
+    initialization.gravity * state.viewportHeight,
+    0.001
+  );
+  const normalDrag = 4 / scaledGravity;
+  const tangentialDrag = normalDrag * 0.25;
+  const averageDrag = ((normalDrag + tangentialDrag) * 4) / (3 * Math.PI);
+  const terminalVelocity = Math.sqrt(scaledGravity / averageDrag);
+  const focalLength = Math.max(
+    100,
+    state.viewportHeight * DEFAULT_FOCAL_LENGTH_RATIO
+  );
+  const phasePermutation = createPhasePermutation(
+    initialization.layoutCount,
+    initialization.seed
+  );
+
+  resources.initUniforms.write({
+    viewportAndLayout: [
+      state.viewportWidth,
+      state.viewportHeight,
+      state.count,
+      initialization.layoutCount,
+    ],
+    grid: [
+      initialization.columnsNum,
+      initialization.rowsNum,
+      initialization.columnWidth,
+      Math.min(initialization.maxFlakeHeight, 20) +
+        initialization.verticalSpacing,
+    ],
+    spawn: [
+      initialization.verticalOffset,
+      initialization.verticalSpacing,
+      initialization.maxFlakeWidth,
+      focalLength,
+    ],
+    rotation: [
+      initialization.rotationX[0],
+      initialization.rotationX[1],
+      initialization.rotationZ[0],
+      initialization.rotationZ[1],
+    ],
+    depthAndWobble: [
+      initialization.depth[0],
+      initialization.depth[1],
+      initialization.wobble[0],
+      initialization.wobble[1],
+    ],
+    physics: [
+      initialization.cycleDuration,
+      scaledGravity,
+      normalDrag,
+      tangentialDrag,
+    ],
+    dynamics: [terminalVelocity, 2, 1, 0],
+    zAndSizes: [
+      initialization.zRange[0],
+      initialization.zRange[1],
+      sizeCount,
+      0,
+    ],
+    seedAndFlags: [
+      initialization.seed >>> 0,
+      continuous ? 1 : 0,
+      infinite ? 1 : 0,
+      0,
+    ],
+    phasePermutation: [
+      phasePermutation.stride,
+      phasePermutation.offset,
+      0,
+      0,
+    ],
+  });
+
+  const encoder = state.device.createCommandEncoder();
+  const pass = encoder.beginComputePass();
+  pass.setPipeline(state.initPipeline);
+  pass.setBindGroup(0, state.initBindGroup);
+  pass.dispatchWorkgroups(state.workgroupCount);
+  pass.end();
+  state.device.queue.submit([encoder.finish()]);
 };
 
 const clamp01 = (value: number) => {
@@ -115,7 +237,9 @@ export const GPUConfettiCanvas = ({
   count,
   sizeVariations,
   allColors,
-  spawns,
+  colorOverrides,
+  parentColorCount,
+  initialization,
   cycleDuration,
   running,
   opacity,
@@ -141,8 +265,11 @@ export const GPUConfettiCanvas = ({
     new Float32Array(UNIFORMS_BYTES / Float32Array.BYTES_PER_ELEMENT)
   );
   const scheduleDataRef = useRef(new Float64Array(SCHEDULE_VALUE_COUNT));
-  const latestSpawnsRef = useRef<Spawn[] | null>(null);
-  const latestCycleDurationRef = useRef(cycleDuration);
+  const initializedRef = useRef<{
+    state: RawFrameState;
+    initialization: GPUConfettiInitialization;
+  } | null>(null);
+  const latestInitializationRef = useRef(initialization);
   const elapsed = useSharedValue(0);
   const lastSimSeconds = useSharedValue(0);
   const simulatedSeconds = useSharedValue(0);
@@ -155,12 +282,13 @@ export const GPUConfettiCanvas = ({
     [params.easing]
   );
 
-  const hasSpawns = spawns !== null;
   const reportReady = useCallback(() => onReadyChange(true), [onReadyChange]);
 
   useEffect(() => {
-    latestSpawnsRef.current = spawns;
-    latestCycleDurationRef.current = cycleDuration;
+    latestInitializationRef.current = initialization;
+  }, [initialization]);
+
+  useEffect(() => {
     elapsed.set(0);
     lastSimSeconds.set(0);
     simulatedSeconds.set(0);
@@ -168,7 +296,6 @@ export const GPUConfettiCanvas = ({
     wasRunning.set(false);
     lastFrameTimestampMs.set(0);
   }, [
-    spawns,
     cycleDuration,
     elapsed,
     lastFrameTimestampMs,
@@ -179,8 +306,7 @@ export const GPUConfettiCanvas = ({
   ]);
 
   useEffect(() => {
-    const currentSpawns = latestSpawnsRef.current;
-    if (!device || !currentSpawns) return;
+    if (!device || count <= 0) return;
     onReadyChange(false);
     let cancelled = false;
     (async () => {
@@ -189,8 +315,8 @@ export const GPUConfettiCanvas = ({
         count,
         sizeVariations,
         allColors,
-        spawns: currentSpawns,
-        cycleDuration: latestCycleDurationRef.current,
+        colorOverrides,
+        parentColorCount,
       });
       if (cancelled) {
         return;
@@ -200,15 +326,28 @@ export const GPUConfettiCanvas = ({
     return () => {
       cancelled = true;
     };
-  }, [device, count, sizeVariations, allColors, hasSpawns, onReadyChange]);
-
-  useEffect(() => {
-    if (!resources || !spawns) return;
-    updateConfettiRuntimeResources(resources, spawns, cycleDuration);
-  }, [resources, spawns, cycleDuration]);
+  }, [
+    device,
+    count,
+    sizeVariations,
+    allColors,
+    colorOverrides,
+    parentColorCount,
+    onReadyChange,
+  ]);
 
   useEffect(() => {
     if (!device || !resources) {
+      return;
+    }
+    if (
+      resources.device !== device ||
+      resources.count !== count ||
+      resources.sizeVariations !== sizeVariations ||
+      resources.allColors !== allColors ||
+      resources.colorOverrides !== colorOverrides ||
+      resources.parentColorCount !== parentColorCount
+    ) {
       return;
     }
     if (viewportWidth <= 0 || viewportHeight <= 0) {
@@ -222,7 +361,8 @@ export const GPUConfettiCanvas = ({
     const dpr = PixelRatio.get();
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
 
-    const { computePipeline, renderPipeline } = createConfettiPipelines(
+    const { initPipeline, computePipeline, renderPipeline } =
+      createConfettiPipelines(
       resources.root,
       presentationFormat
     );
@@ -233,20 +373,36 @@ export const GPUConfettiCanvas = ({
     simulationAccumulator.set(0);
     wasRunning.set(false);
     lastFrameTimestampMs.set(0);
-    setRawFrameState({
+    const nextRawFrameState: RawFrameState = {
       device,
       context,
       uniformBuffer: resources.uniforms.buffer.buffer,
+      initPipeline: resources.root.unwrap(initPipeline),
       computePipeline: resources.root.unwrap(computePipeline),
       renderPipeline: resources.root.unwrap(renderPipeline),
       computeBindGroup: resources.root.unwrap(resources.computeBindGroup),
+      initBindGroup: resources.root.unwrap(resources.initBindGroup),
       renderBindGroup: resources.root.unwrap(resources.renderBindGroup),
       workgroupCount: Math.ceil(count / 64),
       count,
       focalLength: Math.max(100, viewportHeight * DEFAULT_FOCAL_LENGTH_RATIO),
       viewportWidth,
       viewportHeight,
-    });
+    };
+    const currentInitialization = latestInitializationRef.current;
+    initializeParticles(
+      nextRawFrameState,
+      resources,
+      currentInitialization,
+      continuous,
+      infinite,
+      sizeVariations.length
+    );
+    initializedRef.current = {
+      state: nextRawFrameState,
+      initialization: currentInitialization,
+    };
+    setRawFrameState(nextRawFrameState);
     configureCanvasSurface(
       context,
       device,
@@ -270,6 +426,12 @@ export const GPUConfettiCanvas = ({
     surfaceReady,
     reportReady,
     wasRunning,
+    continuous,
+    infinite,
+    sizeVariations,
+    allColors,
+    colorOverrides,
+    parentColorCount,
   ]);
 
   const activeRawFrameState =
@@ -279,6 +441,65 @@ export const GPUConfettiCanvas = ({
     rawFrameState.viewportHeight === viewportHeight
       ? rawFrameState
       : null;
+
+  useEffect(() => {
+    if (!activeRawFrameState || !resources) return;
+    if (
+      resources.count !== count ||
+      resources.sizeVariations !== sizeVariations ||
+      resources.allColors !== allColors ||
+      resources.colorOverrides !== colorOverrides ||
+      resources.parentColorCount !== parentColorCount
+    ) {
+      return;
+    }
+    const initialized = initializedRef.current;
+    if (
+      initialized?.state === activeRawFrameState &&
+      initialized.initialization === initialization
+    ) {
+      return;
+    }
+
+    onReadyChange(false);
+    initializeParticles(
+      activeRawFrameState,
+      resources,
+      initialization,
+      continuous,
+      infinite,
+      sizeVariations.length
+    );
+    initializedRef.current = {
+      state: activeRawFrameState,
+      initialization,
+    };
+    elapsed.set(0);
+    lastSimSeconds.set(0);
+    simulatedSeconds.set(0);
+    simulationAccumulator.set(0);
+    wasRunning.set(false);
+    lastFrameTimestampMs.set(0);
+    onReadyChange(true);
+  }, [
+    activeRawFrameState,
+    resources,
+    count,
+    initialization,
+    continuous,
+    infinite,
+    sizeVariations,
+    allColors,
+    colorOverrides,
+    parentColorCount,
+    elapsed,
+    lastFrameTimestampMs,
+    lastSimSeconds,
+    onReadyChange,
+    simulatedSeconds,
+    simulationAccumulator,
+    wasRunning,
+  ]);
 
   const shouldScheduleFrame = useCallback(() => {
     'worklet';

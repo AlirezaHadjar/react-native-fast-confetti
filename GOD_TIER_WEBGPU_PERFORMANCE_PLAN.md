@@ -6,6 +6,8 @@ The highest-performance architecture that is safe with the current React Native
 WebGPU stack is implemented on this branch:
 
 - Particle state and the complete physical model live on the GPU.
+- Particle initialization and restart randomization also run in GPU compute;
+  React JavaScript never expands a count-sized particle object graph.
 - React JavaScript performs no per-frame animation work.
 - One Reanimated UI-runtime display clock drives native WebGPU work.
 - Simulation uses a deterministic 120 Hz fixed step with interpolated rendering.
@@ -58,7 +60,7 @@ observable native correctness failure.
 ```text
 React JavaScript (configuration and lifecycle only)
   |
-  | resource creation, start/pause/reset/restart, completion notification
+  | compact uniforms + size/origin metadata, lifecycle notification
   v
 Shared control values + immutable GPU resource closures
   |
@@ -73,6 +75,7 @@ One native UI-runtime vsync coordinator
   |
   v
 WebGPU / Dawn / Metal or Vulkan
+  |-- one-shot seeded particle initialization
   |-- authoritative particle state
   |-- 120 Hz physics steps
   `-- instanced rendering with transform interpolation
@@ -164,6 +167,20 @@ The hot path does not:
   descriptor, attachment, submission, and submit-array objects every vsync.
 - Origin arrays are also stabilized by semantic value so readiness state changes
   cannot start a resource-rebuild loop.
+- Falling confetti uploads a fixed-size initialization uniform plus one record
+  per flake size. PI and Cannon upload one compact record per origin. A seeded
+  64-thread compute kernel writes particle state directly into its final storage
+  buffers, so initialization and restart no longer allocate, pack, or copy
+  `O(particleCount)` host data.
+- Continuous phase offsets retain exact stratification through a seeded affine
+  permutation. This preserves the old even temporal density without uploading
+  a shuffled count-sized phase array.
+- Reduced-motion subsets are selected by the inverse of the existing evenly
+  spaced visibility mapping inside the initialization kernel. They retain the
+  full-layout distribution without a JavaScript filter pass.
+- Resource activation verifies device, allocation size, atlas identity, and origin
+  shape before dispatch or draw. A count change therefore cannot briefly draw
+  against a stale, smaller storage buffer.
 - Device loss clears the active device and reconnects.
 - On iOS, device ownership transfers only after the old frame registration has
   retired and the last presentation has been scheduled.
@@ -220,6 +237,8 @@ Automated tests cover:
 - Spawn/resource packing parity for single, continuous, PI, and cannon modes.
 - Seeded deterministic initialization and visual-parity fixtures.
 - Semantic flake memoization across equivalent React values.
+- Compact falling, PI, and Cannon initialization payloads at 20,000 particles.
+- Exact continuous-phase permutation coverage and GPU WGSL kernel resolution.
 
 Build validation covers:
 
@@ -268,6 +287,10 @@ invariants are the reliable tests.
 
 No evidence-backed cross-platform optimization remains in React JavaScript or
 the shader submission architecture without changing behavior:
+
+- Startup and restart are count-independent on React JavaScript. The remaining
+  count-scaled work is the unavoidable GPU storage allocation, one parallel
+  initialization dispatch, physics compute, and instanced rasterization.
 
 - Moving particles to JavaScript would be substantially worse.
 - A background Worklets presentation loop is unsafe on the current iOS bridge.

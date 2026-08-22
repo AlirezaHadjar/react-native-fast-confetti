@@ -12,13 +12,19 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { GPUConfettiCanvas } from './GPUConfettiCanvas';
 import {
   DEFAULT_BOXES_COUNT,
+  DEFAULT_CONFETTI_DEPTH,
   DEFAULT_CONFETTI_DRIFT,
   DEFAULT_CONFETTI_FALL_EASING,
   DEFAULT_CONFETTI_GRAVITY,
+  DEFAULT_CONFETTI_ROTATION,
   DEFAULT_CONFETTI_WOBBLE,
   DEFAULT_VERTICAL_SPACING,
 } from '../constants';
-import { DEFAULT_MAGNUS_STRENGTH, DEFAULT_WIND_STRENGTH } from './constants';
+import {
+  DEFAULT_MAGNUS_STRENGTH,
+  DEFAULT_WIND_STRENGTH,
+  DEFAULT_Z_RANGE,
+} from './constants';
 import { Flake } from '../FlakeComponent';
 import { useSimulationLifecycle } from './hooks/useSimulationLifecycle';
 import { useConfettiFlakes } from '../hooks/useConfettiFlakes';
@@ -26,22 +32,21 @@ import { useContainerDimensions } from '../hooks/useContainerDimensions';
 import { useTextureProps } from '../hooks/useTextureProps';
 import { useReduceMotionFactor } from '../hooks/useReduceMotionFactor';
 import {
-  isReduceMotionPieceVisible,
   reduceCountForMotion,
   scaleRangeForMotion,
   scaleRotationForMotion,
   scaleValueForMotion,
 } from '../reduceMotion';
-import { computeSizeFlags } from './resourcePacking';
 import type {
   GPUConfettiMethods,
   GPUConfettiProps,
   InternalGPUConfettiProps,
 } from './types';
+import type { FixedLengthArray } from '../typeHelpers';
 import {
   computeSpawnGrid,
   estimateFallingDuration,
-  generateSpawnsArray,
+  resolveRange,
 } from './utils';
 
 const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
@@ -152,56 +157,42 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
     const [rendererReady, setRendererReady] = useState(false);
     const bumpSeed = useCallback(() => setSeed((s) => s + 1), []);
 
-    const spawns = useMemo(() => {
-      void seed;
-      if (
-        !ready ||
-        !reduceMotionReady ||
-        visibleCount <= 0 ||
-        containerWidth <= 0 ||
-        containerHeight <= 0
-      ) {
-        return null;
-      }
-      const sizeFlagsByIndex = computeSizeFlags(sizeVariations);
-      const allSpawns = generateSpawnsArray({
-        count: bufferCount,
-        sizeVariations: sizeVariations.length,
-        sizeColorOverrides: colorOverrides,
-        parentColorCount,
-        sizeFlagsByIndex,
-        containerWidth,
-        containerHeight,
+    const initialization = useMemo(() => {
+      const rotationX = resolveRange(
+        effectiveRotation?.x,
+        DEFAULT_CONFETTI_ROTATION.x
+      );
+      const rotationZ = resolveRange(
+        effectiveRotation?.z,
+        DEFAULT_CONFETTI_ROTATION.z
+      );
+      const depthRange = resolveRange(depth, DEFAULT_CONFETTI_DEPTH);
+      const wobbleRange = resolveRange(
+        effectiveWobble,
+        DEFAULT_CONFETTI_WOBBLE
+      );
+
+      return {
+        seed,
+        layoutCount: bufferCount,
+        columnsNum,
+        rowsNum,
+        columnWidth,
         verticalSpacing,
         maxFlakeWidth,
         maxFlakeHeight,
         verticalOffset,
-        columnsNum,
-        columnWidth,
-        rowsNum,
-        rotation: effectiveRotation,
-        depth,
-        wobble: effectiveWobble,
-        totalTime: cycleDuration,
+        rotationX: [rotationX.min, rotationX.max] as const,
+        rotationZ: [rotationZ.min, rotationZ.max] as const,
+        depth: [depthRange.min, depthRange.max] as const,
+        wobble: [wobbleRange.min, wobbleRange.max] as const,
+        zRange: DEFAULT_Z_RANGE,
+        cycleDuration,
         gravity,
-        infinite,
-        continuous,
-      });
-      if (visibleCount >= bufferCount) return allSpawns;
-      return allSpawns.filter((_, index) =>
-        isReduceMotionPieceVisible(index, bufferCount, visibleCount)
-      );
+      };
     }, [
       seed,
-      ready,
       bufferCount,
-      visibleCount,
-      reduceMotionReady,
-      sizeVariations,
-      colorOverrides,
-      parentColorCount,
-      containerWidth,
-      containerHeight,
       verticalSpacing,
       maxFlakeWidth,
       maxFlakeHeight,
@@ -214,10 +205,13 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       effectiveWobble,
       cycleDuration,
       gravity,
-      infinite,
-      continuous,
     ]);
-    const hasSpawns = spawns !== null && spawns.length > 0;
+    const hasParticles =
+      ready &&
+      reduceMotionReady &&
+      visibleCount > 0 &&
+      containerWidth > 0 &&
+      containerHeight > 0;
 
     const restart = useCallback(() => {
       'worklet';
@@ -247,7 +241,8 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
     }, [infinite, running, onAnimationEnd]);
 
     useEffect(() => {
-      if (!ready || !reduceMotionReady || !hasSpawns || !rendererReady) return;
+      if (!ready || !reduceMotionReady || !hasParticles || !rendererReady)
+        return;
       if (!autoplay) return;
       const t = setTimeout(() => {
         if (running.get()) return;
@@ -262,14 +257,14 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       running,
       beginCycle,
       onAnimationStart,
-      hasSpawns,
+      hasParticles,
       reduceMotionReady,
       rendererReady,
     ]);
 
     // Default gravity direction is +Y (down). Caller can override with a
     // SharedValue (e.g. driven by gyroscope).
-    const defaultGravityDir = useSharedValue<[number, number, number]>([
+    const defaultGravityDir = useSharedValue<FixedLengthArray<number, 3>>([
       0, 1, 0,
     ]);
     const gravityDir = externalGravityDir ?? defaultGravityDir;
@@ -309,10 +304,12 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       <GPUConfettiCanvas
         containerStyle={containerStyle}
         onContainerLayout={onContainerLayout}
-        count={spawns?.length ?? 0}
+        count={hasParticles ? visibleCount : 0}
         sizeVariations={sizeVariations}
         allColors={allColors}
-        spawns={spawns}
+        colorOverrides={colorOverrides}
+        parentColorCount={parentColorCount}
+        initialization={initialization}
         cycleDuration={autoRestart ? cycleDuration : 0}
         running={running}
         opacity={opacity}
