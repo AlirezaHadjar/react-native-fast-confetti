@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Platform } from 'react-native';
 import {
   useFrameCallback,
@@ -6,7 +12,7 @@ import {
   type FrameInfo,
 } from 'react-native-reanimated';
 import { installWebGPU } from 'react-native-webgpu';
-import { scheduleOnUI } from 'react-native-worklets';
+import { scheduleOnRN, scheduleOnUI } from 'react-native-worklets';
 
 export type DedicatedGPUFrameTarget = {
   descriptor: GPURenderPassDescriptor;
@@ -111,7 +117,7 @@ const registerGPUFrameOnUI = (
   });
 };
 
-const retireGPUFrameOnUI = (key: string) => {
+const retireGPUFrameOnUI = (key: string, onRetired?: () => void) => {
   'worklet';
   const registry = globalThis.__fastConfettiUIFrameRegistryV5;
   const entry = registry?.get(key);
@@ -123,6 +129,7 @@ const retireGPUFrameOnUI = (key: string) => {
   if (globalThis.__fastConfettiUIFrameCursorV4 === key) {
     globalThis.__fastConfettiUIFrameCursorV4 = undefined;
   }
+  if (onRetired) scheduleOnRN(onRetired);
 };
 
 const commitGPUFrameSubmission = (
@@ -174,7 +181,8 @@ export const useDedicatedGPUFrame = (
   device: GPUDevice | null,
   context: PresentableCanvasContext | null,
   enabled = true,
-  shouldSchedule?: ShouldScheduleGPUFrame
+  shouldSchedule?: ShouldScheduleGPUFrame,
+  onRetired?: () => void
 ) => {
   const [surfaceId] = useState(() => nextSurfaceId++);
   const [webFrameTarget] = useState(createReusableFrameTarget);
@@ -278,7 +286,7 @@ export const useDedicatedGPUFrame = (
     false
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!enabled || !device || !queue || !context) {
       frameCallback.setActive(false);
       return;
@@ -286,7 +294,10 @@ export const useDedicatedGPUFrame = (
 
     if (Platform.OS === 'web') {
       frameCallback.setActive(true);
-      return () => frameCallback.setActive(false);
+      return () => {
+        frameCallback.setActive(false);
+        onRetired?.();
+      };
     }
 
     generationRef.current += 1;
@@ -303,7 +314,7 @@ export const useDedicatedGPUFrame = (
 
     return () => {
       unregisterNativeClock(surfaceId);
-      scheduleOnUI(retireGPUFrameOnUI, key);
+      scheduleOnUI(retireGPUFrameOnUI, key, onRetired);
     };
   }, [
     callback,
@@ -314,5 +325,6 @@ export const useDedicatedGPUFrame = (
     frameCallback,
     queue,
     surfaceId,
+    onRetired,
   ]);
 };

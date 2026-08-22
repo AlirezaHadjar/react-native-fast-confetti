@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
 import { PixelRatio, StyleSheet, View } from 'react-native';
 import {
@@ -46,11 +53,16 @@ import {
   unconfigureCanvasSurface,
 } from './configureCanvasSurface';
 import { createPhasePermutation } from './resourcePacking';
-import { retireGPUResourceSet } from './resourceCleanup';
+import {
+  createGPUFrameRetirement,
+  retireGPUResourceSet,
+  type GPUFrameRetirement,
+} from './resourceCleanup';
 import type {
   FixedLengthArray,
   ReadonlyFixedLengthArray,
 } from '../typeHelpers';
+import { useLazyRef } from '../hooks/useLazyRef';
 
 export type GPUConfettiInitialization = {
   seed: number;
@@ -111,6 +123,10 @@ type Props = {
   onReadyChange: (ready: boolean) => void;
 };
 
+type RendererProps = Omit<Props, 'containerStyle' | 'onContainerLayout'> & {
+  device: GPUDevice;
+};
+
 type RawFrameState = {
   device: GPUDevice;
   queue: GPUQueue;
@@ -127,6 +143,11 @@ type RawFrameState = {
   focalLength: number;
   viewportWidth: number;
   viewportHeight: number;
+};
+
+type FrameRegistration = {
+  rawFrameState: RawFrameState;
+  retirement: GPUFrameRetirement;
 };
 
 const initializeParticles = (
@@ -230,9 +251,8 @@ const resolveEasing = (
   return easing.factory();
 };
 
-export const GPUConfettiCanvas = ({
-  containerStyle,
-  onContainerLayout,
+const GPUConfettiRenderer = ({
+  device,
   count,
   sizeVariations,
   allColors,
@@ -253,22 +273,24 @@ export const GPUConfettiCanvas = ({
   params,
   onAllOffScreen,
   onReadyChange,
-}: Props) => {
-  const device = useGPUDevice();
+}: RendererProps) => {
   const canvasRef = useRef<CanvasRef>(null);
   const [resources, setResources] = useState<ConfettiResources | null>(null);
-  const [rawFrameState, setRawFrameState] = useState<RawFrameState | null>(
-    null
+  const [frameRegistration, setFrameRegistration] =
+    useState<FrameRegistration | null>(null);
+  const uniformDataRef = useLazyRef(
+    () => new Float32Array(UNIFORMS_BYTES / Float32Array.BYTES_PER_ELEMENT)
   );
-  const uniformDataRef = useRef(
-    new Float32Array(UNIFORMS_BYTES / Float32Array.BYTES_PER_ELEMENT)
+  const scheduleDataRef = useLazyRef(
+    () => new Float64Array(SCHEDULE_VALUE_COUNT)
   );
-  const scheduleDataRef = useRef(new Float64Array(SCHEDULE_VALUE_COUNT));
   const initializedRef = useRef<{
     state: RawFrameState;
     initialization: GPUConfettiInitialization;
   } | null>(null);
-  const latestInitializationRef = useRef(initialization);
+  const frameRetirementsRef = useRef(
+    new WeakMap<ConfettiResources, GPUFrameRetirement>()
+  );
   const elapsed = useSharedValue(0);
   const lastSimSeconds = useSharedValue(0);
   const simulatedSeconds = useSharedValue(0);
@@ -283,10 +305,6 @@ export const GPUConfettiCanvas = ({
   );
 
   const reportReady = useCallback(() => onReadyChange(true), [onReadyChange]);
-
-  useEffect(() => {
-    latestInitializationRef.current = initialization;
-  }, [initialization]);
 
   useEffect(() => {
     elapsed.set(0);
@@ -306,8 +324,8 @@ export const GPUConfettiCanvas = ({
   ]);
 
   useEffect(() => {
-    if (!device || count <= 0) return;
     onReadyChange(false);
+    if (!device || count <= 0) return;
     let cancelled = false;
     (async () => {
       try {
@@ -359,6 +377,16 @@ export const GPUConfettiCanvas = ({
     if (viewportWidth <= 0 || viewportHeight <= 0) {
       return;
     }
+    const currentFrame = initializedRef.current?.state;
+    if (
+      currentFrame?.device === device &&
+      currentFrame.uniformBuffer === resources.uniforms.buffer.buffer &&
+      currentFrame.count === count &&
+      currentFrame.viewportWidth === viewportWidth &&
+      currentFrame.viewportHeight === viewportHeight
+    ) {
+      return;
+    }
     const context = canvasRef.current?.getContext('webgpu');
     if (!context) {
       return;
@@ -393,11 +421,12 @@ export const GPUConfettiCanvas = ({
       viewportWidth,
       viewportHeight,
     };
-    const currentInitialization = latestInitializationRef.current;
+    const retirement = createGPUFrameRetirement();
+    frameRetirementsRef.current.set(resources, retirement);
     initializeParticles(
       nextRawFrameState,
       resources,
-      currentInitialization,
+      initialization,
       continuous,
       infinite,
       sizeVariations.length
@@ -405,9 +434,9 @@ export const GPUConfettiCanvas = ({
     needsRender.set(true);
     initializedRef.current = {
       state: nextRawFrameState,
-      initialization: currentInitialization,
+      initialization,
     };
-    setRawFrameState(nextRawFrameState);
+    setFrameRegistration({ rawFrameState: nextRawFrameState, retirement });
     configureCanvasSurface(
       context,
       device,
@@ -438,11 +467,22 @@ export const GPUConfettiCanvas = ({
     colorOverrides,
     parentColorCount,
     needsRender,
+    initialization,
   ]);
 
+  const rawFrameState = frameRegistration?.rawFrameState ?? null;
+
+  const resourcesAreCurrent =
+    resources?.device === device &&
+    resources.count === count &&
+    resources.sizeVariations === sizeVariations &&
+    resources.allColors === allColors &&
+    resources.colorOverrides === colorOverrides &&
+    resources.parentColorCount === parentColorCount;
   const activeRawFrameState =
+    resourcesAreCurrent &&
     rawFrameState?.device === device &&
-    rawFrameState.uniformBuffer === resources?.uniforms.buffer.buffer &&
+    rawFrameState.uniformBuffer === resources.uniforms.buffer.buffer &&
     rawFrameState.count === count &&
     rawFrameState.viewportWidth === viewportWidth &&
     rawFrameState.viewportHeight === viewportHeight
@@ -518,6 +558,15 @@ export const GPUConfettiCanvas = ({
     );
   }, [needsRender, running, surfaceReady, wasRunning]);
 
+  const activeFrameRetirement =
+    activeRawFrameState === frameRegistration?.rawFrameState
+      ? frameRegistration?.retirement
+      : undefined;
+  const reportFrameRetired = useCallback(
+    () => activeFrameRetirement?.resolve(),
+    [activeFrameRetirement]
+  );
+
   const renderFrame = useCallback(
     (
       timestamp: number,
@@ -557,21 +606,21 @@ export const GPUConfettiCanvas = ({
 
       const targetDelta = Math.max(nowSim - lastSimSeconds.get(), 0);
       lastSimSeconds.set(nowSim);
-      const schedule = scheduleDataRef.current;
+      const scheduleData = scheduleDataRef.current;
       writeFixedStepSchedule(
         simulationAccumulator.get(),
         targetDelta,
-        schedule
+        scheduleData
       );
-      const accumulator = schedule[SCHEDULE_ACCUMULATOR]!;
-      const simulationSteps = schedule[SCHEDULE_STEPS]!;
+      const accumulator = scheduleData[SCHEDULE_ACCUMULATOR]!;
+      const simulationSteps = scheduleData[SCHEDULE_STEPS]!;
       const simulationTimeBeforeFrame = simulatedSeconds.get();
       if (simulationSteps > 0) {
         const advancedSeconds = simulationSteps * FIXED_SIMULATION_STEP_SECONDS;
         simulatedSeconds.set(simulationTimeBeforeFrame + advancedSeconds);
       }
       simulationAccumulator.set(accumulator);
-      const interpolationAlpha = schedule[SCHEDULE_ALPHA]!;
+      const interpolationAlpha = scheduleData[SCHEDULE_ALPHA]!;
 
       const gDir = params.gravityDir.get();
       const cycleProgress =
@@ -588,43 +637,43 @@ export const GPUConfettiCanvas = ({
         Math.min(1, 1 - params.flipIntensity)
       );
 
-      const uniforms = uniformDataRef.current;
-      uniforms[0] = activeRawFrameState.viewportWidth;
-      uniforms[1] = activeRawFrameState.viewportHeight;
-      uniforms[2] = activeRawFrameState.focalLength;
-      uniforms[3] = opacity.get() * fadeOpacity;
-      uniforms[4] = FIXED_SIMULATION_STEP_SECONDS;
-      uniforms[5] = simulationTimeBeforeFrame;
-      uniforms[6] = drift;
-      uniforms[7] = initialScale;
-      uniforms[8] = params.windStrength;
-      uniforms[9] = params.magnusStrength;
-      uniforms[10] = continuous ? 1 : 0;
-      uniforms[11] = infinite ? 1 : 0;
-      uniforms[12] = interpolationAlpha;
-      uniforms[13] = simulationSteps;
-      uniforms[14] = cycleDuration;
-      uniforms[15] = fadeOutOnEnd ? 1 : 0;
-      uniforms[16] = DEFAULT_FADE_START;
-      uniforms[17] = params.bounceRestitution;
-      uniforms[18] = params.floorFriction;
-      uniforms[19] = params.motionBlurAmount;
-      uniforms[20] = params.shadowOpacity;
-      uniforms[21] = params.iridescence;
-      uniforms[22] = gravityPxPerSec2;
-      uniforms[23] = params.textureMode;
-      uniforms[24] = DEFAULT_LIGHT_DIR[0];
-      uniforms[25] = DEFAULT_LIGHT_DIR[1];
-      uniforms[26] = DEFAULT_LIGHT_DIR[2];
-      uniforms[27] = minVisibleScale;
-      uniforms[28] = gDir[0];
-      uniforms[29] = gDir[1];
-      uniforms[30] = gDir[2];
-      uniforms[31] = 0;
+      const uniformData = uniformDataRef.current;
+      uniformData[0] = activeRawFrameState.viewportWidth;
+      uniformData[1] = activeRawFrameState.viewportHeight;
+      uniformData[2] = activeRawFrameState.focalLength;
+      uniformData[3] = opacity.get() * fadeOpacity;
+      uniformData[4] = FIXED_SIMULATION_STEP_SECONDS;
+      uniformData[5] = simulationTimeBeforeFrame;
+      uniformData[6] = drift;
+      uniformData[7] = initialScale;
+      uniformData[8] = params.windStrength;
+      uniformData[9] = params.magnusStrength;
+      uniformData[10] = continuous ? 1 : 0;
+      uniformData[11] = infinite ? 1 : 0;
+      uniformData[12] = interpolationAlpha;
+      uniformData[13] = simulationSteps;
+      uniformData[14] = cycleDuration;
+      uniformData[15] = fadeOutOnEnd ? 1 : 0;
+      uniformData[16] = DEFAULT_FADE_START;
+      uniformData[17] = params.bounceRestitution;
+      uniformData[18] = params.floorFriction;
+      uniformData[19] = params.motionBlurAmount;
+      uniformData[20] = params.shadowOpacity;
+      uniformData[21] = params.iridescence;
+      uniformData[22] = gravityPxPerSec2;
+      uniformData[23] = params.textureMode;
+      uniformData[24] = DEFAULT_LIGHT_DIR[0];
+      uniformData[25] = DEFAULT_LIGHT_DIR[1];
+      uniformData[26] = DEFAULT_LIGHT_DIR[2];
+      uniformData[27] = minVisibleScale;
+      uniformData[28] = gDir[0];
+      uniformData[29] = gDir[1];
+      uniformData[30] = gDir[2];
+      uniformData[31] = 0;
       activeRawFrameState.queue.writeBuffer(
         activeRawFrameState.uniformBuffer,
         0,
-        uniforms
+        uniformData
       );
 
       const encoder = activeRawFrameState.device.createCommandEncoder();
@@ -696,29 +745,49 @@ export const GPUConfettiCanvas = ({
     activeRawFrameState?.device ?? null,
     activeRawFrameState?.context ?? null,
     activeRawFrameState !== null,
-    shouldScheduleFrame
+    shouldScheduleFrame,
+    activeFrameRetirement ? reportFrameRetired : undefined
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!activeRawFrameState) return;
     return () => {
+      onReadyChange(false);
       initializedRef.current = null;
       unconfigureCanvasSurface(activeRawFrameState.context, surfaceReady);
     };
-  }, [activeRawFrameState, surfaceReady]);
+  }, [activeRawFrameState, onReadyChange, surfaceReady]);
 
   useEffect(() => {
     if (!resources) return;
-    return retireGPUResourceSet(() => destroyConfettiResources(resources));
+    const frameRetirements = frameRetirementsRef.current;
+    return () => {
+      void retireGPUResourceSet(
+        resources.queue,
+        () => destroyConfettiResources(resources),
+        frameRetirements.get(resources)?.promise
+      );
+    };
   }, [resources]);
+
+  return <Canvas ref={canvasRef} style={styles.canvas} transparent />;
+};
+
+export const GPUConfettiCanvas = (props: Props) => {
+  const device = useGPUDevice();
+  const canRender =
+    device !== null &&
+    props.count > 0 &&
+    props.viewportWidth > 0 &&
+    props.viewportHeight > 0;
 
   return (
     <View
       pointerEvents="none"
-      onLayout={onContainerLayout}
-      style={[styles.container, containerStyle]}
+      onLayout={props.onContainerLayout}
+      style={[styles.container, props.containerStyle]}
     >
-      <Canvas ref={canvasRef} style={styles.canvas} transparent />
+      {canRender ? <GPUConfettiRenderer {...props} device={device} /> : null}
     </View>
   );
 };

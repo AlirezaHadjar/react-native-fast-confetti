@@ -9,9 +9,9 @@ import {
 import {
   Extrapolation,
   interpolate,
-  runOnUI,
   useSharedValue,
 } from 'react-native-reanimated';
+import { scheduleOnUI } from 'react-native-worklets';
 import {
   resolveNamedPosition,
   estimateCannonDuration,
@@ -287,7 +287,7 @@ const CannonConfettiInner = forwardRef<
             };
           });
         }
-        runOnUI(workletRestart)(resolvedPositions, resolvedConfigs);
+        scheduleOnUI(workletRestart, resolvedPositions, resolvedConfigs);
       },
       [
         workletRestart,
@@ -302,15 +302,15 @@ const CannonConfettiInner = forwardRef<
     );
 
     useImperativeHandle(ref, () => ({
-      pause: runOnUI(pause),
-      reset: runOnUI(reset),
-      resume: runOnUI(resume),
+      pause: () => scheduleOnUI(pause),
+      reset: () => scheduleOnUI(reset),
+      resume: () => scheduleOnUI(resume),
       restart: jsRestart,
     }));
 
     useEffect(() => {
       if (!ready || !reduceMotionReady) return;
-      runOnUI(() => {
+      scheduleOnUI(() => {
         if (visibleCount === 0) {
           if (autoplay) {
             workletRestart(null, null, 0);
@@ -324,9 +324,8 @@ const CannonConfettiInner = forwardRef<
           refreshBoxes();
           return;
         }
-        if (autoplay)
-          workletRestart(null, null, autoStartDelay);
-      })();
+        if (autoplay) workletRestart(null, null, autoStartDelay);
+      });
     }, [
       autoplay,
       autoStartDelay,
@@ -359,8 +358,7 @@ const CannonConfettiInner = forwardRef<
 
       const valueOffset = i * BURST_FLOAT_STRIDE;
       const metaOffset = i * BURST_META_STRIDE;
-      const originIndex =
-        packed.metadata[metaOffset + BURST_ORIGIN_INDEX] ?? 0;
+      const originIndex = packed.metadata[metaOffset + BURST_ORIGIN_INDEX] ?? 0;
 
       const currentCannons = dynamicCannonsPositions.get() || cannonsPositions;
       const cannon = currentCannons[originIndex % currentCannons.length];
@@ -373,22 +371,17 @@ const CannonConfettiInner = forwardRef<
 
       const vx = packed.values[valueOffset + BURST_VX] ?? 0;
       const vy = packed.values[valueOffset + BURST_VY] ?? 0;
-      const launchDelay =
-        packed.values[valueOffset + BURST_LAUNCH_DELAY] ?? 0;
-      const depthScale =
-        packed.values[valueOffset + BURST_DEPTH_SCALE] ?? 1;
-      const rotationX =
-        packed.values[valueOffset + BURST_ROTATION_X] ?? 0;
-      const rotationZ =
-        packed.values[valueOffset + BURST_ROTATION_Z] ?? 0;
+      const launchDelay = packed.values[valueOffset + BURST_LAUNCH_DELAY] ?? 0;
+      const depthScale = packed.values[valueOffset + BURST_DEPTH_SCALE] ?? 1;
+      const rotationX = packed.values[valueOffset + BURST_ROTATION_X] ?? 0;
+      const rotationZ = packed.values[valueOffset + BURST_ROTATION_Z] ?? 0;
       const initialRotation =
         packed.values[valueOffset + BURST_INITIAL_ROTATION] ?? 0;
       const clockwise =
         ((packed.metadata[metaOffset + BURST_FLAGS] ?? 0) &
           BURST_FLAG_CLOCKWISE) !==
         0;
-      const sizeIndex =
-        packed.metadata[metaOffset + BURST_SIZE_INDEX] ?? -1;
+      const sizeIndex = packed.metadata[metaOffset + BURST_SIZE_INDEX] ?? -1;
 
       const p = progress.get();
 
@@ -416,9 +409,7 @@ const CannonConfettiInner = forwardRef<
 
       const minFlipScale = 1 - effectiveFlipIntensity;
       const oscillatingScale =
-        rotationX === 0
-          ? 1
-          : Math.max(Math.abs(Math.cos(rx)), minFlipScale);
+        rotationX === 0 ? 1 : Math.max(Math.abs(Math.cos(rx)), minFlipScale);
       const appearScale = interpolate(
         effectiveProgress,
         [0, 0.05],

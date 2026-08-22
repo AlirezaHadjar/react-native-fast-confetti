@@ -1,15 +1,12 @@
-import { afterEach, describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, jest } from '@jest/globals';
 
 import {
+  createGPUFrameRetirement,
   destroyGPUResourceSet,
   retireGPUResourceSet,
 } from '../webgpu/resourceCleanup';
 
 describe('GPU resource cleanup', () => {
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
   it('destroys every owned resource even when one teardown throws', () => {
     const calls: string[] = [];
     const destroyable = (name: string, shouldThrow = false) => ({
@@ -28,19 +25,42 @@ describe('GPU resource cleanup', () => {
     expect(calls).toEqual(['buffer-a', 'buffer-b', 'texture', 'root']);
   });
 
-  it('waits until unmount cleanup before retiring resources', () => {
-    jest.useFakeTimers();
+  it('waits for frame retirement and submitted GPU work', async () => {
     const destroy = jest.fn();
-    const cleanup = retireGPUResourceSet(destroy);
+    let finishSubmittedWork!: () => void;
+    const queue = {
+      onSubmittedWorkDone: jest.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            finishSubmittedWork = resolve;
+          })
+      ),
+    } as unknown as GPUQueue;
+    const frame = createGPUFrameRetirement();
 
-    jest.advanceTimersByTime(200);
+    const retirement = retireGPUResourceSet(queue, destroy, frame.promise);
+    await Promise.resolve();
+    expect(queue.onSubmittedWorkDone).not.toHaveBeenCalled();
     expect(destroy).not.toHaveBeenCalled();
 
-    cleanup();
-    jest.advanceTimersByTime(99);
+    frame.resolve();
+    await Promise.resolve();
+    expect(queue.onSubmittedWorkDone).toHaveBeenCalledTimes(1);
     expect(destroy).not.toHaveBeenCalled();
 
-    jest.advanceTimersByTime(1);
+    finishSubmittedWork();
+    await retirement;
+    expect(destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('still destroys resources when the device queue is lost', async () => {
+    const destroy = jest.fn();
+    const queue = {
+      onSubmittedWorkDone: jest.fn(() => Promise.reject(new Error('lost'))),
+    } as unknown as GPUQueue;
+
+    await retireGPUResourceSet(queue, destroy);
+
     expect(destroy).toHaveBeenCalledTimes(1);
   });
 });

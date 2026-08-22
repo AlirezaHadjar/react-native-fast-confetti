@@ -7,8 +7,8 @@ import {
   useRef,
   useState,
 } from 'react';
-import { runOnUI, useSharedValue } from 'react-native-reanimated';
-import { scheduleOnRN } from 'react-native-worklets';
+import { useSharedValue } from 'react-native-reanimated';
+import { scheduleOnRN, scheduleOnUI } from 'react-native-worklets';
 
 import { GPUConfettiCanvas } from './GPUConfettiCanvas';
 import {
@@ -32,12 +32,8 @@ import { useConfettiFlakes } from '../hooks/useConfettiFlakes';
 import { useContainerDimensions } from '../hooks/useContainerDimensions';
 import { useTextureProps } from '../hooks/useTextureProps';
 import { useReduceMotionFactor } from '../hooks/useReduceMotionFactor';
-import {
-  reduceCountForMotion,
-  scaleRangeForMotion,
-  scaleRotationForMotion,
-  scaleValueForMotion,
-} from '../reduceMotion';
+import { useLatestCallback } from '../hooks/useLatestCallback';
+import { reduceCountForMotion, scaleValueForMotion } from '../reduceMotion';
 import type {
   GPUConfettiMethods,
   GPUConfettiProps,
@@ -98,11 +94,6 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       flipIntensity,
       reduceMotionFactor
     );
-    const effectiveRotation = scaleRotationForMotion(
-      rotation,
-      reduceMotionFactor
-    );
-    const effectiveWobble = scaleRangeForMotion(wobble, reduceMotionFactor);
     const effectiveWindStrength = scaleValueForMotion(
       windStrength,
       reduceMotionFactor
@@ -153,6 +144,8 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
     const [rendererReady, setRendererReady] = useState(false);
     const autoplayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const autoplaySuppressedRef = useRef(false);
+    const autoplayConfigRef = useRef({ autoplay, autoStartDelay });
+    const notifyAnimationStart = useLatestCallback(onAnimationStart);
     const clearPendingAutoplay = useCallback(() => {
       if (autoplayTimerRef.current === null) return;
       clearTimeout(autoplayTimerRef.current);
@@ -169,19 +162,53 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
     );
     const handleRestart = useCallback(() => {
       bumpSeed();
-      onAnimationStart?.();
-    }, [bumpSeed, onAnimationStart]);
+      notifyAnimationStart();
+    }, [bumpSeed, notifyAnimationStart]);
+
+    const rotationXMin = rotation?.x?.min;
+    const rotationXMax = rotation?.x?.max;
+    const rotationZMin = rotation?.z?.min;
+    const rotationZMax = rotation?.z?.max;
+    const depthMin = depth?.min;
+    const depthMax = depth?.max;
+    const wobbleMin = wobble?.min;
+    const wobbleMax = wobble?.max;
 
     const initialization = useMemo(() => {
+      const effectiveRotationX =
+        rotationXMin === undefined || rotationXMax === undefined
+          ? undefined
+          : {
+              min: scaleValueForMotion(rotationXMin, reduceMotionFactor),
+              max: scaleValueForMotion(rotationXMax, reduceMotionFactor),
+            };
+      const effectiveRotationZ =
+        rotationZMin === undefined || rotationZMax === undefined
+          ? undefined
+          : {
+              min: scaleValueForMotion(rotationZMin, reduceMotionFactor),
+              max: scaleValueForMotion(rotationZMax, reduceMotionFactor),
+            };
+      const effectiveDepth =
+        depthMin === undefined || depthMax === undefined
+          ? undefined
+          : { min: depthMin, max: depthMax };
+      const effectiveWobble =
+        wobbleMin === undefined || wobbleMax === undefined
+          ? undefined
+          : {
+              min: scaleValueForMotion(wobbleMin, reduceMotionFactor),
+              max: scaleValueForMotion(wobbleMax, reduceMotionFactor),
+            };
       const rotationX = resolveRange(
-        effectiveRotation?.x,
+        effectiveRotationX,
         DEFAULT_CONFETTI_ROTATION.x
       );
       const rotationZ = resolveRange(
-        effectiveRotation?.z,
+        effectiveRotationZ,
         DEFAULT_CONFETTI_ROTATION.z
       );
-      const depthRange = resolveRange(depth, DEFAULT_CONFETTI_DEPTH);
+      const depthRange = resolveRange(effectiveDepth, DEFAULT_CONFETTI_DEPTH);
       const wobbleRange = resolveRange(
         effectiveWobble,
         DEFAULT_CONFETTI_WOBBLE
@@ -217,9 +244,15 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       columnsNum,
       columnWidth,
       rowsNum,
-      effectiveRotation,
-      depth,
-      effectiveWobble,
+      rotationXMin,
+      rotationXMax,
+      rotationZMin,
+      rotationZMax,
+      depthMin,
+      depthMax,
+      wobbleMin,
+      wobbleMax,
+      reduceMotionFactor,
       cycleDuration,
       gravity,
     ]);
@@ -244,19 +277,19 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
 
     const imperativePause = useCallback(() => {
       suppressPendingAutoplay();
-      runOnUI(pause)();
+      scheduleOnUI(pause);
     }, [pause, suppressPendingAutoplay]);
     const imperativeReset = useCallback(() => {
       suppressPendingAutoplay();
-      runOnUI(resetAndReinitialize)();
+      scheduleOnUI(resetAndReinitialize);
     }, [resetAndReinitialize, suppressPendingAutoplay]);
     const imperativeResume = useCallback(() => {
       suppressPendingAutoplay();
-      runOnUI(resume)();
+      scheduleOnUI(resume);
     }, [resume, suppressPendingAutoplay]);
     const imperativeRestart = useCallback(() => {
       suppressPendingAutoplay();
-      runOnUI(restart)();
+      scheduleOnUI(restart);
     }, [restart, suppressPendingAutoplay]);
 
     useImperativeHandle(ref, () => ({
@@ -272,42 +305,56 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       if (infinite) {
         return;
       } else {
-        runOnUI(() => {
+        scheduleOnUI(() => {
           'worklet';
           running.set(false);
-        })();
+        });
         onAnimationEnd?.();
       }
     }, [infinite, running, onAnimationEnd]);
 
     useEffect(() => {
-      autoplaySuppressedRef.current = false;
-    }, [autoplay, autoStartDelay]);
+      const previousConfig = autoplayConfigRef.current;
+      if (
+        previousConfig.autoplay !== autoplay ||
+        previousConfig.autoStartDelay !== autoStartDelay
+      ) {
+        autoplayConfigRef.current = { autoplay, autoStartDelay };
+        autoplaySuppressedRef.current = false;
+      }
 
-    useEffect(() => {
       clearPendingAutoplay();
-      if (!ready || !reduceMotionReady || !hasParticles || !rendererReady)
-        return;
-      if (!autoplay || autoplaySuppressedRef.current) return;
-      autoplayTimerRef.current = setTimeout(() => {
+      if (
+        ready &&
+        reduceMotionReady &&
+        hasParticles &&
+        rendererReady &&
+        autoplay &&
+        !autoplaySuppressedRef.current
+      ) {
+        autoplayTimerRef.current = setTimeout(() => {
+          autoplayTimerRef.current = null;
+          if (autoplaySuppressedRef.current || running.get()) return;
+          scheduleOnUI(beginCycle);
+          notifyAnimationStart();
+        }, autoStartDelay);
+      }
+      return () => {
+        if (autoplayTimerRef.current === null) return;
+        clearTimeout(autoplayTimerRef.current);
         autoplayTimerRef.current = null;
-        if (autoplaySuppressedRef.current) return;
-        if (running.get()) return;
-        runOnUI(beginCycle)();
-        onAnimationStart?.();
-      }, autoStartDelay);
-      return clearPendingAutoplay;
+      };
     }, [
       ready,
       autoplay,
       autoStartDelay,
       running,
       beginCycle,
-      onAnimationStart,
       hasParticles,
       reduceMotionReady,
       rendererReady,
       clearPendingAutoplay,
+      notifyAnimationStart,
     ]);
 
     // Default gravity direction is +Y (down). Caller can override with a

@@ -10,9 +10,9 @@ import {
   Easing,
   Extrapolation,
   interpolate,
-  runOnUI,
   useSharedValue,
 } from 'react-native-reanimated';
+import { scheduleOnUI } from 'react-native-worklets';
 import { ConfettiCanvas } from './ConfettiCanvas';
 import {
   DEFAULT_BOXES_COUNT,
@@ -234,19 +234,20 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
     );
 
     useImperativeHandle(ref, () => ({
-      pause: runOnUI(pause),
-      reset: runOnUI(() => {
-        'worklet';
-        reset();
-        cycleCount.set(0);
-      }),
-      resume: runOnUI(resume),
-      restart: runOnUI(restart),
+      pause: () => scheduleOnUI(pause),
+      reset: () =>
+        scheduleOnUI(() => {
+          'worklet';
+          reset();
+          cycleCount.set(0);
+        }),
+      resume: () => scheduleOnUI(resume),
+      restart: () => scheduleOnUI(restart),
     }));
 
     useEffect(() => {
       if (!ready || !reduceMotionReady) return;
-      runOnUI(() => {
+      scheduleOnUI(() => {
         if (visibleCount === 0) {
           if (autoplay) {
             restart(0);
@@ -266,7 +267,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
         } else {
           refreshBoxes();
         }
-      })();
+      });
     }, [
       autoplay,
       autoStartDelay,

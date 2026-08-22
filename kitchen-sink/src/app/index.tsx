@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
-import { FlatList, StyleSheet, Dimensions, Platform } from 'react-native';
-import { colors } from '../constants/colors';
+import { Dimensions, FlatList, Platform, StyleSheet } from 'react-native';
 import {
   CannonConfetti as SkiaCannonConfetti,
   Confetti as SkiaConfetti,
@@ -14,13 +13,13 @@ import {
   PIConfetti as WebGPUPIConfetti,
 } from '../../../src/gpu';
 import { ModeCard } from '../components/ModeCard';
-import {
-  PERFORMANCE_PARTICLE_COUNT,
-  type RendererType,
-} from '../constants/config';
+import { colors } from '../constants/colors';
+import { type RendererType } from '../constants/config';
 import { useRenderer } from '../hooks/useRenderer';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+const MENU_ITEM_FLAKE_COUNT = 200;
 
 const PADDING = 16;
 const ITEM_HEIGHT = 140;
@@ -51,7 +50,7 @@ const createModes = (renderer: RendererType) => {
       render: () => (
         <Confetti
           autoplay
-          count={PERFORMANCE_PARTICLE_COUNT}
+          count={MENU_ITEM_FLAKE_COUNT}
           containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
           verticalSpacing={50}
           infinite
@@ -69,7 +68,7 @@ const createModes = (renderer: RendererType) => {
       render: () => (
         <ContinuousConfetti
           autoplay
-          count={PERFORMANCE_PARTICLE_COUNT}
+          count={MENU_ITEM_FLAKE_COUNT}
           containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
           verticalSpacing={120}
           flakeStyle="glossy"
@@ -93,7 +92,7 @@ const createModes = (renderer: RendererType) => {
         >
           <PIConfetti.Origin
             blastPosition="center"
-            count={PERFORMANCE_PARTICLE_COUNT}
+            count={MENU_ITEM_FLAKE_COUNT}
             initialSpeed={4}
           >
             {previewFlakes(PIConfetti.Flake)}
@@ -119,7 +118,7 @@ const createModes = (renderer: RendererType) => {
         >
           <CannonConfetti.Origin
             position="bottom-left"
-            count={PERFORMANCE_PARTICLE_COUNT}
+            count={MENU_ITEM_FLAKE_COUNT}
             initialSpeed={6}
             spread={Math.PI / 3}
             depth={{ min: 1, max: 1.1 }}
@@ -128,7 +127,7 @@ const createModes = (renderer: RendererType) => {
           </CannonConfetti.Origin>
           <CannonConfetti.Origin
             position="bottom-right"
-            count={PERFORMANCE_PARTICLE_COUNT}
+            count={MENU_ITEM_FLAKE_COUNT}
             initialSpeed={6}
             spread={Math.PI / 3}
             depth={{ min: 1, max: 1.1 }}
@@ -137,7 +136,7 @@ const createModes = (renderer: RendererType) => {
           </CannonConfetti.Origin>
           <CannonConfetti.Origin
             position="bottom-center"
-            count={PERFORMANCE_PARTICLE_COUNT}
+            count={MENU_ITEM_FLAKE_COUNT}
             initialSpeed={4}
             spread={Math.PI / 3}
           >

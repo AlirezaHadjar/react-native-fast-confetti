@@ -9,13 +9,10 @@ import {
 import {
   Extrapolation,
   interpolate,
-  runOnUI,
   useSharedValue,
 } from 'react-native-reanimated';
-import {
-  resolveNamedPosition,
-  estimatePIDuration,
-} from './utils';
+import { scheduleOnUI } from 'react-native-worklets';
+import { resolveNamedPosition, estimatePIDuration } from './utils';
 import {
   DEFAULT_PI_CONFETTI_GRAVITY,
   DEFAULT_PI_CONFETTI_DRAG,
@@ -226,25 +223,29 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         let resolvedDelays: number[] | null = null;
         if (options.origins) {
           resolvedPositions = options.origins.map((o) =>
-            resolveNamedPosition(o.blastPosition, containerWidth, containerHeight)
+            resolveNamedPosition(
+              o.blastPosition,
+              containerWidth,
+              containerHeight
+            )
           );
           resolvedDelays = options.origins.map((o) => o.delay ?? 0);
         }
-        runOnUI(workletRestart)(resolvedPositions, resolvedDelays);
+        scheduleOnUI(workletRestart, resolvedPositions, resolvedDelays);
       },
       [workletRestart, containerWidth, containerHeight]
     );
 
     useImperativeHandle(ref, () => ({
-      pause: runOnUI(pause),
-      reset: runOnUI(reset),
-      resume: runOnUI(resume),
+      pause: () => scheduleOnUI(pause),
+      reset: () => scheduleOnUI(reset),
+      resume: () => scheduleOnUI(resume),
       restart: jsRestart,
     }));
 
     useEffect(() => {
       if (!ready || !reduceMotionReady) return;
-      runOnUI(() => {
+      scheduleOnUI(() => {
         if (visibleCount === 0) {
           if (autoplay) {
             workletRestart(null, null, 0);
@@ -258,9 +259,8 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
           refreshBoxes();
           return;
         }
-        if (autoplay)
-          workletRestart(null, null, autoStartDelay);
-      })();
+        if (autoplay) workletRestart(null, null, autoStartDelay);
+      });
     }, [
       autoplay,
       autoStartDelay,
@@ -291,13 +291,10 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
 
       const valueOffset = i * BURST_FLOAT_STRIDE;
       const metaOffset = i * BURST_META_STRIDE;
-      const originIndex =
-        packed.metadata[metaOffset + BURST_ORIGIN_INDEX] ?? 0;
+      const originIndex = packed.metadata[metaOffset + BURST_ORIGIN_INDEX] ?? 0;
 
-      const currentPositions =
-        dynamicBlastPositions.get() || blastPositions;
-      const blast =
-        currentPositions[originIndex % currentPositions.length];
+      const currentPositions = dynamicBlastPositions.get() || blastPositions;
+      const blast = currentPositions[originIndex % currentPositions.length];
       if (!blast) {
         val.set(0, 0, -10000, -10000);
         return;
@@ -307,24 +304,18 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
 
       const vx = packed.values[valueOffset + BURST_VX] ?? 0;
       const vy = packed.values[valueOffset + BURST_VY] ?? 0;
-      const launchDelay =
-        packed.values[valueOffset + BURST_LAUNCH_DELAY] ?? 0;
-      const depthScale =
-        packed.values[valueOffset + BURST_DEPTH_SCALE] ?? 1;
-      const rotationX =
-        packed.values[valueOffset + BURST_ROTATION_X] ?? 0;
-      const rotationZ =
-        packed.values[valueOffset + BURST_ROTATION_Z] ?? 0;
+      const launchDelay = packed.values[valueOffset + BURST_LAUNCH_DELAY] ?? 0;
+      const depthScale = packed.values[valueOffset + BURST_DEPTH_SCALE] ?? 1;
+      const rotationX = packed.values[valueOffset + BURST_ROTATION_X] ?? 0;
+      const rotationZ = packed.values[valueOffset + BURST_ROTATION_Z] ?? 0;
       const initialRotation =
         packed.values[valueOffset + BURST_INITIAL_ROTATION] ?? 0;
-      const originDelay =
-        packed.values[valueOffset + BURST_ORIGIN_DELAY] ?? 0;
+      const originDelay = packed.values[valueOffset + BURST_ORIGIN_DELAY] ?? 0;
       const clockwise =
         ((packed.metadata[metaOffset + BURST_FLAGS] ?? 0) &
           BURST_FLAG_CLOCKWISE) !==
         0;
-      const sizeIndex =
-        packed.metadata[metaOffset + BURST_SIZE_INDEX] ?? -1;
+      const sizeIndex = packed.metadata[metaOffset + BURST_SIZE_INDEX] ?? -1;
 
       const p = progress.get();
 
@@ -371,9 +362,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       // Scale: appearance animation at launch + oscillation
       const minFlipScale = 1 - effectiveFlipIntensity;
       const oscillatingScale =
-        rotationX === 0
-          ? 1
-          : Math.max(Math.abs(Math.cos(rx)), minFlipScale);
+        rotationX === 0 ? 1 : Math.max(Math.abs(Math.cos(rx)), minFlipScale);
       const appearScale = interpolate(
         effectiveProgress,
         [0, 0.05],

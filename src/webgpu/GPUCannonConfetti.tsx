@@ -8,8 +8,7 @@ import {
   type ForwardRefExoticComponent,
   type RefAttributes,
 } from 'react';
-import { runOnUI } from 'react-native-reanimated';
-import { scheduleOnRN } from 'react-native-worklets';
+import { scheduleOnRN, scheduleOnUI } from 'react-native-worklets';
 
 import {
   DEFAULT_CANNON_CONFETTI_DRAG,
@@ -286,9 +285,9 @@ const CannonConfettiInner = forwardRef<
     );
 
     useImperativeHandle(ref, () => ({
-      pause: runOnUI(pause),
-      reset: runOnUI(reset),
-      resume: runOnUI(resume),
+      pause: () => scheduleOnUI(pause),
+      reset: () => scheduleOnUI(reset),
+      resume: () => scheduleOnUI(resume),
       restart: jsRestart,
     }));
 
@@ -298,7 +297,7 @@ const CannonConfettiInner = forwardRef<
       if (!autoplay) return;
       if (startRequest.nonce !== 0) return;
       if (running.get()) return;
-      runOnUI(runAnimation)(autoStartDelay);
+      scheduleOnUI(runAnimation, autoStartDelay);
     }, [
       ready,
       renderCount,
@@ -315,7 +314,7 @@ const CannonConfettiInner = forwardRef<
       if (startRequest.nonce === 0) return;
       if (!ready || !reduceMotionReady || !rendererReady || renderCount === 0)
         return;
-      runOnUI(runAnimation)(startRequest.delay, startRequest.notifyStart);
+      scheduleOnUI(runAnimation, startRequest.delay, startRequest.notifyStart);
     }, [
       startRequest,
       ready,
