@@ -1,5 +1,11 @@
 import { useRSXformBuffer } from '@shopify/react-native-skia';
-import { useCallback, useEffect, useImperativeHandle, forwardRef } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  forwardRef,
+} from 'react';
 import {
   Extrapolation,
   interpolate,
@@ -7,7 +13,6 @@ import {
   useSharedValue,
 } from 'react-native-reanimated';
 import {
-  generateCannonBoxesArray,
   resolveNamedPosition,
   estimateCannonDuration,
   type CannonConfig,
@@ -27,7 +32,7 @@ import type {
   NamedPosition,
   Position,
 } from './types';
-import { useConfettiLogic } from './hooks/useConfettiLogic';
+import { usePackedConfettiLogic } from './hooks/useConfettiLogic';
 import { useCannonOrigins } from './hooks/useCannonOrigins';
 import { useTextureProps } from './hooks/useTextureProps';
 import { useAnimationLifecycle } from './hooks/useAnimationLifecycle';
@@ -39,6 +44,23 @@ import {
 } from './reduceMotion';
 import { ConfettiCanvas } from './ConfettiCanvas';
 import { Origin, Flake } from './CannonConfettiComponents';
+import {
+  BURST_DEPTH_SCALE,
+  BURST_FLAGS,
+  BURST_FLAG_CLOCKWISE,
+  BURST_FLOAT_STRIDE,
+  BURST_INITIAL_ROTATION,
+  BURST_LAUNCH_DELAY,
+  BURST_META_STRIDE,
+  BURST_ORIGIN_INDEX,
+  BURST_ROTATION_X,
+  BURST_ROTATION_Z,
+  BURST_SIZE_INDEX,
+  BURST_VX,
+  BURST_VY,
+  generatePackedCannonBoxes,
+  type PackedBurstBoxes,
+} from './packedBurstBoxes';
 
 const CannonConfettiInner = forwardRef<
   CannonConfettiMethods,
@@ -132,19 +154,21 @@ const CannonConfettiInner = forwardRef<
     const dynamicCannonsPositions = useSharedValue<Position[] | null>(null);
     const dynamicCannonConfigs = useSharedValue<CannonConfig[] | null>(null);
 
-    const boxes = useSharedValue(
-      generateCannonBoxesArray({
-        cannonConfigs,
-        cannonsPositions,
-        containerHeight,
-        launchDelayMax,
-        sizeColorOverrides: colorOverrides,
-        parentColorCount,
-        sizeIsTextured,
-      })
-    );
+    // Generation belongs on the UI runtime in refreshBoxes. Passing the
+    // generated array to useSharedValue evaluates it again on every React
+    // render even though the hook only consumes its first value. At large
+    // counts that created and serialized several discarded object graphs.
+    const boxes = useSharedValue<PackedBurstBoxes | null>(null);
 
-    const { texture, sprites } = useConfettiLogic({
+    useLayoutEffect(() => {
+      return () => {
+        boxes.set(null);
+        dynamicCannonsPositions.set(null);
+        dynamicCannonConfigs.set(null);
+      };
+    }, [boxes, dynamicCannonConfigs, dynamicCannonsPositions]);
+
+    const { texture, sprites } = usePackedConfettiLogic({
       sizeVariations,
       colors: allColors,
       boxes,
@@ -157,7 +181,7 @@ const CannonConfettiInner = forwardRef<
       const currentConfigs = dynamicCannonConfigs.get() || cannonConfigs;
       const currentPositions =
         dynamicCannonsPositions.get() || cannonsPositions;
-      const newBoxes = generateCannonBoxesArray({
+      const newBoxes = generatePackedCannonBoxes({
         cannonConfigs: currentConfigs,
         cannonsPositions: currentPositions,
         containerHeight,
@@ -327,14 +351,19 @@ const CannonConfettiInner = forwardRef<
         return;
       }
 
-      const piece = boxes.get()[i];
-      if (!piece) {
+      const packed = boxes.get();
+      if (!packed) {
         val.set(0, 0, -10000, -10000);
         return;
       }
 
+      const valueOffset = i * BURST_FLOAT_STRIDE;
+      const metaOffset = i * BURST_META_STRIDE;
+      const originIndex =
+        packed.metadata[metaOffset + BURST_ORIGIN_INDEX] ?? 0;
+
       const currentCannons = dynamicCannonsPositions.get() || cannonsPositions;
-      const cannon = currentCannons[piece.cannonIndex % currentCannons.length];
+      const cannon = currentCannons[originIndex % currentCannons.length];
       if (!cannon) {
         val.set(0, 0, -10000, -10000);
         return;
@@ -342,13 +371,30 @@ const CannonConfettiInner = forwardRef<
       const cannonX = cannon.x;
       const cannonY = cannon.y;
 
-      const { vx, vy } = piece;
+      const vx = packed.values[valueOffset + BURST_VX] ?? 0;
+      const vy = packed.values[valueOffset + BURST_VY] ?? 0;
+      const launchDelay =
+        packed.values[valueOffset + BURST_LAUNCH_DELAY] ?? 0;
+      const depthScale =
+        packed.values[valueOffset + BURST_DEPTH_SCALE] ?? 1;
+      const rotationX =
+        packed.values[valueOffset + BURST_ROTATION_X] ?? 0;
+      const rotationZ =
+        packed.values[valueOffset + BURST_ROTATION_Z] ?? 0;
+      const initialRotation =
+        packed.values[valueOffset + BURST_INITIAL_ROTATION] ?? 0;
+      const clockwise =
+        ((packed.metadata[metaOffset + BURST_FLAGS] ?? 0) &
+          BURST_FLAG_CLOCKWISE) !==
+        0;
+      const sizeIndex =
+        packed.metadata[metaOffset + BURST_SIZE_INDEX] ?? -1;
 
       const p = progress.get();
 
       const effectiveProgress = interpolate(
         p,
-        [piece.launchDelay, 1],
+        [launchDelay, 1],
         [0, 1],
         Extrapolation.CLAMP
       );
@@ -364,15 +410,13 @@ const CannonConfettiInner = forwardRef<
         (scaledGravity / safeVDrag) * t +
         ((vy - scaledGravity / safeVDrag) / safeVDrag) * vExpDecay;
 
-      const rotationDirection = piece.clockwise ? 1 : -1;
-      const rz =
-        piece.initialRotation + p * rotationDirection * piece.maxRotation.z;
-      const rx =
-        piece.initialRotation + p * rotationDirection * piece.maxRotation.x;
+      const rotationDirection = clockwise ? 1 : -1;
+      const rz = initialRotation + p * rotationDirection * rotationZ;
+      const rx = initialRotation + p * rotationDirection * rotationX;
 
       const minFlipScale = 1 - effectiveFlipIntensity;
       const oscillatingScale =
-        piece.maxRotation.x === 0
+        rotationX === 0
           ? 1
           : Math.max(Math.abs(Math.cos(rx)), minFlipScale);
       const appearScale = interpolate(
@@ -381,9 +425,9 @@ const CannonConfettiInner = forwardRef<
         [initialScale, 1],
         Extrapolation.CLAMP
       );
-      const scale = appearScale * oscillatingScale * piece.depthScale;
+      const scale = appearScale * oscillatingScale * depthScale;
 
-      const size = sizeVariations[piece.sizeIndex];
+      const size = sizeVariations[sizeIndex];
       if (!size) {
         val.set(0, 0, -10000, -10000);
         return;
@@ -396,6 +440,13 @@ const CannonConfettiInner = forwardRef<
 
       val.set(c, s, tx - c * px + s * py, ty - s * px - c * py);
     });
+
+    useLayoutEffect(() => {
+      return () => {
+        transforms.set([]);
+        sprites.set([]);
+      };
+    }, [sprites, transforms]);
 
     return (
       <ConfettiCanvas

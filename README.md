@@ -39,6 +39,7 @@ separate entry point:
 
 ```sh
 yarn add react-native-webgpu typegpu
+yarn add --dev unplugin-typegpu @babel/plugin-transform-class-static-block
 ```
 
 ```tsx
@@ -76,9 +77,11 @@ plugins: [
 
 The WebGPU entry exports `Confetti`, `ContinuousConfetti`, `PIConfetti`, and
 `CannonConfetti` with the same component API. On iOS, mount one active WebGPU
-canvas at a time (normally one full-screen overlay); additional GPU canvases wait
+canvas at a time (normally one full-screen canvas); additional GPU canvases wait
 for the active owner to unmount because the current native WebGPU bridge cannot
 safely present multiple `CAMetalLayer` swapchains concurrently.
+
+Read the [WebGPU caveats](#webgpu-caveats)
 
 ## Components
 
@@ -492,6 +495,13 @@ Define flake sizes as children of any confetti component (or origin).
 | `0.2.0` - `0.7.0` | `0.74.5`                 | `1.4.2`          | `3.15.5`               | Not required directly     | React Native `>=0.74`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.15.5`                    |
 
 For exact app support, check the compatibility pages for the installed versions of Reanimated and Worklets. For Skia, follow the official installation requirements: current Skia versions require React Native `>=0.79` and React `>=19`; React Native `<=0.78` / React `<=18` projects should use Skia `1.12.4` or below.
+
+## WebGPU caveats
+
+### Liquid Glass
+
+When a Liquid Glass or blur component is rendered above confetti, the OS must
+recalculate the effect every frame, which can cause performance drops. It's recommended to render the confetti component on top of everything else.
 
 ## Migrating from v1
 

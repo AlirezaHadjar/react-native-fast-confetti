@@ -22,16 +22,24 @@ const acquireIOSDevice = (ownerId: number, connect: () => void) => {
   }
 };
 
-const releaseIOSDevice = (ownerId: number) => {
+const destroyDevice = (device: GPUDevice | null) => {
+  if (!device) return;
+  try {
+    device.destroy();
+  } catch {
+    // A device that was already lost has no remaining resources to release.
+  }
+};
+
+const releaseIOSDevice = (ownerId: number, device: GPUDevice | null) => {
   iosDeviceWaiters.delete(ownerId);
   if (iosDeviceOwner !== ownerId) return;
   iosDeviceOwner = undefined;
 
-  // Let the frame registry retire and Metal schedule the final presentation
-  // before another CAMetalLayer starts recording. Explicit resource/device
-  // destruction is intentionally avoided: RN WebGPU's cross-runtime native
-  // finalizers are the safe owner of that lifecycle.
+  // Let the UI-runtime frame registry retire and Metal finish the final
+  // presentation before releasing the device and handing off the swapchain.
   setTimeout(() => {
+    destroyDevice(device);
     if (iosDeviceOwner !== undefined) return;
     const next = iosDeviceWaiters.entries().next().value as
       | [number, () => void]
@@ -72,7 +80,10 @@ export const useGPUDevice = () => {
           );
         }
         const nextDevice = await adapter.requestDevice();
-        if (cancelled) return;
+        if (cancelled) {
+          destroyDevice(nextDevice);
+          return;
+        }
         currentDevice = nextDevice;
         setDevice(nextDevice);
 
@@ -94,8 +105,15 @@ export const useGPUDevice = () => {
     }
     return () => {
       cancelled = true;
+      const deviceToDestroy = currentDevice;
       currentDevice = null;
-      if (Platform.OS === 'ios') releaseIOSDevice(ownerId);
+      if (Platform.OS === 'ios') {
+        releaseIOSDevice(ownerId, deviceToDestroy);
+      } else {
+        // Resource-set cleanup runs after the frame-hook cleanup and retires
+        // its buffers at 100 ms. Keep the device alive beyond that boundary.
+        setTimeout(() => destroyDevice(deviceToDestroy), 250);
+      }
     };
   }, [ownerId]);
 

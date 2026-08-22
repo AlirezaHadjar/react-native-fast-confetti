@@ -16,6 +16,9 @@ WebGPU stack is implemented on this branch:
 - Burst renderers submit nothing while idle.
 - Pipelines, buffers, samplers, textures, atlases, and typed-array scratch space
   are created outside the hot loop and reused.
+- Unmount retires the UI frame registration, unconfigures the canvas, destroys
+  every owned buffer and texture, then destroys the device after the final
+  presentation grace period.
 - The public Skia renderer remains the default. WebGPU is an opt-in entry point,
   so existing users do not inherit its native dependencies.
 
@@ -142,8 +145,7 @@ The hot path does not:
 - Rasterize Skia images or SVGs.
 - Regenerate spawn data for semantically unchanged props.
 - Submit burst frames after the animation is idle.
-- Perform explicit cross-runtime GPU destruction, which is unsafe in the
-  current native bridge.
+- Create a new `GPUQueue` JSI wrapper for every write or submission.
 
 ## Resource and Lifecycle Strategy
 
@@ -162,9 +164,13 @@ The hot path does not:
   angular clamps compare squared magnitudes and only take an inverse square root
   when clamping is actually required.
 - Native submission reuses coordinator-owned render-pass descriptors and a
-  command-buffer sequence. Frame callbacks return the command buffer directly
-  and receive timestamps as primitives instead of allocating JavaScript frame,
-  descriptor, attachment, submission, and submit-array objects every vsync.
+  single submit array. The descriptor's swapchain view and submit array are
+  cleared in `finally` blocks after every frame, including failed submissions,
+  so neither can become a cross-runtime GC root.
+- The device queue is cached once per resource set/runtime registration. This
+  removed the observed frame-scaled accumulation of hundreds of `GPUQueue` JSI
+  wrappers. The submit array and last swapchain view are cleared immediately
+  after presentation so they do not become accidental GC roots.
 - Origin arrays are also stabilized by semantic value so readiness state changes
   cannot start a resource-rebuild loop.
 - Falling confetti uploads a fixed-size initialization uniform plus one record
@@ -183,10 +189,21 @@ The hot path does not:
   against a stale, smaller storage buffer.
 - Device loss clears the active device and reconnects.
 - On iOS, device ownership transfers only after the old frame registration has
-  retired and the last presentation has been scheduled.
-- Native GPU resources are released by the bridge's native finalizers. Explicit
-  destruction across runtimes caused reproducible Dawn/Metal failures and is
-  intentionally avoided until upstream ownership becomes safe.
+  retired, the canvas has been unconfigured, and the last presentation has had
+  time to enter Metal's queue.
+- The only asynchronous resource-construction stage runs before GPU allocation.
+  Its temporary Skia paint, snapshot, and surface objects are explicitly
+  disposed, and uploaded or cancelled `ImageBitmap` pixel stores are explicitly
+  closed. Completed or cancelled GPU construction destroys every buffer and
+  texture. Mounted resource sets do the same on replacement or unmount; device
+  destruction is delayed until after UI-runtime retirement. Teardown is
+  idempotent and tolerates a device-loss race.
+- The Skia comparison path no longer evaluates count-sized burst generation as
+  a `useSharedValue` argument on every React render. PI and Cannon retain their
+  identical physics in two typed arrays instead of an object graph per particle,
+  and falling trajectories use a contiguous `Float32Array`. Layout cleanup
+  clears particle, trajectory, sprite, and transform shared values before the
+  native canvas is removed.
 
 ## Public Packaging
 
@@ -239,6 +256,10 @@ Automated tests cover:
 - Semantic flake memoization across equivalent React values.
 - Compact falling, PI, and Cannon initialization payloads at 20,000 particles.
 - Exact continuous-phase permutation coverage and GPU WGSL kernel resolution.
+- Exact field parity between legacy Skia burst objects and the packed PI/Cannon
+  buffers, including velocity, timing, depth, rotation, selection, and flags.
+- GPU resource cleanup continuing after an individual device-loss exception,
+  and resource retirement occurring only after component cleanup.
 
 Build validation covers:
 
@@ -254,6 +275,51 @@ The iOS simulator visually exercised single, continuous, PI, and cannon scenes,
 including a 1,000-particle PI burst. A single GPU surface remained stable during
 extended stress. The simulator is a 60 Hz environment, so it cannot honestly
 prove physical-device 120 Hz frame pacing.
+
+### 20,000-count memory profile (Debug simulator)
+
+The profiling workload positively identified each route, used the same installed
+development build and renderer menu, waited for initialization, and measured the
+process with `footprint`, `vmmap`, `heap`, and `sample`:
+
+| Scenario | Effective particles | Physical footprint |
+| --- | ---: | ---: |
+| Clean Single WebGPU | 20,000 | ~404 MB |
+| Clean Cannon WebGPU | 60,000 (20k × 3 origins) | ~401 MB |
+| WebGPU route sequence | 20k → 40k → 60k | ~397–533 MB plateau |
+| Single Skia | 20,000 | ~529 MB |
+| Cannon Skia before cleanup work | 60,000 | ~1,372 MB |
+| Cannon Skia after eager-generation removal and packed state | 60,000 | ~718 MB |
+
+The original ~1.5 GB report was therefore reproducible and causal: it was the
+60,000-particle Skia Cannon path plus retained high-water allocations, not the
+WebGPU particle buffers. Before the fixes, `heap` also showed roughly 504 live
+`GPUQueue` wrappers after a short run. Queue caching reduced that to four in a
+clean active scene. Repeated WebGPU screen changes now remain in a bounded band
+instead of growing with each mount.
+
+A clean 20,000-particle WebGPU run measured ~402 MB. Cycling Single →
+Continuous → PI → Cannon → Single ended at ~427 MB. The bridge-owned command
+buffer/texture wrappers rose during the cycle, then fell from roughly 360 to 50
+after simulator memory-pressure collections. That proves those wrappers are
+collectible rather than retained by the component graph. Their freed allocator
+pages need not be returned to the OS immediately, so Activity Monitor's process
+footprint is a high-water measurement rather than a live-object count.
+
+These are deliberately Debug-simulator figures. They include Expo development
+client, Metro/debug metadata, two Hermes runtimes, Reanimated/Worklets, Skia,
+Dawn, and allocator high-water pages. They are not a valid Release-device RAM
+SLO. A 20,000-particle falling WebGPU allocation itself is only a few megabytes
+of storage buffers; the remaining process footprint is framework and transient
+command-encoding overhead.
+
+Raw `xctrace` correctly attached to the simulator's host process, but Xcode 26.6
+classified it as macOS: Animation Hitches reported “not supported on this
+platform,” and Time Profiler produced an empty/missing-template document. Those
+files were rejected as evidence rather than reported as successful traces.
+Native `sample`, `heap`, `vmmap`, and `footprint` produced valid data. Final
+ProMotion, thermal, and GPU-counter acceptance still requires a Release build
+on physical hardware.
 
 ## Release Performance Matrix
 
@@ -311,6 +377,10 @@ Further structural improvement now requires one of these native changes:
 2. React Native WebGPU fixes multiple-swapchain command ownership on iOS.
 3. The library gains a single native render view backed directly by Metal on
    iOS and Vulkan on Android, with WebGPU retained for web.
+4. React Native WebGPU releases consumed command encoders, pass encoders,
+   command buffers, and presented swapchain texture wrappers eagerly instead of
+   waiting for the Worklets Hermes GC. This is the remaining source of the
+   periodic native-heap sawtooth in an active scene.
 
 Option 1 is the only plausible next step that preserves one renderer and avoids
 duplicating the simulation. A direct Metal/Vulkan rewrite is justified only if

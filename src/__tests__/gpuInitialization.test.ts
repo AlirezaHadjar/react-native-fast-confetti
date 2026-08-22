@@ -96,6 +96,36 @@ describe('GPU-native particle initialization', () => {
     expect(origins[1]!.targetStartAndMode).toEqual([0, 0, 12_000, 0]);
   });
 
+  it('cycles a shorter PI restart position list across configured origins', () => {
+    const configs: PIConfig[] = [
+      {
+        spread: Math.PI,
+        initialSpeed: 1,
+        count: 10,
+        speedVariation: { min: 1, max: 1 },
+        colorStart: 0,
+        colorCount: 1,
+        sizeStart: 0,
+        sizeCount: 1,
+      },
+      {
+        spread: Math.PI,
+        initialSpeed: 1,
+        count: 10,
+        speedVariation: { min: 1, max: 1 },
+        colorStart: 0,
+        colorCount: 1,
+        sizeStart: 0,
+        sizeCount: 1,
+      },
+    ];
+
+    const origins = toPIBurstOrigins(configs, [{ x: 120, y: 480 }], [0]);
+
+    expect(origins[0]!.originAndCount.slice(0, 2)).toEqual([120, 480]);
+    expect(origins[1]!.originAndCount.slice(0, 2)).toEqual([120, 480]);
+  });
+
   it('packs Cannon targets and prefix ranges without expanding particles', () => {
     const configs: CannonConfig[] = [
       {
@@ -129,12 +159,7 @@ describe('GPU-native particle initialization', () => {
 
     expect(origins).toHaveLength(2);
     expect(origins[0]!.targetStartAndMode).toEqual([200, 100, 0, 1]);
-    expect(origins[1]!.targetStartAndMode).toEqual([
-      250,
-      150,
-      10_000,
-      1,
-    ]);
+    expect(origins[1]!.targetStartAndMode).toEqual([250, 150, 10_000, 1]);
   });
 
   it('resolves both initialization kernels to WGSL', () => {

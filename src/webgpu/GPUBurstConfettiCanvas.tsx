@@ -11,6 +11,7 @@ import type {
 import type { GPUBurstInitialization } from './burstResourcePacking';
 import {
   createBurstConfettiResources,
+  destroyBurstConfettiResources,
   type BurstConfettiResources,
 } from './hooks/useBurstConfettiResources';
 import {
@@ -23,7 +24,11 @@ import {
   type DedicatedGPUFrameTarget,
 } from './hooks/useDedicatedGPUFrame';
 import { useGPUDevice } from './hooks/useGPUDevice';
-import { configureCanvasSurface } from './configureCanvasSurface';
+import {
+  configureCanvasSurface,
+  unconfigureCanvasSurface,
+} from './configureCanvasSurface';
+import { retireGPUResourceSet } from './resourceCleanup';
 
 type NumericValue = {
   get: () => number;
@@ -59,6 +64,7 @@ type Props = {
 
 type RawFrameState = {
   device: GPUDevice;
+  queue: GPUQueue;
   context: GPUCanvasContext & { present?: () => void };
   uniformBuffer: GPUBuffer;
   initPipeline: GPUComputePipeline;
@@ -98,7 +104,7 @@ const initializeParticles = (
   pass.setBindGroup(0, state.initBindGroup);
   pass.dispatchWorkgroups(state.workgroupCount);
   pass.end();
-  state.device.queue.submit([encoder.finish()]);
+  state.queue.submit([encoder.finish()]);
 };
 
 export const GPUBurstConfettiCanvas = ({
@@ -156,19 +162,25 @@ export const GPUBurstConfettiCanvas = ({
     onReadyChange(false);
     let cancelled = false;
     (async () => {
-      const res = await createBurstConfettiResources({
-        device,
-        count,
-        originCount: initialization.origins.length,
-        sizeVariations,
-        allColors,
-        colorOverrides,
-        parentColorCount,
-      });
-      if (cancelled) {
-        return;
+      try {
+        const res = await createBurstConfettiResources({
+          device,
+          count,
+          originCount: initialization.origins.length,
+          sizeVariations,
+          allColors,
+          colorOverrides,
+          parentColorCount,
+          isCancelled: () => cancelled,
+        });
+        if (cancelled) {
+          destroyBurstConfettiResources(res);
+          return;
+        }
+        setResources(res);
+      } catch (error) {
+        if (!cancelled) console.error(error);
       }
-      setResources(res);
     })();
     return () => {
       cancelled = true;
@@ -220,6 +232,7 @@ export const GPUBurstConfettiCanvas = ({
 
     const nextRawFrameState: RawFrameState = {
       device,
+      queue: resources.queue,
       context,
       uniformBuffer: resources.uniforms.buffer.buffer,
       initPipeline: resources.root.unwrap(initPipeline),
@@ -270,6 +283,7 @@ export const GPUBurstConfettiCanvas = ({
 
   const activeRawFrameState =
     rawFrameState?.device === device &&
+    rawFrameState.uniformBuffer === resources?.uniforms.buffer.buffer &&
     rawFrameState.count === count &&
     rawFrameState.viewportWidth === viewportWidth &&
     rawFrameState.viewportHeight === viewportHeight
@@ -319,9 +333,11 @@ export const GPUBurstConfettiCanvas = ({
 
   const shouldScheduleFrame = useCallback(() => {
     'worklet';
+    const currentProgress = progress.get();
     return (
       surfaceReady.get() &&
-      (running.get() || progress.get() !== lastRenderedProgress.get())
+      (currentProgress !== lastRenderedProgress.get() ||
+        (running.get() && currentProgress < 1))
     );
   }, [lastRenderedProgress, progress, running, surfaceReady]);
 
@@ -356,7 +372,7 @@ export const GPUBurstConfettiCanvas = ({
       uniforms[11] = verticalDrag;
       uniforms[12] = 0;
       uniforms[13] = 0;
-      activeRawFrameState.device.queue.writeBuffer(
+      activeRawFrameState.queue.writeBuffer(
         activeRawFrameState.uniformBuffer,
         0,
         uniforms
@@ -398,6 +414,24 @@ export const GPUBurstConfettiCanvas = ({
     activeRawFrameState !== null,
     shouldScheduleFrame
   );
+
+  useEffect(() => {
+    if (!activeRawFrameState) return;
+    return () => {
+      initializedRef.current = null;
+      unconfigureCanvasSurface(
+        activeRawFrameState.context,
+        surfaceReady
+      );
+    };
+  }, [activeRawFrameState, surfaceReady]);
+
+  useEffect(() => {
+    if (!resources) return;
+    return retireGPUResourceSet(() =>
+      destroyBurstConfettiResources(resources)
+    );
+  }, [resources]);
 
   return (
     <View

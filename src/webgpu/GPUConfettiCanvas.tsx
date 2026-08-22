@@ -11,10 +11,7 @@ import {
 import { scheduleOnRN } from 'react-native-worklets';
 import { Canvas, type CanvasRef } from 'react-native-webgpu';
 
-import type {
-  ColorRange,
-  SizeVariation,
-} from '../hooks/useConfettiFlakes';
+import type { ColorRange, SizeVariation } from '../hooks/useConfettiFlakes';
 import {
   DEFAULT_FADE_START,
   DEFAULT_FOCAL_LENGTH_RATIO,
@@ -22,6 +19,7 @@ import {
 } from './constants';
 import {
   createConfettiResources,
+  destroyConfettiResources,
   type ConfettiResources,
 } from './hooks/useConfettiResources';
 import {
@@ -43,8 +41,12 @@ import {
   type DedicatedGPUFrameTarget,
 } from './hooks/useDedicatedGPUFrame';
 import { useGPUDevice } from './hooks/useGPUDevice';
-import { configureCanvasSurface } from './configureCanvasSurface';
+import {
+  configureCanvasSurface,
+  unconfigureCanvasSurface,
+} from './configureCanvasSurface';
 import { createPhasePermutation } from './resourcePacking';
+import { retireGPUResourceSet } from './resourceCleanup';
 import type {
   FixedLengthArray,
   ReadonlyFixedLengthArray,
@@ -52,6 +54,7 @@ import type {
 
 export type GPUConfettiInitialization = {
   seed: number;
+  revision: number;
   layoutCount: number;
   columnsNum: number;
   rowsNum: number;
@@ -110,6 +113,7 @@ type Props = {
 
 type RawFrameState = {
   device: GPUDevice;
+  queue: GPUQueue;
   context: GPUCanvasContext & { present?: () => void };
   uniformBuffer: GPUBuffer;
   initPipeline: GPUComputePipeline;
@@ -201,12 +205,7 @@ const initializeParticles = (
       infinite ? 1 : 0,
       0,
     ],
-    phasePermutation: [
-      phasePermutation.stride,
-      phasePermutation.offset,
-      0,
-      0,
-    ],
+    phasePermutation: [phasePermutation.stride, phasePermutation.offset, 0, 0],
   });
 
   const encoder = state.device.createCommandEncoder();
@@ -215,7 +214,7 @@ const initializeParticles = (
   pass.setBindGroup(0, state.initBindGroup);
   pass.dispatchWorkgroups(state.workgroupCount);
   pass.end();
-  state.device.queue.submit([encoder.finish()]);
+  state.queue.submit([encoder.finish()]);
 };
 
 const clamp01 = (value: number) => {
@@ -277,6 +276,7 @@ export const GPUConfettiCanvas = ({
   const wasRunning = useSharedValue(false);
   const lastFrameTimestampMs = useSharedValue(0);
   const surfaceReady = useSharedValue(false);
+  const needsRender = useSharedValue(false);
   const easingFunction = useMemo(
     () => resolveEasing(params.easing ?? Easing.linear),
     [params.easing]
@@ -310,18 +310,24 @@ export const GPUConfettiCanvas = ({
     onReadyChange(false);
     let cancelled = false;
     (async () => {
-      const res = await createConfettiResources({
-        device,
-        count,
-        sizeVariations,
-        allColors,
-        colorOverrides,
-        parentColorCount,
-      });
-      if (cancelled) {
-        return;
+      try {
+        const res = await createConfettiResources({
+          device,
+          count,
+          sizeVariations,
+          allColors,
+          colorOverrides,
+          parentColorCount,
+          isCancelled: () => cancelled,
+        });
+        if (cancelled) {
+          destroyConfettiResources(res);
+          return;
+        }
+        setResources(res);
+      } catch (error) {
+        if (!cancelled) console.error(error);
       }
-      setResources(res);
     })();
     return () => {
       cancelled = true;
@@ -362,10 +368,7 @@ export const GPUConfettiCanvas = ({
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
 
     const { initPipeline, computePipeline, renderPipeline } =
-      createConfettiPipelines(
-      resources.root,
-      presentationFormat
-    );
+      createConfettiPipelines(resources.root, presentationFormat);
 
     elapsed.set(0);
     lastSimSeconds.set(0);
@@ -375,6 +378,7 @@ export const GPUConfettiCanvas = ({
     lastFrameTimestampMs.set(0);
     const nextRawFrameState: RawFrameState = {
       device,
+      queue: resources.queue,
       context,
       uniformBuffer: resources.uniforms.buffer.buffer,
       initPipeline: resources.root.unwrap(initPipeline),
@@ -398,6 +402,7 @@ export const GPUConfettiCanvas = ({
       infinite,
       sizeVariations.length
     );
+    needsRender.set(true);
     initializedRef.current = {
       state: nextRawFrameState,
       initialization: currentInitialization,
@@ -432,10 +437,12 @@ export const GPUConfettiCanvas = ({
     allColors,
     colorOverrides,
     parentColorCount,
+    needsRender,
   ]);
 
   const activeRawFrameState =
     rawFrameState?.device === device &&
+    rawFrameState.uniformBuffer === resources?.uniforms.buffer.buffer &&
     rawFrameState.count === count &&
     rawFrameState.viewportWidth === viewportWidth &&
     rawFrameState.viewportHeight === viewportHeight
@@ -470,6 +477,7 @@ export const GPUConfettiCanvas = ({
       infinite,
       sizeVariations.length
     );
+    needsRender.set(true);
     initializedRef.current = {
       state: activeRawFrameState,
       initialization,
@@ -495,6 +503,7 @@ export const GPUConfettiCanvas = ({
     elapsed,
     lastFrameTimestampMs,
     lastSimSeconds,
+    needsRender,
     onReadyChange,
     simulatedSeconds,
     simulationAccumulator,
@@ -503,8 +512,11 @@ export const GPUConfettiCanvas = ({
 
   const shouldScheduleFrame = useCallback(() => {
     'worklet';
-    return surfaceReady.get() && running.get();
-  }, [running, surfaceReady]);
+    return (
+      surfaceReady.get() &&
+      (running.get() || wasRunning.get() || needsRender.get())
+    );
+  }, [needsRender, running, surfaceReady, wasRunning]);
 
   const renderFrame = useCallback(
     (
@@ -514,7 +526,10 @@ export const GPUConfettiCanvas = ({
     ): GPUCommandBuffer | null => {
       'worklet';
 
-      if (!activeRawFrameState || !running.get()) {
+      if (!activeRawFrameState) return null;
+
+      const isRunning = running.get();
+      if (!isRunning && !needsRender.get()) {
         wasRunning.set(false);
         lastFrameTimestampMs.set(0);
         return null;
@@ -522,15 +537,15 @@ export const GPUConfettiCanvas = ({
 
       const previousTimestamp = lastFrameTimestampMs.get();
       const timestampDelta =
-        wasRunning.get() && previousTimestamp > 0
+        isRunning && wasRunning.get() && previousTimestamp > 0
           ? Math.max((timestamp - previousTimestamp) / 1000, 0)
           : 0;
       // Treat suspension/background gaps as a pause. Short render stalls retain
       // their simulation debt and are caught up over bounded GPU dispatches.
       const rawDt =
         timestampDelta <= SUSPENSION_GAP_SECONDS ? timestampDelta : 0;
-      lastFrameTimestampMs.set(timestamp);
-      wasRunning.set(true);
+      lastFrameTimestampMs.set(isRunning ? timestamp : 0);
+      wasRunning.set(isRunning);
 
       const rawElapsed = elapsed.get() + rawDt;
       elapsed.set(rawElapsed);
@@ -561,7 +576,7 @@ export const GPUConfettiCanvas = ({
       const gDir = params.gravityDir.get();
       const cycleProgress =
         !continuous && !infinite && cycleDuration > 0
-          ? clamp01(rawElapsed / cycleDuration)
+          ? clamp01(nowSim / cycleDuration)
           : 0;
       const fadeProgress =
         cycleProgress <= DEFAULT_FADE_START
@@ -606,7 +621,7 @@ export const GPUConfettiCanvas = ({
       uniforms[29] = gDir[1];
       uniforms[30] = gDir[2];
       uniforms[31] = 0;
-      activeRawFrameState.device.queue.writeBuffer(
+      activeRawFrameState.queue.writeBuffer(
         activeRawFrameState.uniformBuffer,
         0,
         uniforms
@@ -631,6 +646,7 @@ export const GPUConfettiCanvas = ({
       renderPass.end();
 
       const commandBuffer = encoder.finish();
+      needsRender.set(false);
 
       if (!continuous && !infinite && cycleDuration > 0) {
         const done =
@@ -661,6 +677,7 @@ export const GPUConfettiCanvas = ({
       initialScale,
       lastFrameTimestampMs,
       lastSimSeconds,
+      needsRender,
       onAllOffScreen,
       opacity,
       params,
@@ -681,6 +698,19 @@ export const GPUConfettiCanvas = ({
     activeRawFrameState !== null,
     shouldScheduleFrame
   );
+
+  useEffect(() => {
+    if (!activeRawFrameState) return;
+    return () => {
+      initializedRef.current = null;
+      unconfigureCanvasSurface(activeRawFrameState.context, surfaceReady);
+    };
+  }, [activeRawFrameState, surfaceReady]);
+
+  useEffect(() => {
+    if (!resources) return;
+    return retireGPUResourceSet(() => destroyConfettiResources(resources));
+  }, [resources]);
 
   return (
     <View

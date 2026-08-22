@@ -7,7 +7,11 @@ import { PIConfetti as WebGPUPIConfetti } from '../../../src/gpu';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
-import { rendererOptions, textureOptions } from '../constants/config';
+import {
+  PERFORMANCE_PARTICLE_COUNT,
+  rendererOptions,
+  textureOptions,
+} from '../constants/config';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
 import { useScreenConfig } from '../hooks/useScreenConfig';
 import { getRotation, getTextureProps } from '../utils/confettiConfig';
@@ -64,24 +68,6 @@ export default function PIScreen() {
         />
       </View>
 
-      {isFocused ? (
-        <PIConfetti key={confettiKey} ref={piConfettiRef} rotation={rotation}>
-          <PIConfetti.Origin
-            blastPosition={{ x: width / 2, y: 450 }}
-            count={500}
-          >
-            {renderFlakes()}
-          </PIConfetti.Origin>
-          <PIConfetti.Origin
-            blastPosition={{ x: width / 2, y: 150 }}
-            count={500}
-            delay={300}
-          >
-            {renderFlakes()}
-          </PIConfetti.Origin>
-        </PIConfetti>
-      ) : null}
-
       <ConfettiControls
         actions={{
           resume: () => piConfettiRef.current?.resume(),
@@ -90,6 +76,24 @@ export default function PIScreen() {
           reset: () => piConfettiRef.current?.reset(),
         }}
       />
+
+      {isFocused ? (
+        <PIConfetti key={confettiKey} ref={piConfettiRef} rotation={rotation}>
+          <PIConfetti.Origin
+            blastPosition={{ x: width / 2, y: 450 }}
+            count={PERFORMANCE_PARTICLE_COUNT}
+          >
+            {renderFlakes()}
+          </PIConfetti.Origin>
+          <PIConfetti.Origin
+            blastPosition={{ x: width / 2, y: 150 }}
+            count={PERFORMANCE_PARTICLE_COUNT}
+            delay={300}
+          >
+            {renderFlakes()}
+          </PIConfetti.Origin>
+        </PIConfetti>
+      ) : null}
     </View>
   );
 }

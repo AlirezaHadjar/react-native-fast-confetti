@@ -51,7 +51,7 @@ export function integrateTrajectory(
   p: PlateParams,
   totalTime: number,
   sampleCount: number,
-  output: number[],
+  output: number[] | Float32Array,
   outputOffset: number
 ): void {
   'worklet';

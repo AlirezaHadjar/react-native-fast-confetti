@@ -12,6 +12,12 @@ import {
   Image,
 } from '@shopify/react-native-skia';
 import type { SizeVariation, ColorRange } from './useConfettiFlakes';
+import {
+  BURST_COLOR_INDEX,
+  BURST_META_STRIDE,
+  BURST_SIZE_INDEX,
+  type PackedBurstBoxes,
+} from '../packedBurstBoxes';
 
 function renderAtlasCell(
   color: string,
@@ -115,22 +121,13 @@ type MinimalBox = {
   sizeIndex: number;
 };
 
-export const useConfettiLogic = <T extends MinimalBox>({
-  sizeVariations,
-  colors,
-  boxes,
-  sizeColorOverrides,
-  count,
-}: {
-  colors: string[];
-  boxes: SharedValue<T[]>;
-  sizeVariations: SizeVariation[];
-  sizeColorOverrides: (ColorRange | null)[];
-  count: number;
-}) => {
+const useConfettiAtlas = (
+  sizeVariations: SizeVariation[],
+  colors: string[],
+  sizeColorOverrides: (ColorRange | null)[]
+) => {
   const maxWidth = Math.max(...sizeVariations.map((size) => size.width));
   const maxHeight = Math.max(...sizeVariations.map((size) => size.height));
-
   const texture = useTexture(
     <Group>
       {colors.map((color, colorIndex) => {
@@ -153,6 +150,27 @@ export const useConfettiLogic = <T extends MinimalBox>({
       width: maxWidth * sizeVariations.length,
       height: maxHeight * colors.length,
     }
+  );
+  return { maxWidth, maxHeight, texture };
+};
+
+export const useConfettiLogic = <T extends MinimalBox>({
+  sizeVariations,
+  colors,
+  boxes,
+  sizeColorOverrides,
+  count,
+}: {
+  colors: string[];
+  boxes: SharedValue<T[]>;
+  sizeVariations: SizeVariation[];
+  sizeColorOverrides: (ColorRange | null)[];
+  count: number;
+}) => {
+  const { maxWidth, maxHeight, texture } = useConfettiAtlas(
+    sizeVariations,
+    colors,
+    sizeColorOverrides
   );
 
   const sprites = useRectBuffer(count, (value, index) => {
@@ -180,4 +198,50 @@ export const useConfettiLogic = <T extends MinimalBox>({
     texture,
     sprites,
   };
+};
+
+export const usePackedConfettiLogic = ({
+  sizeVariations,
+  colors,
+  boxes,
+  sizeColorOverrides,
+  count,
+}: {
+  colors: string[];
+  boxes: SharedValue<PackedBurstBoxes | null>;
+  sizeVariations: SizeVariation[];
+  sizeColorOverrides: (ColorRange | null)[];
+  count: number;
+}) => {
+  const { maxWidth, maxHeight, texture } = useConfettiAtlas(
+    sizeVariations,
+    colors,
+    sizeColorOverrides
+  );
+
+  const sprites = useRectBuffer(count, (value, index) => {
+    'worklet';
+    const current = boxes.get();
+    if (!current) {
+      value.setXYWH(0, 0, 0, 0);
+      return;
+    }
+    const metaOffset = index * BURST_META_STRIDE;
+    const colorIndex =
+      current.metadata[metaOffset + BURST_COLOR_INDEX] ?? 0;
+    const sizeIndex = current.metadata[metaOffset + BURST_SIZE_INDEX] ?? -1;
+    const size = sizeVariations[sizeIndex];
+    if (!size) {
+      value.setXYWH(0, 0, 0, 0);
+      return;
+    }
+    value.setXYWH(
+      sizeIndex * maxWidth,
+      colorIndex * maxHeight,
+      size.width,
+      size.height
+    );
+  });
+
+  return { texture, sprites };
 };

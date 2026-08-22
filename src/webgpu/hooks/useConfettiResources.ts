@@ -1,4 +1,5 @@
 import { Skia, ImageFormat } from '@shopify/react-native-skia';
+import { Platform } from 'react-native';
 import { tgpu } from 'typegpu';
 
 import type {
@@ -24,13 +25,26 @@ import {
   renderLayout,
 } from '../shaders/confetti';
 import type { FixedLengthArray } from '../../typeHelpers';
+import { destroyGPUResourceSet } from '../resourceCleanup';
 
 // `createImageBitmap` is installed on globalThis by react-native-webgpu.
-export type NativeImageBitmap = unknown;
+export type NativeImageBitmap = {
+  close: () => void;
+};
 
 declare const createImageBitmap: (
-  source: ArrayBuffer | ArrayBufferView
+  source: ArrayBuffer | ArrayBufferView | Blob
 ) => Promise<NativeImageBitmap>;
+
+const createPNGBlob = (data: ArrayBuffer) => {
+  // React Native's ambient Blob constructor omits ArrayBuffer even though the
+  // browser constructor accepts it as a BlobPart.
+  const BrowserBlob = Blob as unknown as new (
+    parts: ArrayBuffer[],
+    options: { type: string }
+  ) => Blob;
+  return new BrowserBlob([data], { type: 'image/png' });
+};
 
 const HEX_TO_RGBA = (hex: string): FixedLengthArray<number, 4> => {
   const c = Skia.Color(hex);
@@ -52,33 +66,52 @@ export const rasterizeFlakeTextures = async (
     const h = Math.max(1, Math.round(maxHeight));
     const surface = Skia.Surface.MakeOffscreen(w, h);
     if (!surface) continue;
-    const canvas = surface.getCanvas();
-    canvas.clear(Skia.Color('transparent'));
-    const sx = w / size.width;
-    const sy = h / size.height;
-    const s = Math.min(sx, sy);
-    const offsetX = (w - size.width * s) / 2;
-    const offsetY = (h - size.height * s) / 2;
-    canvas.save();
-    canvas.translate(offsetX, offsetY);
-    canvas.scale(s, s);
-    if (size.texture.type === 'svg') {
-      canvas.drawSvg(size.texture.content, size.width, size.height);
-    } else {
-      const img = size.texture.content;
-      const srcRect = Skia.XYWHRect(0, 0, img.width(), img.height());
-      const dstRect = Skia.XYWHRect(0, 0, size.width, size.height);
-      const paint = Skia.Paint();
-      canvas.drawImageRect(img, srcRect, dstRect, paint);
+    try {
+      const canvas = surface.getCanvas();
+      canvas.clear(Skia.Color('transparent'));
+      if (size.texture.type === 'svg') {
+        canvas.drawSvg(size.texture.content, w, h);
+      } else {
+        const img = size.texture.content;
+        const srcRect = Skia.XYWHRect(0, 0, img.width(), img.height());
+        const dstRect = Skia.XYWHRect(0, 0, w, h);
+        const paint = Skia.Paint();
+        try {
+          canvas.drawImageRect(img, srcRect, dstRect, paint);
+        } finally {
+          paint.dispose();
+        }
+      }
+      surface.flush();
+      const snapshot = surface.makeImageSnapshot();
+      try {
+        const bytes = snapshot.encodeToBytes(ImageFormat.PNG, 100);
+        const encodedPNG = bytes.buffer.slice(
+          bytes.byteOffset,
+          bytes.byteOffset + bytes.byteLength
+        ) as ArrayBuffer;
+        const bitmap = await createImageBitmap(
+          Platform.OS === 'web' ? createPNGBlob(encodedPNG) : encodedPNG
+        );
+        layers.push(bitmap);
+      } finally {
+        snapshot.dispose();
+      }
+    } finally {
+      surface.dispose();
     }
-    canvas.restore();
-    surface.flush();
-    const snapshot = surface.makeImageSnapshot();
-    const bytes = snapshot.encodeToBytes(ImageFormat.PNG, 100);
-    const bitmap = await createImageBitmap(bytes.buffer as ArrayBuffer);
-    layers.push(bitmap);
   }
   return layers;
+};
+
+export const closeImageBitmaps = (bitmaps: readonly NativeImageBitmap[]) => {
+  for (const bitmap of bitmaps) {
+    try {
+      bitmap.close();
+    } catch {
+      // A closed bitmap has already released its native pixel storage.
+    }
+  }
 };
 
 const MASK_TEXTURE_SCALE = 2;
@@ -142,6 +175,7 @@ const createShapeMaskLayer = (
 
 export const createShapeMasksTexture = (
   device: GPUDevice,
+  queue: GPUQueue,
   sizes: SizeVariation[],
   flags: number[],
   maxWidth: number,
@@ -178,7 +212,7 @@ export const createShapeMasksTexture = (
             maskH,
             bytesPerRow
           );
-    device.queue.writeTexture(
+    queue.writeTexture(
       { texture, origin: [0, 0, i] },
       data,
       { bytesPerRow, rowsPerImage: maskH },
@@ -196,6 +230,7 @@ export type ConfettiResourcesInput = {
   allColors: string[];
   colorOverrides: (ColorRange | null)[];
   parentColorCount: number;
+  isCancelled?: () => boolean;
 };
 
 const createConfettiResourcesImpl = async ({
@@ -205,12 +240,29 @@ const createConfettiResourcesImpl = async ({
   allColors,
   colorOverrides,
   parentColorCount,
+  isCancelled,
 }: ConfettiResourcesInput) => {
-  const root = tgpu.initFromDevice({ device, unstable_names: 'strict' });
   const maxFlakeWidth = Math.max(...sizeVariations.map((s) => s.width));
   const maxFlakeHeight = Math.max(...sizeVariations.map((s) => s.height));
-
   const sizeFlags = computeSizeFlags(sizeVariations);
+  const texturedSizes = sizeVariations.filter((s) => !!s.texture);
+  const texLayerCount = Math.max(1, texturedSizes.length);
+  const texW = Math.max(1, Math.round(maxFlakeWidth));
+  const texH = Math.max(1, Math.round(maxFlakeHeight));
+  const bitmaps =
+    texturedSizes.length > 0
+      ? await rasterizeFlakeTextures(sizeVariations, texW, texH)
+      : [];
+  if (isCancelled?.()) {
+    closeImageBitmaps(bitmaps);
+    throw new Error('GPU resource creation cancelled');
+  }
+
+  // Do not allocate any GPU object before the only async operation above.
+  // From here to the returned ownership record, creation is synchronous, so a
+  // cancelled caller can always destroy the complete set deterministically.
+  const root = tgpu.initFromDevice({ device, unstable_names: 'strict' });
+  const queue = device.queue;
 
   const uniforms = root.createUniform(UniformsSchema);
   const initUniforms = root.createUniform(InitUniformsSchema);
@@ -235,6 +287,7 @@ const createConfettiResourcesImpl = async ({
   );
   const shapeMasksArray = createShapeMasksTexture(
     device,
+    queue,
     sizeVariations,
     sizeFlags,
     maxFlakeWidth,
@@ -243,10 +296,6 @@ const createConfettiResourcesImpl = async ({
 
   // Texture upload stays raw because react-native-webgpu owns the native bitmap
   // bridge; TypeGPU owns the shader-visible buffer and bind-group state.
-  const texturedSizes = sizeVariations.filter((s) => !!s.texture);
-  const texLayerCount = Math.max(1, texturedSizes.length);
-  const texW = Math.max(1, Math.round(maxFlakeWidth));
-  const texH = Math.max(1, Math.round(maxFlakeHeight));
   const texturesArray = device.createTexture({
     size: [texW, texH, texLayerCount],
     format: 'rgba8unorm',
@@ -256,15 +305,18 @@ const createConfettiResourcesImpl = async ({
       GPUTextureUsage.RENDER_ATTACHMENT,
     dimension: '2d',
   });
-  if (texturedSizes.length > 0) {
-    const bitmaps = await rasterizeFlakeTextures(sizeVariations, texW, texH);
-    for (let i = 0; i < bitmaps.length; i++) {
-      device.queue.copyExternalImageToTexture(
-        { source: bitmaps[i]! as GPUImageCopyExternalImage['source'] },
-        { texture: texturesArray, origin: [0, 0, i] },
-        [texW, texH, 1]
-      );
+  try {
+    if (bitmaps.length > 0) {
+      for (let i = 0; i < bitmaps.length; i++) {
+        queue.copyExternalImageToTexture(
+          { source: bitmaps[i]! as GPUImageCopyExternalImage['source'] },
+          { texture: texturesArray, origin: [0, 0, i] },
+          [texW, texH, 1]
+        );
+      }
     }
+  } finally {
+    closeImageBitmaps(bitmaps);
   }
 
   const sampler = device.createSampler({
@@ -300,6 +352,7 @@ const createConfettiResourcesImpl = async ({
   return {
     root,
     device,
+    queue,
     uniforms,
     initUniforms,
     spawnsBuffer,
@@ -326,5 +379,21 @@ const createConfettiResourcesImpl = async ({
 export type ConfettiResources = Awaited<
   ReturnType<typeof createConfettiResourcesImpl>
 >;
+
+export const destroyConfettiResources = (resources: ConfettiResources) => {
+  destroyGPUResourceSet({
+    buffers: [
+      resources.uniforms.buffer,
+      resources.initUniforms.buffer,
+      resources.spawnsBuffer.buffer,
+      resources.runtimeBuffer.buffer,
+      resources.sizesBuffer.buffer,
+      resources.initSizesBuffer.buffer,
+      resources.paletteBuffer.buffer,
+    ],
+    textures: [resources.texturesArray, resources.shapeMasksArray],
+    root: resources.root,
+  });
+};
 
 export const createConfettiResources = createConfettiResourcesImpl;

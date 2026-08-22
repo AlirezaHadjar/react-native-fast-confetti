@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { Platform, useColorScheme, View } from 'react-native';
+import { RendererMenu } from '../components/RendererMenu';
 import { colors } from '../constants/colors';
+import { RendererProvider } from '../hooks/useRenderer';
 
 function useWebFontFix() {
   useEffect(() => {
@@ -20,56 +22,50 @@ function useWebFontFix() {
   }, []);
 }
 
-function getIOSVersion(): number {
-  if (Platform.OS !== 'ios') return 0;
-
-  return parseInt(Platform.Version as string, 10);
-}
-
-function isIOS26OrLater(): boolean {
-  return getIOSVersion() >= 26;
-}
-
 export default function RootLayout() {
   useWebFontFix();
   const colorScheme = useColorScheme();
   const titleColor = colorScheme === 'dark' ? '#fff' : '#000';
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <Stack
-        screenOptions={{
-          contentStyle: { backgroundColor: colors.background },
-          fullScreenGestureEnabled: true,
-          headerBackButtonDisplayMode: 'minimal',
-          headerBlurEffect: Platform.OS === 'ios' ? 'none' : undefined,
-          headerTransparent: Platform.OS === 'ios',
-          headerStyle:
-            Platform.OS === 'android'
-              ? { backgroundColor: colors.background as string }
-              : undefined,
-          headerTintColor: titleColor,
-          headerTitleAlign: 'center',
-          headerShadowVisible: false,
-          headerTitleStyle: { color: titleColor },
-        }}
-      >
-        <Stack.Screen
-          name="index"
-          options={{
-            headerLargeTitle: true,
-            headerTransparent: Platform.OS === 'ios',
-            headerBlurEffect: isIOS26OrLater() ? undefined : 'regular',
-            headerTitle: 'Confetti Modes',
-            headerLargeTitleStyle: { color: titleColor },
+    <RendererProvider>
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <Stack
+          screenOptions={{
+            contentStyle: { backgroundColor: colors.background },
+            fullScreenGestureEnabled: true,
+            headerBackButtonDisplayMode: 'minimal',
+            headerBlurEffect: Platform.OS === 'ios' ? 'none' : undefined,
+            headerRight: () => <RendererMenu />,
+            headerTransparent: false,
+            headerStyle: { backgroundColor: colors.background as string },
+            headerTintColor: titleColor,
+            headerTitleAlign: 'center',
+            headerShadowVisible: false,
             headerTitleStyle: { color: titleColor },
           }}
-        />
-        <Stack.Screen name="single" options={{ title: 'Single' }} />
-        <Stack.Screen name="continuous" options={{ title: 'Continuous' }} />
-        <Stack.Screen name="pi" options={{ title: 'PI' }} />
-        <Stack.Screen name="cannon" options={{ title: 'Cannon' }} />
-      </Stack>
-    </View>
+        >
+          <Stack.Screen
+            name="index"
+            options={{
+              headerLargeTitle: true,
+              headerTransparent: false,
+              headerBlurEffect: Platform.OS === 'ios' ? 'none' : undefined,
+              headerTitle: 'Confetti Modes',
+              headerLargeTitleStyle: { color: titleColor },
+              headerTitleStyle: { color: titleColor },
+            }}
+          />
+          <Stack.Screen name="single" options={{ title: 'Single' }} />
+          <Stack.Screen name="continuous" options={{ title: 'Continuous' }} />
+          <Stack.Screen name="pi" options={{ title: 'PI' }} />
+          <Stack.Screen name="cannon" options={{ title: 'Cannon' }} />
+          <Stack.Screen
+            name="profile-webgpu"
+            options={{ title: 'WebGPU Profile' }}
+          />
+        </Stack>
+      </View>
+    </RendererProvider>
   );
 }

@@ -7,7 +7,11 @@ import { CannonConfetti as WebGPUCannonConfetti } from '../../../src/gpu';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
-import { rendererOptions, textureOptions } from '../constants/config';
+import {
+  PERFORMANCE_PARTICLE_COUNT,
+  rendererOptions,
+  textureOptions,
+} from '../constants/config';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
 import { useScreenConfig } from '../hooks/useScreenConfig';
 import { getRotation, getTextureProps } from '../utils/confettiConfig';
@@ -65,6 +69,15 @@ export default function CannonScreen() {
         />
       </View>
 
+      <ConfettiControls
+        actions={{
+          resume: () => cannonConfettiRef.current?.resume(),
+          pause: () => cannonConfettiRef.current?.pause(),
+          restart: () => cannonConfettiRef.current?.restart(),
+          reset: () => cannonConfettiRef.current?.reset(),
+        }}
+      />
+
       {isFocused ? (
         <CannonConfetti
           key={confettiKey}
@@ -80,7 +93,7 @@ export default function CannonScreen() {
         >
           <CannonConfetti.Origin
             position="bottom-left"
-            count={150}
+            count={PERFORMANCE_PARTICLE_COUNT}
             initialSpeed={3}
             depth={{ min: 1, max: 1.1 }}
           >
@@ -88,7 +101,7 @@ export default function CannonScreen() {
           </CannonConfetti.Origin>
           <CannonConfetti.Origin
             position="bottom-right"
-            count={150}
+            count={PERFORMANCE_PARTICLE_COUNT}
             initialSpeed={3}
             depth={{ min: 1, max: 1.1 }}
           >
@@ -96,7 +109,7 @@ export default function CannonScreen() {
           </CannonConfetti.Origin>
           <CannonConfetti.Origin
             position="bottom-center"
-            count={150}
+            count={PERFORMANCE_PARTICLE_COUNT}
             initialSpeed={4}
             target={'center'}
           >
@@ -104,15 +117,6 @@ export default function CannonScreen() {
           </CannonConfetti.Origin>
         </CannonConfetti>
       ) : null}
-
-      <ConfettiControls
-        actions={{
-          resume: () => cannonConfettiRef.current?.resume(),
-          pause: () => cannonConfettiRef.current?.pause(),
-          restart: () => cannonConfettiRef.current?.restart(),
-          reset: () => cannonConfettiRef.current?.reset(),
-        }}
-      />
     </View>
   );
 }

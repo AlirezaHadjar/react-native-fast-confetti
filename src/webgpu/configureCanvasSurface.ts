@@ -36,6 +36,19 @@ const configureCanvasSurfaceOnUI = (
   if (onConfigured) scheduleOnRN(onConfigured);
 };
 
+const unconfigureCanvasSurfaceOnUI = (
+  context: PresentableCanvasContext,
+  ready: SharedValue<boolean>
+) => {
+  'worklet';
+  ready.set(false);
+  try {
+    context.unconfigure();
+  } catch {
+    // The native canvas can disappear before React's passive cleanup runs.
+  }
+};
+
 /**
  * Configures the native CAMetalLayer from the main/UI runtime. Dawn mutates
  * that layer while configuring a swapchain, which UIKit explicitly forbids
@@ -76,4 +89,20 @@ export const configureCanvasSurface = (
     ready,
     onConfigured
   );
+};
+
+export const unconfigureCanvasSurface = (
+  context: PresentableCanvasContext,
+  ready: SharedValue<boolean>
+) => {
+  ready.set(false);
+  if (Platform.OS === 'web') {
+    try {
+      context.unconfigure();
+    } catch {
+      // The browser may already have detached the canvas.
+    }
+    return;
+  }
+  scheduleOnUI(unconfigureCanvasSurfaceOnUI, context, ready);
 };

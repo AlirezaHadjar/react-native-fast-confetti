@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
 } from 'react';
 import {
   Easing,
@@ -149,7 +150,14 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
     const totalTime = duration / 1000;
 
     const boxes = useSharedValue<FallingBox[]>([]);
-    const trajectories = useSharedValue<number[]>([]);
+    const trajectories = useSharedValue(new Float32Array(0));
+
+    useLayoutEffect(() => {
+      return () => {
+        boxes.set([]);
+        trajectories.set(new Float32Array(0));
+      };
+    }, [boxes, trajectories]);
 
     const { texture, sprites } = useConfettiLogic({
       sizeVariations,
@@ -346,6 +354,13 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       const c = Math.cos(rz) * scale;
       val.set(c, s, tx - c * px + s * py, ty - s * px - c * py);
     });
+
+    useLayoutEffect(() => {
+      return () => {
+        transforms.set([]);
+        sprites.set([]);
+      };
+    }, [sprites, transforms]);
 
     return (
       <ConfettiCanvas

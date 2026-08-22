@@ -1,6 +1,8 @@
 export type TextureType = 'default' | 'money' | 'snowflake';
 export type RendererType = 'webgpu' | 'skia';
 
+export const PERFORMANCE_PARTICLE_COUNT = 20_000;
+
 export type DropdownOption<T = any> = {
   label: string;
   value: T;

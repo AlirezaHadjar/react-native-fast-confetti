@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { useIsFocused } from 'expo-router';
-import { Platform, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import type { ConfettiMethods } from 'react-native-fast-confetti';
 import { Confetti as SkiaConfetti } from '../../../src';
 import { Confetti as WebGPUConfetti } from '../../../src/gpu';
@@ -8,6 +8,7 @@ import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
 import {
+  PERFORMANCE_PARTICLE_COUNT,
   rendererOptions,
   textureOptions,
   verticalSpacingOptions,
@@ -74,23 +75,6 @@ export default function SingleScreen() {
         />
       </View>
 
-      {isFocused ? (
-        <Confetti
-          key={confettiKey}
-          ref={confettiRef}
-          rotation={rotation}
-          verticalSpacing={config.verticalSpacing}
-          autoplay
-          count={Platform.OS === 'web' ? 2000 : 400}
-          infinite
-          flakeStyle="glossy"
-          gravity={1}
-          flipIntensity={config.textureType === 'money' ? 0.1 : 0.85}
-        >
-          {renderFlakes()}
-        </Confetti>
-      ) : null}
-
       <ConfettiControls
         actions={{
           resume: () => confettiRef.current?.resume(),
@@ -99,6 +83,23 @@ export default function SingleScreen() {
           reset: () => confettiRef.current?.reset(),
         }}
       />
+
+      {isFocused ? (
+        <Confetti
+          key={confettiKey}
+          ref={confettiRef}
+          rotation={rotation}
+          verticalSpacing={config.verticalSpacing}
+          autoplay
+          count={PERFORMANCE_PARTICLE_COUNT}
+          infinite
+          flakeStyle="glossy"
+          gravity={1}
+          flipIntensity={config.textureType === 'money' ? 0.1 : 0.85}
+        >
+          {renderFlakes()}
+        </Confetti>
+      ) : null}
     </View>
   );
 }

@@ -82,9 +82,8 @@ export type InternalGPUConfettiProps = InternalConfettiProps &
   GPUConfettiExtraProps;
 export type GPUContinuousConfettiProps = ContinuousConfettiProps &
   GPUConfettiExtraProps;
-export type GPUPIConfettiProps = PIConfettiProps & GPUConfettiExtraProps;
-export type GPUCannonConfettiProps = CannonConfettiProps &
-  GPUConfettiExtraProps;
+export type GPUPIConfettiProps = PIConfettiProps;
+export type GPUCannonConfettiProps = CannonConfettiProps;
 export type GPUConfettiMethods = ConfettiMethods;
 export type GPUPIConfettiMethods = PIConfettiMethods;
 export type GPUCannonConfettiMethods = CannonConfettiMethods;

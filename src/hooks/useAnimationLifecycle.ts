@@ -26,6 +26,8 @@ type UseAnimationLifecycleParams = {
   fadeRange?: FixedLengthArray<number, 2>;
   /** Worklet called at the end of each animation cycle (before looping). */
   onCycleEnd?: () => void;
+  /** Wait for the caller to restart an infinite cycle after onCycleEnd. */
+  deferInfiniteRestart?: boolean;
   disabled?: boolean;
 };
 
@@ -38,6 +40,7 @@ export const useAnimationLifecycle = ({
   onAnimationEnd,
   fadeRange = [0.8, 1],
   onCycleEnd,
+  deferInfiniteRestart = false,
   disabled = false,
 }: UseAnimationLifecycleParams) => {
   const progress = useSharedValue(0);
@@ -77,19 +80,19 @@ export const useAnimationLifecycle = ({
   }, [running, progress]);
 
   const runAnimation = useCallback(
-    (delay: number = 0) => {
+    (delay: number = 0, notifyStart = true) => {
       'worklet';
       if (disabled) {
         running.set(false);
         cancelAnimation(progress);
         progress.set(0);
-        UIOnStart();
+        if (notifyStart) UIOnStart();
         UIOnEnd();
         return;
       }
       progress.set(0);
       running.set(true);
-      UIOnStart();
+      if (notifyStart) UIOnStart();
 
       function repeatAnimation() {
         'worklet';
@@ -121,8 +124,15 @@ export const useAnimationLifecycle = ({
         { duration, easing: easingProp, reduceMotion: ReduceMotion.Never },
         (finished) => {
           'worklet';
-          if (!finished || !infinite) {
-            if (finished) UIOnEnd();
+          if (!finished) return;
+          if (!infinite) {
+            UIOnEnd();
+            return;
+          }
+          if (deferInfiniteRestart) {
+            running.set(false);
+            UIOnEnd();
+            onCycleEnd?.();
             return;
           }
           repeatAnimation();
@@ -142,6 +152,7 @@ export const useAnimationLifecycle = ({
       infinite,
       duration,
       easingProp,
+      deferInfiniteRestart,
       disabled,
     ]
   );
@@ -189,8 +200,15 @@ export const useAnimationLifecycle = ({
         },
         (finished) => {
           'worklet';
-          if (!finished || !infinite) {
-            if (finished) UIOnEnd();
+          if (!finished) return;
+          if (!infinite) {
+            UIOnEnd();
+            return;
+          }
+          if (deferInfiniteRestart) {
+            running.set(false);
+            UIOnEnd();
+            onCycleEnd?.();
             return;
           }
           repeatAnimation();
@@ -205,6 +223,7 @@ export const useAnimationLifecycle = ({
     onCycleEnd,
     infinite,
     easingProp,
+    deferInfiniteRestart,
     disabled,
   ]);
 

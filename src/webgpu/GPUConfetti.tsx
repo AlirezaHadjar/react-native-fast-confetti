@@ -4,6 +4,7 @@ import {
   useEffect,
   useImperativeHandle,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { runOnUI, useSharedValue } from 'react-native-reanimated';
@@ -144,18 +145,32 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
     });
     const cycleDuration = duration / 1000;
 
-    const {
-      running,
-      opacity,
-      pause,
-      resume,
-      reset,
-      beginCycle,
-    } = useSimulationLifecycle({ fadeOutOnEnd });
+    const { running, opacity, pause, resume, reset, beginCycle } =
+      useSimulationLifecycle({ fadeOutOnEnd });
 
     const [seed, setSeed] = useState(0);
+    const [resetRevision, setResetRevision] = useState(0);
     const [rendererReady, setRendererReady] = useState(false);
+    const autoplayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const autoplaySuppressedRef = useRef(false);
+    const clearPendingAutoplay = useCallback(() => {
+      if (autoplayTimerRef.current === null) return;
+      clearTimeout(autoplayTimerRef.current);
+      autoplayTimerRef.current = null;
+    }, []);
+    const suppressPendingAutoplay = useCallback(() => {
+      autoplaySuppressedRef.current = true;
+      clearPendingAutoplay();
+    }, [clearPendingAutoplay]);
     const bumpSeed = useCallback(() => setSeed((s) => s + 1), []);
+    const bumpResetRevision = useCallback(
+      () => setResetRevision((revision) => revision + 1),
+      []
+    );
+    const handleRestart = useCallback(() => {
+      bumpSeed();
+      onAnimationStart?.();
+    }, [bumpSeed, onAnimationStart]);
 
     const initialization = useMemo(() => {
       const rotationX = resolveRange(
@@ -174,6 +189,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
 
       return {
         seed,
+        revision: resetRevision,
         layoutCount: bufferCount,
         columnsNum,
         rowsNum,
@@ -192,6 +208,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       };
     }, [
       seed,
+      resetRevision,
       bufferCount,
       verticalSpacing,
       maxFlakeWidth,
@@ -215,15 +232,38 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
 
     const restart = useCallback(() => {
       'worklet';
-      scheduleOnRN(bumpSeed);
+      scheduleOnRN(handleRestart);
       beginCycle();
-    }, [bumpSeed, beginCycle]);
+    }, [handleRestart, beginCycle]);
+
+    const resetAndReinitialize = useCallback(() => {
+      'worklet';
+      reset();
+      scheduleOnRN(bumpResetRevision);
+    }, [bumpResetRevision, reset]);
+
+    const imperativePause = useCallback(() => {
+      suppressPendingAutoplay();
+      runOnUI(pause)();
+    }, [pause, suppressPendingAutoplay]);
+    const imperativeReset = useCallback(() => {
+      suppressPendingAutoplay();
+      runOnUI(resetAndReinitialize)();
+    }, [resetAndReinitialize, suppressPendingAutoplay]);
+    const imperativeResume = useCallback(() => {
+      suppressPendingAutoplay();
+      runOnUI(resume)();
+    }, [resume, suppressPendingAutoplay]);
+    const imperativeRestart = useCallback(() => {
+      suppressPendingAutoplay();
+      runOnUI(restart)();
+    }, [restart, suppressPendingAutoplay]);
 
     useImperativeHandle(ref, () => ({
-      pause: runOnUI(pause),
-      reset: runOnUI(reset),
-      resume: runOnUI(resume),
-      restart: runOnUI(restart),
+      pause: imperativePause,
+      reset: imperativeReset,
+      resume: imperativeResume,
+      restart: imperativeRestart,
     }));
 
     // onAllOffScreen: GPU reported every piece is off-viewport. Infinite mode
@@ -241,15 +281,22 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
     }, [infinite, running, onAnimationEnd]);
 
     useEffect(() => {
+      autoplaySuppressedRef.current = false;
+    }, [autoplay, autoStartDelay]);
+
+    useEffect(() => {
+      clearPendingAutoplay();
       if (!ready || !reduceMotionReady || !hasParticles || !rendererReady)
         return;
-      if (!autoplay) return;
-      const t = setTimeout(() => {
+      if (!autoplay || autoplaySuppressedRef.current) return;
+      autoplayTimerRef.current = setTimeout(() => {
+        autoplayTimerRef.current = null;
+        if (autoplaySuppressedRef.current) return;
         if (running.get()) return;
         runOnUI(beginCycle)();
         onAnimationStart?.();
       }, autoStartDelay);
-      return () => clearTimeout(t);
+      return clearPendingAutoplay;
     }, [
       ready,
       autoplay,
@@ -260,6 +307,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       hasParticles,
       reduceMotionReady,
       rendererReady,
+      clearPendingAutoplay,
     ]);
 
     // Default gravity direction is +Y (down). Caller can override with a

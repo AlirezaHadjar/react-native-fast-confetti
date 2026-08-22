@@ -78,18 +78,8 @@ export const toPIBurstParticles = (
   boxes.map((box) => {
     const origin = blastPositions[box.originIndex] ?? hiddenOrigin;
     return {
-      originAndTiming: [
-        origin.x,
-        origin.y,
-        box.originDelay,
-        box.launchDelay,
-      ],
-      velocityAndDepth: [
-        box.vx,
-        box.vy,
-        box.depthScale,
-        box.initialRotation,
-      ],
+      originAndTiming: [origin.x, origin.y, box.originDelay, box.launchDelay],
+      velocityAndDepth: [box.vx, box.vy, box.depthScale, box.initialRotation],
       rotationAndMeta: [
         box.maxRotation.x,
         box.maxRotation.z,
@@ -113,18 +103,8 @@ export const toCannonBurstParticles = (
   boxes.map((box) => {
     const origin = cannonPositions[box.cannonIndex] ?? hiddenOrigin;
     return {
-      originAndTiming: [
-        origin.x,
-        origin.y,
-        0,
-        box.launchDelay,
-      ],
-      velocityAndDepth: [
-        box.vx,
-        box.vy,
-        box.depthScale,
-        box.initialRotation,
-      ],
+      originAndTiming: [origin.x, origin.y, 0, box.launchDelay],
+      velocityAndDepth: [box.vx, box.vy, box.depthScale, box.initialRotation],
       rotationAndMeta: [
         box.maxRotation.x,
         box.maxRotation.z,
@@ -153,7 +133,10 @@ export const toPIBurstOrigins = (
 ): GPUBurstOrigin[] => {
   let countStart = 0;
   return configs.map((config, index) => {
-    const position = positions[index] ?? hiddenOrigin;
+    const position =
+      positions.length > 0
+        ? (positions[index % positions.length] ?? hiddenOrigin)
+        : hiddenOrigin;
     const rotation = config.rotation ?? DEFAULT_PI_CONFETTI_ROTATION;
     const rotationX = rotation.x ?? DEFAULT_PI_CONFETTI_ROTATION.x;
     const rotationZ = rotation.z ?? DEFAULT_PI_CONFETTI_ROTATION.z;
@@ -178,12 +161,7 @@ export const toPIBurstOrigins = (
         config.sizeStart,
         config.sizeCount,
       ],
-      rotation: [
-        rotationX.min,
-        rotationX.max,
-        rotationZ.min,
-        rotationZ.max,
-      ],
+      rotation: [rotationX.min, rotationX.max, rotationZ.min, rotationZ.max],
       depth: [depth.min, depth.max, 0, 0],
     };
     countStart += config.count;
@@ -204,12 +182,7 @@ export const toCannonBurstOrigins = (
     const depth = config.depth ?? DEFAULT_CANNON_CONFETTI_DEPTH;
     const origin: GPUBurstOrigin = {
       originAndCount: [position.x, position.y, 0, config.count],
-      targetStartAndMode: [
-        config.target.x,
-        config.target.y,
-        countStart,
-        1,
-      ],
+      targetStartAndMode: [config.target.x, config.target.y, countStart, 1],
       motion: [
         config.spread,
         config.speed,
@@ -222,12 +195,7 @@ export const toCannonBurstOrigins = (
         config.sizeStart,
         config.sizeCount,
       ],
-      rotation: [
-        rotationX.min,
-        rotationX.max,
-        rotationZ.min,
-        rotationZ.max,
-      ],
+      rotation: [rotationX.min, rotationX.max, rotationZ.min, rotationZ.max],
       depth: [depth.min, depth.max, 0, 0],
     };
     countStart += config.count;

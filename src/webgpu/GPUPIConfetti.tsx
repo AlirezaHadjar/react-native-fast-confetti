@@ -28,10 +28,7 @@ import type {
   PIConfettiRestartOptions,
   Position,
 } from '../types';
-import {
-  estimatePIDuration,
-  resolveNamedPosition,
-} from '../utils';
+import { estimatePIDuration, resolveNamedPosition } from '../utils';
 import { toPIBurstOrigins } from './burstResourcePacking';
 import { GPUBurstConfettiCanvas } from './GPUBurstConfettiCanvas';
 import type { GPUPIConfettiProps } from './types';
@@ -45,6 +42,7 @@ type RestartState = {
 type StartRequest = {
   nonce: number;
   delay: number;
+  notifyStart: boolean;
 };
 
 const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
@@ -121,11 +119,19 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
     const [startRequest, setStartRequest] = useState<StartRequest>({
       nonce: 0,
       delay: 0,
+      notifyStart: true,
     });
     const [rendererReady, setRendererReady] = useState(false);
 
-    const currentBlastPositions =
-      restartState.positions ?? blastPositions;
+    const requestStart = useCallback((delay = 0, notifyStart = true) => {
+      setStartRequest((request) => ({
+        nonce: request.nonce + 1,
+        delay,
+        notifyStart,
+      }));
+    }, []);
+
+    const currentBlastPositions = restartState.positions ?? blastPositions;
     const currentOriginDelays = restartState.delays ?? originDelays;
 
     const { flightDuration, totalDuration } = estimatePIDuration({
@@ -143,14 +149,16 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
         ? Math.min(sprayDuration / totalDuration, 1)
         : DEFAULT_PI_CONFETTI_LAUNCH_DELAY_MAX;
 
-    const bumpSeed = useCallback(() => {
+    const prepareNextCycle = useCallback(() => {
+      setRendererReady(false);
       setRestartState((state) => ({ ...state, seed: state.seed + 1 }));
-    }, []);
+      requestStart(0, false);
+    }, [requestStart]);
 
     const onCycleEnd = useCallback(() => {
       'worklet';
-      scheduleOnRN(bumpSeed);
-    }, [bumpSeed]);
+      scheduleOnRN(prepareNextCycle);
+    }, [prepareNextCycle]);
 
     const { progress, running, opacity, pause, reset, resume, runAnimation } =
       useAnimationLifecycle({
@@ -162,6 +170,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
         onAnimationEnd,
         fadeRange: [0.5, 0.9],
         onCycleEnd,
+        deferInfiniteRestart: true,
         disabled: visibleCount === 0,
       });
 
@@ -193,13 +202,6 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
     );
     const renderCount = ready && reduceMotionReady ? visibleCount : 0;
 
-    const requestStart = useCallback((delay = 0) => {
-      setStartRequest((request) => ({
-        nonce: request.nonce + 1,
-        delay,
-      }));
-    }, []);
-
     const jsRestart = useCallback(
       (options: PIConfettiRestartOptions = {}) => {
         let resolvedPositions: Position[] | null = null;
@@ -215,6 +217,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
           resolvedDelays = options.origins.map((origin) => origin.delay ?? 0);
         }
 
+        setRendererReady(false);
         setRestartState((state) => ({
           seed: state.seed + 1,
           positions: resolvedPositions,
@@ -233,14 +236,10 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
     }));
 
     useEffect(() => {
-      if (
-        !ready ||
-        !reduceMotionReady ||
-        !rendererReady ||
-        renderCount === 0
-      )
+      if (!ready || !reduceMotionReady || !rendererReady || renderCount === 0)
         return;
       if (!autoplay) return;
+      if (startRequest.nonce !== 0) return;
       if (running.get()) return;
       runOnUI(runAnimation)(autoStartDelay);
     }, [
@@ -252,18 +251,14 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
       runAnimation,
       reduceMotionReady,
       rendererReady,
+      startRequest.nonce,
     ]);
 
     useEffect(() => {
       if (startRequest.nonce === 0) return;
-      if (
-        !ready ||
-        !reduceMotionReady ||
-        !rendererReady ||
-        renderCount === 0
-      )
+      if (!ready || !reduceMotionReady || !rendererReady || renderCount === 0)
         return;
-      runOnUI(runAnimation)(startRequest.delay);
+      runOnUI(runAnimation)(startRequest.delay, startRequest.notifyStart);
     }, [
       startRequest,
       ready,

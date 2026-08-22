@@ -50,6 +50,7 @@ type RestartState = {
 type StartRequest = {
   nonce: number;
   delay: number;
+  notifyStart: boolean;
 };
 
 const CannonConfettiInner = forwardRef<
@@ -130,11 +131,19 @@ const CannonConfettiInner = forwardRef<
     const [startRequest, setStartRequest] = useState<StartRequest>({
       nonce: 0,
       delay: 0,
+      notifyStart: true,
     });
     const [rendererReady, setRendererReady] = useState(false);
 
-    const currentCannonsPositions =
-      restartState.positions ?? cannonsPositions;
+    const requestStart = useCallback((delay = 0, notifyStart = true) => {
+      setStartRequest((request) => ({
+        nonce: request.nonce + 1,
+        delay,
+        notifyStart,
+      }));
+    }, []);
+
+    const currentCannonsPositions = restartState.positions ?? cannonsPositions;
     const currentCannonConfigs = restartState.configs ?? cannonConfigs;
 
     const duration = estimateCannonDuration({
@@ -154,14 +163,16 @@ const CannonConfettiInner = forwardRef<
         ? Math.min(sprayDuration / duration, 1)
         : DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX;
 
-    const bumpSeed = useCallback(() => {
+    const prepareNextCycle = useCallback(() => {
+      setRendererReady(false);
       setRestartState((state) => ({ ...state, seed: state.seed + 1 }));
-    }, []);
+      requestStart(0, false);
+    }, [requestStart]);
 
     const onCycleEnd = useCallback(() => {
       'worklet';
-      scheduleOnRN(bumpSeed);
-    }, [bumpSeed]);
+      scheduleOnRN(prepareNextCycle);
+    }, [prepareNextCycle]);
 
     const { progress, running, opacity, pause, reset, resume, runAnimation } =
       useAnimationLifecycle({
@@ -172,6 +183,7 @@ const CannonConfettiInner = forwardRef<
         onAnimationStart,
         onAnimationEnd,
         onCycleEnd,
+        deferInfiniteRestart: true,
         disabled: visibleCount === 0,
       });
 
@@ -200,13 +212,6 @@ const CannonConfettiInner = forwardRef<
       ]
     );
     const renderCount = ready && reduceMotionReady ? visibleCount : 0;
-
-    const requestStart = useCallback((delay = 0) => {
-      setStartRequest((request) => ({
-        nonce: request.nonce + 1,
-        delay,
-      }));
-    }, []);
 
     const jsRestart = useCallback(
       (options: CannonConfettiRestartOptions = {}) => {
@@ -242,7 +247,10 @@ const CannonConfettiInner = forwardRef<
                 : defaultTarget;
 
             return {
-              spread: DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE,
+              spread: scaleValueForMotion(
+                DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE,
+                reduceMotionFactor
+              ),
               speed: DEFAULT_CANNON_CONFETTI_INITIAL_SPEED,
               count: perOriginCount,
               speedVariation: {
@@ -257,6 +265,7 @@ const CannonConfettiInner = forwardRef<
           });
         }
 
+        setRendererReady(false);
         setRestartState((state) => ({
           seed: state.seed + 1,
           positions: resolvedPositions,
@@ -269,6 +278,7 @@ const CannonConfettiInner = forwardRef<
         containerWidth,
         containerHeight,
         requestStart,
+        reduceMotionFactor,
         rootTarget,
         sizeVariations.length,
         totalCount,
@@ -283,14 +293,10 @@ const CannonConfettiInner = forwardRef<
     }));
 
     useEffect(() => {
-      if (
-        !ready ||
-        !reduceMotionReady ||
-        !rendererReady ||
-        renderCount === 0
-      )
+      if (!ready || !reduceMotionReady || !rendererReady || renderCount === 0)
         return;
       if (!autoplay) return;
+      if (startRequest.nonce !== 0) return;
       if (running.get()) return;
       runOnUI(runAnimation)(autoStartDelay);
     }, [
@@ -302,18 +308,14 @@ const CannonConfettiInner = forwardRef<
       runAnimation,
       reduceMotionReady,
       rendererReady,
+      startRequest.nonce,
     ]);
 
     useEffect(() => {
       if (startRequest.nonce === 0) return;
-      if (
-        !ready ||
-        !reduceMotionReady ||
-        !rendererReady ||
-        renderCount === 0
-      )
+      if (!ready || !reduceMotionReady || !rendererReady || renderCount === 0)
         return;
-      runOnUI(runAnimation)(startRequest.delay);
+      runOnUI(runAnimation)(startRequest.delay, startRequest.notifyStart);
     }, [
       startRequest,
       ready,

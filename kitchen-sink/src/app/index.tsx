@@ -1,16 +1,24 @@
-import {
-  FlatList,
-  StyleSheet,
-  Dimensions,
-} from 'react-native';
+import { useMemo } from 'react';
+import { FlatList, StyleSheet, Dimensions, Platform } from 'react-native';
 import { colors } from '../constants/colors';
 import {
-  CannonConfetti,
-  Confetti,
-  ContinuousConfetti,
-  PIConfetti,
-} from 'react-native-fast-confetti';
+  CannonConfetti as SkiaCannonConfetti,
+  Confetti as SkiaConfetti,
+  ContinuousConfetti as SkiaContinuousConfetti,
+  PIConfetti as SkiaPIConfetti,
+} from '../../../src';
+import {
+  CannonConfetti as WebGPUCannonConfetti,
+  Confetti as WebGPUConfetti,
+  ContinuousConfetti as WebGPUContinuousConfetti,
+  PIConfetti as WebGPUPIConfetti,
+} from '../../../src/gpu';
 import { ModeCard } from '../components/ModeCard';
+import {
+  PERFORMANCE_PARTICLE_COUNT,
+  type RendererType,
+} from '../constants/config';
+import { useRenderer } from '../hooks/useRenderer';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -18,7 +26,7 @@ const PADDING = 16;
 const ITEM_HEIGHT = 140;
 const ITEM_WIDTH = SCREEN_WIDTH - PADDING * 2;
 
-const previewFlakes = (Flake: typeof Confetti.Flake) => (
+const previewFlakes = (Flake: typeof SkiaConfetti.Flake) => (
   <>
     <Flake size={12} radius={6} />
     <Flake width={8} height={14} />
@@ -27,112 +35,125 @@ const previewFlakes = (Flake: typeof Confetti.Flake) => (
   </>
 );
 
-const modes = [
-  {
-    key: 'single',
-    title: 'Single',
-    description: 'One-shot confetti burst',
-    render: () => (
-      <Confetti
-        autoplay
-        count={100}
-        containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
-        verticalSpacing={50}
-        infinite
-        flakeStyle="glossy"
-        gravity={2}
-      >
-        {previewFlakes(Confetti.Flake)}
-      </Confetti>
-    ),
-  },
-  {
-    key: 'continuous',
-    title: 'Continuous',
-    description: 'Continuous falling confetti',
-    render: () => (
-      <ContinuousConfetti
-        autoplay
-        count={400}
-        containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
-        verticalSpacing={120}
-        flakeStyle="glossy"
-        gravity={2}
-      >
-        {previewFlakes(ContinuousConfetti.Flake)}
-      </ContinuousConfetti>
-    ),
-  },
-  {
-    key: 'pi',
-    title: 'PI',
-    description: 'Physics-inspired confetti',
-    render: () => (
-      <PIConfetti
-        autoplay
-        flakeStyle="glossy"
-        gravity={6}
-        infinite
-        containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
-      >
-        <PIConfetti.Origin
-          blastPosition="center"
-          count={100}
-          initialSpeed={4}
+const createModes = (renderer: RendererType) => {
+  const Confetti = renderer === 'webgpu' ? WebGPUConfetti : SkiaConfetti;
+  const ContinuousConfetti =
+    renderer === 'webgpu' ? WebGPUContinuousConfetti : SkiaContinuousConfetti;
+  const PIConfetti = renderer === 'webgpu' ? WebGPUPIConfetti : SkiaPIConfetti;
+  const CannonConfetti =
+    renderer === 'webgpu' ? WebGPUCannonConfetti : SkiaCannonConfetti;
+
+  return [
+    {
+      key: 'single',
+      title: 'Single',
+      description: 'One-shot confetti burst',
+      render: () => (
+        <Confetti
+          autoplay
+          count={PERFORMANCE_PARTICLE_COUNT}
+          containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
+          verticalSpacing={50}
+          infinite
+          flakeStyle="glossy"
+          gravity={2}
         >
-          {previewFlakes(PIConfetti.Flake)}
-        </PIConfetti.Origin>
-      </PIConfetti>
-    ),
-  },
-  {
-    key: 'cannon',
-    title: 'Cannon',
-    description: 'Confetti cannons from edges',
-    render: () => (
-      <CannonConfetti
-        autoplay
-        fadeOutOnEnd
-        infinite
-        flakeStyle="glossy"
-        gravity={4}
-        drag={{ vertical: 3, horizontal: 6 }}
-        sprayDuration={300}
-        initialScale={0.7}
-        containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
-      >
-        <CannonConfetti.Origin
-          position="bottom-left"
-          count={50}
-          initialSpeed={6}
-          spread={Math.PI / 3}
-          depth={{ min: 1, max: 1.1 }}
+          {previewFlakes(Confetti.Flake)}
+        </Confetti>
+      ),
+    },
+    {
+      key: 'continuous',
+      title: 'Continuous',
+      description: 'Continuous falling confetti',
+      render: () => (
+        <ContinuousConfetti
+          autoplay
+          count={PERFORMANCE_PARTICLE_COUNT}
+          containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
+          verticalSpacing={120}
+          flakeStyle="glossy"
+          gravity={2}
         >
-          {previewFlakes(CannonConfetti.Flake)}
-        </CannonConfetti.Origin>
-        <CannonConfetti.Origin
-          position="bottom-right"
-          count={50}
-          initialSpeed={6}
-          spread={Math.PI / 3}
-          depth={{ min: 1, max: 1.1 }}
+          {previewFlakes(ContinuousConfetti.Flake)}
+        </ContinuousConfetti>
+      ),
+    },
+    {
+      key: 'pi',
+      title: 'PI',
+      description: 'Physics-inspired confetti',
+      render: () => (
+        <PIConfetti
+          autoplay
+          flakeStyle="glossy"
+          gravity={6}
+          infinite
+          containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
         >
-          {previewFlakes(CannonConfetti.Flake)}
-        </CannonConfetti.Origin>
-        <CannonConfetti.Origin
-          position="bottom-center"
-          count={50}
-          initialSpeed={4}
-          spread={Math.PI / 3}
+          <PIConfetti.Origin
+            blastPosition="center"
+            count={PERFORMANCE_PARTICLE_COUNT}
+            initialSpeed={4}
+          >
+            {previewFlakes(PIConfetti.Flake)}
+          </PIConfetti.Origin>
+        </PIConfetti>
+      ),
+    },
+    {
+      key: 'cannon',
+      title: 'Cannon',
+      description: 'Confetti cannons from edges',
+      render: () => (
+        <CannonConfetti
+          autoplay
+          fadeOutOnEnd
+          infinite
+          flakeStyle="glossy"
+          gravity={4}
+          drag={{ vertical: 3, horizontal: 6 }}
+          sprayDuration={300}
+          initialScale={0.7}
+          containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
         >
-          {previewFlakes(CannonConfetti.Flake)}
-        </CannonConfetti.Origin>
-      </CannonConfetti>
-    ),
-  },
-] as const;
+          <CannonConfetti.Origin
+            position="bottom-left"
+            count={PERFORMANCE_PARTICLE_COUNT}
+            initialSpeed={6}
+            spread={Math.PI / 3}
+            depth={{ min: 1, max: 1.1 }}
+          >
+            {previewFlakes(CannonConfetti.Flake)}
+          </CannonConfetti.Origin>
+          <CannonConfetti.Origin
+            position="bottom-right"
+            count={PERFORMANCE_PARTICLE_COUNT}
+            initialSpeed={6}
+            spread={Math.PI / 3}
+            depth={{ min: 1, max: 1.1 }}
+          >
+            {previewFlakes(CannonConfetti.Flake)}
+          </CannonConfetti.Origin>
+          <CannonConfetti.Origin
+            position="bottom-center"
+            count={PERFORMANCE_PARTICLE_COUNT}
+            initialSpeed={4}
+            spread={Math.PI / 3}
+          >
+            {previewFlakes(CannonConfetti.Flake)}
+          </CannonConfetti.Origin>
+        </CannonConfetti>
+      ),
+    },
+  ] as const;
+};
 
 export default function HomeScreen() {
+  const { renderer } = useRenderer();
+  const previewRenderer = Platform.OS === 'ios' ? 'skia' : renderer;
+  const modes = useMemo(() => createModes(previewRenderer), [previewRenderer]);
+
   return (
     <FlatList
       data={modes}

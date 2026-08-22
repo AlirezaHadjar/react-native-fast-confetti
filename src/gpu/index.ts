@@ -22,4 +22,3 @@ export type {
   Range,
   Rotation,
 } from './types';
-

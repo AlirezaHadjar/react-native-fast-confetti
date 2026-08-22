@@ -7,7 +7,11 @@ import { ContinuousConfetti as WebGPUContinuousConfetti } from '../../../src/gpu
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
-import { rendererOptions, textureOptions } from '../constants/config';
+import {
+  PERFORMANCE_PARTICLE_COUNT,
+  rendererOptions,
+  textureOptions,
+} from '../constants/config';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
 import { useScreenConfig } from '../hooks/useScreenConfig';
 import { getRotation, getTextureProps } from '../utils/confettiConfig';
@@ -60,19 +64,6 @@ export default function ContinuousScreen() {
         />
       </View>
 
-      {isFocused ? (
-        <ContinuousConfetti
-          key={confettiKey}
-          ref={confettiRef}
-          autoplay
-          rotation={rotation}
-          count={200}
-          flipIntensity={config.textureType === 'money' ? 0.1 : 0.85}
-        >
-          {renderFlakes()}
-        </ContinuousConfetti>
-      ) : null}
-
       <ConfettiControls
         actions={{
           resume: () => confettiRef.current?.resume(),
@@ -81,6 +72,19 @@ export default function ContinuousScreen() {
           reset: () => confettiRef.current?.reset(),
         }}
       />
+
+      {isFocused ? (
+        <ContinuousConfetti
+          key={confettiKey}
+          ref={confettiRef}
+          autoplay
+          rotation={rotation}
+          count={PERFORMANCE_PARTICLE_COUNT}
+          flipIntensity={config.textureType === 'money' ? 0.1 : 0.85}
+        >
+          {renderFlakes()}
+        </ContinuousConfetti>
+      ) : null}
     </View>
   );
 }

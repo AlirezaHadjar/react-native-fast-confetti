@@ -21,21 +21,9 @@ export function ModeCard({ item, styles }: ModeCardProps) {
     <Link href={`/${item.key}`} asChild>
       <Link.AppleZoom>
         <Pressable style={styles.card}>
-          <BlurTargetView ref={blurTargetRef} style={StyleSheet.absoluteFill}>
-            <View
-              style={[
-                StyleSheet.absoluteFill,
-                {
-                  zIndex: -1,
-                },
-              ]}
-            >
-              {isFocused ? item.render() : null}
-            </View>
-          </BlurTargetView>
-          <View style={styles.cardTitleContainer}>
+          <BlurTargetView ref={blurTargetRef} style={styles.cardTitleContainer}>
             <Text style={styles.cardTitle}>{item.title}</Text>
-          </View>
+          </BlurTargetView>
           <BlurView
             intensity={isAndroidDark ? 70 : 8}
             blurMethod="dimezisBlurView"
@@ -47,6 +35,9 @@ export function ModeCard({ item, styles }: ModeCardProps) {
           >
             <Text style={styles.cardDescription}>{item.description}</Text>
           </BlurView>
+          <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+            {isFocused ? item.render() : null}
+          </View>
         </Pressable>
       </Link.AppleZoom>
     </Link>

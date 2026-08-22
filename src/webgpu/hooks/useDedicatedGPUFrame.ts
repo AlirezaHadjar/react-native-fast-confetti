@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import {
   useFrameCallback,
@@ -25,7 +25,7 @@ type ShouldScheduleGPUFrame = () => boolean;
 type UIFrameEntry = {
   callback: DedicatedGPUFrameCallback;
   shouldSchedule: ShouldScheduleGPUFrame;
-  device: GPUDevice;
+  queue: GPUQueue;
   context: PresentableCanvasContext;
   commandBuffers: GPUCommandBuffer[];
   target: DedicatedGPUFrameTarget;
@@ -92,7 +92,7 @@ const registerGPUFrameOnUI = (
   key: string,
   callback: DedicatedGPUFrameCallback,
   shouldSchedule: ShouldScheduleGPUFrame,
-  device: GPUDevice,
+  queue: GPUQueue,
   context: PresentableCanvasContext
 ) => {
   'worklet';
@@ -102,7 +102,7 @@ const registerGPUFrameOnUI = (
   registry.set(key, {
     callback,
     shouldSchedule,
-    device,
+    queue,
     context,
     // Allocate the submit sequence once in its owning runtime. Only the
     // unavoidable native GPUCommandBuffer wrapper changes each frame.
@@ -114,6 +114,11 @@ const registerGPUFrameOnUI = (
 const retireGPUFrameOnUI = (key: string) => {
   'worklet';
   const registry = globalThis.__fastConfettiUIFrameRegistryV5;
+  const entry = registry?.get(key);
+  if (entry) {
+    entry.commandBuffers.length = 0;
+    entry.target.colorAttachment.view = undefined as unknown as GPUTextureView;
+  }
   registry?.delete(key);
   if (globalThis.__fastConfettiUIFrameCursorV4 === key) {
     globalThis.__fastConfettiUIFrameCursorV4 = undefined;
@@ -121,7 +126,7 @@ const retireGPUFrameOnUI = (key: string) => {
 };
 
 const commitGPUFrameSubmission = (
-  device: GPUDevice,
+  queue: GPUQueue,
   context: PresentableCanvasContext,
   commandBuffer: GPUCommandBuffer,
   commandBuffers: GPUCommandBuffer[]
@@ -130,24 +135,32 @@ const commitGPUFrameSubmission = (
   // Each native swapchain owns a pending Metal command buffer. Submit and
   // present must remain an adjacent pair for that exact surface.
   commandBuffers[0] = commandBuffer;
-  device.queue.submit(commandBuffers);
-  context.present?.();
+  try {
+    queue.submit(commandBuffers);
+    context.present?.();
+  } finally {
+    commandBuffers.length = 0;
+  }
 };
 
 const dispatchGPUFrame = (entry: UIFrameEntry, frameInfo: FrameInfo) => {
   'worklet';
-  const commandBuffer = entry.callback(
-    frameInfo.timestamp,
-    frameInfo.timeSinceFirstFrame,
-    entry.target
-  );
-  if (commandBuffer) {
-    commitGPUFrameSubmission(
-      entry.device,
-      entry.context,
-      commandBuffer,
-      entry.commandBuffers
+  try {
+    const commandBuffer = entry.callback(
+      frameInfo.timestamp,
+      frameInfo.timeSinceFirstFrame,
+      entry.target
     );
+    if (commandBuffer) {
+      commitGPUFrameSubmission(
+        entry.queue,
+        entry.context,
+        commandBuffer,
+        entry.commandBuffers
+      );
+    }
+  } finally {
+    entry.target.colorAttachment.view = undefined as unknown as GPUTextureView;
   }
 };
 
@@ -168,6 +181,7 @@ export const useDedicatedGPUFrame = (
   const generationRef = useRef(0);
   const webCommandBuffersRef = useRef<GPUCommandBuffer[]>([]);
   const serializeNativeSwapchains = Platform.OS === 'ios';
+  const queue = useMemo(() => device?.queue ?? null, [device]);
 
   const canSchedule = useCallback(() => {
     'worklet';
@@ -234,22 +248,27 @@ export const useDedicatedGPUFrame = (
   const scheduleWebFrame = useCallback(
     (frameInfo: FrameInfo) => {
       'worklet';
-      if (!enabled || !device || !context || !canSchedule()) return;
-      const commandBuffer = callback(
-        frameInfo.timestamp,
-        frameInfo.timeSinceFirstFrame,
-        webFrameTarget
-      );
-      if (commandBuffer) {
-        commitGPUFrameSubmission(
-          device,
-          context,
-          commandBuffer,
-          webCommandBuffersRef.current
+      if (!enabled || !queue || !context || !canSchedule()) return;
+      try {
+        const commandBuffer = callback(
+          frameInfo.timestamp,
+          frameInfo.timeSinceFirstFrame,
+          webFrameTarget
         );
+        if (commandBuffer) {
+          commitGPUFrameSubmission(
+            queue,
+            context,
+            commandBuffer,
+            webCommandBuffersRef.current
+          );
+        }
+      } finally {
+        webFrameTarget.colorAttachment.view =
+          undefined as unknown as GPUTextureView;
       }
     },
-    [callback, canSchedule, context, device, enabled, webFrameTarget]
+    [callback, canSchedule, context, enabled, queue, webFrameTarget]
   );
 
   // The native clock callback captures no canvas, resource, or user worklet.
@@ -260,7 +279,7 @@ export const useDedicatedGPUFrame = (
   );
 
   useEffect(() => {
-    if (!enabled || !device || !context) {
+    if (!enabled || !device || !queue || !context) {
       frameCallback.setActive(false);
       return;
     }
@@ -277,7 +296,7 @@ export const useDedicatedGPUFrame = (
       key,
       callback,
       canSchedule,
-      device,
+      queue,
       context
     );
     registerNativeClock(surfaceId, frameCallback);
@@ -293,6 +312,7 @@ export const useDedicatedGPUFrame = (
     device,
     enabled,
     frameCallback,
+    queue,
     surfaceId,
   ]);
 };

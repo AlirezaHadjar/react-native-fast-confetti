@@ -20,9 +20,8 @@ import type { GPUConfettiExtraProps, GPUTextureMode } from '../webgpu/types';
 export type ConfettiProps = CoreConfettiProps & GPUConfettiExtraProps;
 export type ContinuousConfettiProps = CoreContinuousConfettiProps &
   GPUConfettiExtraProps;
-export type PIConfettiProps = CorePIConfettiProps & GPUConfettiExtraProps;
-export type CannonConfettiProps = CoreCannonConfettiProps &
-  GPUConfettiExtraProps;
+export type PIConfettiProps = CorePIConfettiProps;
+export type CannonConfettiProps = CoreCannonConfettiProps;
 export type ConfettiMethods = CoreConfettiMethods;
 export type PIConfettiMethods = CorePIConfettiMethods;
 export type CannonConfettiMethods = CoreCannonConfettiMethods;
@@ -39,4 +38,3 @@ export type {
   Range,
   Rotation,
 };
-
