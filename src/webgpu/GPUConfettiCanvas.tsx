@@ -99,6 +99,7 @@ export type GPUConfettiCanvasParams = {
 };
 
 type Props = {
+  device?: GPUDevice;
   containerStyle?: StyleProp<ViewStyle>;
   onContainerLayout: (e: LayoutChangeEvent) => void;
   count: number;
@@ -123,7 +124,10 @@ type Props = {
   onReadyChange: (ready: boolean) => void;
 };
 
-type RendererProps = Omit<Props, 'containerStyle' | 'onContainerLayout'> & {
+type RendererProps = Omit<
+  Props,
+  'containerStyle' | 'device' | 'onContainerLayout'
+> & {
   device: GPUDevice;
 };
 
@@ -774,7 +778,7 @@ const GPUConfettiRenderer = ({
 };
 
 export const GPUConfettiCanvas = (props: Props) => {
-  const device = useGPUDevice();
+  const device = useGPUDevice(props.device);
   const canRender =
     device !== null &&
     props.count > 0 &&

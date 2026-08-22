@@ -14,6 +14,7 @@ export type {
   FlakeProps,
   FlakeStyle,
   GPUConfettiExtraProps,
+  GPUDeviceProps,
   GPUTextureMode,
   NamedPosition,
   PIConfettiMethods,

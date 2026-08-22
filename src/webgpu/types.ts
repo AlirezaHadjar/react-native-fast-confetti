@@ -21,6 +21,15 @@ export type GPUTextureMode =
   | 6 // neon
   | 7; // glass
 
+export type GPUDeviceProps = {
+  /**
+   * An optional GPUDevice borrowed from the host application.
+   * When omitted, all GPU confetti components lazily share one internal device.
+   * The library never destroys an injected device.
+   */
+  device?: GPUDevice;
+};
+
 export type GPUConfettiExtraProps = {
   /**
    * Strength of the procedural wind field.
@@ -77,13 +86,17 @@ export type GPUConfettiExtraProps = {
   gravityDir?: SharedValue<FixedLengthArray<number, 3>>;
 };
 
-export type GPUConfettiProps = ConfettiProps & GPUConfettiExtraProps;
+export type GPUConfettiProps = ConfettiProps &
+  GPUConfettiExtraProps &
+  GPUDeviceProps;
 export type InternalGPUConfettiProps = InternalConfettiProps &
-  GPUConfettiExtraProps;
+  GPUConfettiExtraProps &
+  GPUDeviceProps;
 export type GPUContinuousConfettiProps = ContinuousConfettiProps &
-  GPUConfettiExtraProps;
-export type GPUPIConfettiProps = PIConfettiProps;
-export type GPUCannonConfettiProps = CannonConfettiProps;
+  GPUConfettiExtraProps &
+  GPUDeviceProps;
+export type GPUPIConfettiProps = PIConfettiProps & GPUDeviceProps;
+export type GPUCannonConfettiProps = CannonConfettiProps & GPUDeviceProps;
 export type GPUConfettiMethods = ConfettiMethods;
 export type GPUPIConfettiMethods = PIConfettiMethods;
 export type GPUCannonConfettiMethods = CannonConfettiMethods;

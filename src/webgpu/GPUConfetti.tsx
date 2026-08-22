@@ -81,6 +81,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       iridescence = 0,
       textureMode = 0,
       gravityDir: externalGravityDir,
+      device,
       ...textureRootProps
     },
     ref
@@ -397,6 +398,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
 
     return (
       <GPUConfettiCanvas
+        device={device}
         containerStyle={containerStyle}
         onContainerLayout={onContainerLayout}
         count={hasParticles ? visibleCount : 0}

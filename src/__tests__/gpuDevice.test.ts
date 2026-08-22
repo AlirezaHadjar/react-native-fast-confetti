@@ -1,0 +1,60 @@
+import { describe, expect, it, jest } from '@jest/globals';
+
+import { createGPUDeviceStore } from '../webgpu/hooks/useGPUDevice';
+
+const createDevice = () => {
+  let lose!: () => void;
+  const lost = new Promise<GPUDeviceLostInfo>((resolve) => {
+    lose = () =>
+      resolve({
+        message: 'test device loss',
+        reason: 'destroyed',
+      } as GPUDeviceLostInfo);
+  });
+
+  return {
+    device: { lost } as GPUDevice,
+    lose,
+  };
+};
+
+describe('shared GPU device store', () => {
+  it('deduplicates concurrent device requests', async () => {
+    const { device } = createDevice();
+    const requestDevice = jest.fn(async () => device);
+    const store = createGPUDeviceStore(requestDevice);
+
+    const [first, second] = await Promise.all([
+      store.acquire(),
+      store.acquire(),
+    ]);
+
+    expect(requestDevice).toHaveBeenCalledTimes(1);
+    expect(first).toBe(device);
+    expect(second).toBe(device);
+    expect(store.getSnapshot()).toBe(device);
+  });
+
+  it('reacquires a lost device while consumers are subscribed', async () => {
+    const first = createDevice();
+    const second = createDevice();
+    const requestDevice = jest
+      .fn<() => Promise<GPUDevice | null>>()
+      .mockResolvedValueOnce(first.device)
+      .mockResolvedValueOnce(second.device);
+    const store = createGPUDeviceStore(requestDevice);
+    const listener = jest.fn();
+    const unsubscribe = store.subscribe(listener);
+
+    await store.acquire();
+    first.lose();
+    await Promise.resolve();
+    await store.acquire();
+
+    expect(requestDevice).toHaveBeenCalledTimes(2);
+    expect(store.getSnapshot()).toBe(second.device);
+    expect(listener).toHaveBeenCalledTimes(3);
+
+    unsubscribe();
+  });
+});

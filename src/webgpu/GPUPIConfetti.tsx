@@ -67,6 +67,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
       onAnimationEnd,
       onAnimationStart,
       containerStyle,
+      device,
       ...textureRootProps
     },
     ref
@@ -269,6 +270,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
 
     return (
       <GPUBurstConfettiCanvas
+        device={device}
         containerStyle={containerStyle}
         onContainerLayout={onContainerLayout}
         count={renderCount}

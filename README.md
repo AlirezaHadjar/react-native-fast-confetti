@@ -76,10 +76,17 @@ plugins: [
 ```
 
 The WebGPU entry exports `Confetti`, `ContinuousConfetti`, `PIConfetti`, and
-`CannonConfetti` with the same component API. On iOS, mount one active WebGPU
-canvas at a time (normally one full-screen canvas); additional GPU canvases wait
-for the active owner to unmount because the current native WebGPU bridge cannot
-safely present multiple `CAMetalLayer` swapchains concurrently.
+`CannonConfetti` with the same component API. By default, mounted GPU confetti
+components lazily share one device. To coordinate with another WebGPU renderer,
+pass an app-owned `GPUDevice`; the confetti component borrows it and never
+destroys it:
+
+```tsx
+<Confetti device={device} autoplay />
+```
+
+The owner of an injected device is responsible for replacing it after device
+loss. Keep all work submitted to a shared device serialized on one runtime.
 
 Read the [WebGPU caveats](#webgpu-caveats)
 

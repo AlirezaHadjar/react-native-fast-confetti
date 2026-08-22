@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import {
   useFrameCallback,
@@ -91,7 +85,6 @@ declare global {
   // This registry exists only in the Reanimated UI runtime.
   var __fastConfettiUIFrameRegistryV5: UIFrameRegistry | undefined;
   var __fastConfettiUIWebGPUInstalled: boolean | undefined;
-  var __fastConfettiUIFrameCursorV4: string | undefined;
 }
 
 const registerGPUFrameOnUI = (
@@ -126,9 +119,6 @@ const retireGPUFrameOnUI = (key: string, onRetired?: () => void) => {
     entry.target.colorAttachment.view = undefined as unknown as GPUTextureView;
   }
   registry?.delete(key);
-  if (globalThis.__fastConfettiUIFrameCursorV4 === key) {
-    globalThis.__fastConfettiUIFrameCursorV4 = undefined;
-  }
   if (onRetired) scheduleOnRN(onRetired);
 };
 
@@ -188,7 +178,6 @@ export const useDedicatedGPUFrame = (
   const [webFrameTarget] = useState(createReusableFrameTarget);
   const generationRef = useRef(0);
   const webCommandBuffersRef = useRef<GPUCommandBuffer[]>([]);
-  const serializeNativeSwapchains = Platform.OS === 'ios';
   const queue = useMemo(() => device?.queue ?? null, [device]);
 
   const canSchedule = useCallback(() => {
@@ -196,62 +185,24 @@ export const useDedicatedGPUFrame = (
     return shouldSchedule?.() ?? true;
   }, [shouldSchedule]);
 
-  const scheduleNativeFrame = useCallback(
-    (frameInfo: FrameInfo) => {
-      'worklet';
-      const registry = globalThis.__fastConfettiUIFrameRegistryV5;
-      if (!registry || registry.size === 0) return;
+  const scheduleNativeFrame = useCallback((frameInfo: FrameInfo) => {
+    'worklet';
+    const registry = globalThis.__fastConfettiUIFrameRegistryV5;
+    if (!registry || registry.size === 0) return;
 
-      if (!globalThis.__fastConfettiUIWebGPUInstalled) {
-        installWebGPU();
-        globalThis.__fastConfettiUIWebGPUInstalled = true;
-      }
+    if (!globalThis.__fastConfettiUIWebGPUInstalled) {
+      installWebGPU();
+      globalThis.__fastConfettiUIWebGPUInstalled = true;
+    }
 
-      if (!serializeNativeSwapchains) {
-        for (const entry of registry.values()) {
-          if (!entry.shouldSchedule()) continue;
-          dispatchGPUFrame(entry, frameInfo);
-        }
-        return;
-      }
-
-      // An iOS GPU canvas is a swapchain, not merely another draw target. The
-      // RN WebGPU/Dawn Metal bridge cannot safely finish two swapchains inside a
-      // single display-link callback (it corrupts the simulator command recording
-      // context). Games avoid this by owning one presentation surface. Keep the
-      // production fast path identical for one surface and fairly serialize the
-      // exceptional multi-canvas case across vsyncs.
-      const cursor = globalThis.__fastConfettiUIFrameCursorV4;
-      let passedCursor = cursor === undefined;
-      let firstEligibleKey: string | undefined;
-      let firstEligibleEntry: UIFrameEntry | undefined;
-      let selectedKey: string | undefined;
-      let selectedEntry: UIFrameEntry | undefined;
-
-      for (const [key, entry] of registry) {
-        if (!entry.shouldSchedule()) continue;
-
-        if (!firstEligibleEntry) {
-          firstEligibleKey = key;
-          firstEligibleEntry = entry;
-        }
-        if (passedCursor && key !== cursor) {
-          selectedKey = key;
-          selectedEntry = entry;
-          break;
-        }
-        if (key === cursor) passedCursor = true;
-      }
-
-      selectedKey ??= firstEligibleKey;
-      selectedEntry ??= firstEligibleEntry;
-      if (!selectedEntry || selectedKey === undefined) return;
-
-      globalThis.__fastConfettiUIFrameCursorV4 = selectedKey;
-      dispatchGPUFrame(selectedEntry, frameInfo);
-    },
-    [serializeNativeSwapchains]
-  );
+    // Every native canvas uses this one UI-runtime clock. Process them
+    // sequentially so this library never operates on a device concurrently,
+    // while still giving every surface one opportunity per display tick.
+    for (const entry of registry.values()) {
+      if (!entry.shouldSchedule()) continue;
+      dispatchGPUFrame(entry, frameInfo);
+    }
+  }, []);
 
   const scheduleWebFrame = useCallback(
     (frameInfo: FrameInfo) => {

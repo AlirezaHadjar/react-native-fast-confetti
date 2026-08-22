@@ -15,13 +15,20 @@ import type {
   Range,
   Rotation,
 } from '../types';
-import type { GPUConfettiExtraProps, GPUTextureMode } from '../webgpu/types';
+import type {
+  GPUConfettiExtraProps,
+  GPUDeviceProps,
+  GPUTextureMode,
+} from '../webgpu/types';
 
-export type ConfettiProps = CoreConfettiProps & GPUConfettiExtraProps;
+export type ConfettiProps = CoreConfettiProps &
+  GPUConfettiExtraProps &
+  GPUDeviceProps;
 export type ContinuousConfettiProps = CoreContinuousConfettiProps &
-  GPUConfettiExtraProps;
-export type PIConfettiProps = CorePIConfettiProps;
-export type CannonConfettiProps = CoreCannonConfettiProps;
+  GPUConfettiExtraProps &
+  GPUDeviceProps;
+export type PIConfettiProps = CorePIConfettiProps & GPUDeviceProps;
+export type CannonConfettiProps = CoreCannonConfettiProps & GPUDeviceProps;
 export type ConfettiMethods = CoreConfettiMethods;
 export type PIConfettiMethods = CorePIConfettiMethods;
 export type CannonConfettiMethods = CoreCannonConfettiMethods;
@@ -32,6 +39,7 @@ export type {
   FlakeProps,
   FlakeStyle,
   GPUConfettiExtraProps,
+  GPUDeviceProps,
   GPUTextureMode,
   NamedPosition,
   PIOriginProps,

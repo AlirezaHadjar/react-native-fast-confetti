@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Dimensions, FlatList, Platform, StyleSheet } from 'react-native';
+import { Dimensions, FlatList, StyleSheet } from 'react-native';
 import {
   CannonConfetti as SkiaCannonConfetti,
   Confetti as SkiaConfetti,
@@ -19,7 +19,7 @@ import { useRenderer } from '../hooks/useRenderer';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const MENU_ITEM_FLAKE_COUNT = 200;
+const MENU_ITEM_FLAKE_COUNT = 20000;
 
 const PADDING = 16;
 const ITEM_HEIGHT = 140;
@@ -150,8 +150,7 @@ const createModes = (renderer: RendererType) => {
 
 export default function HomeScreen() {
   const { renderer } = useRenderer();
-  const previewRenderer = Platform.OS === 'ios' ? 'skia' : renderer;
-  const modes = useMemo(() => createModes(previewRenderer), [previewRenderer]);
+  const modes = useMemo(() => createModes(renderer), [renderer]);
 
   return (
     <FlatList

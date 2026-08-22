@@ -5,6 +5,6 @@ export type {
   GPUConfettiMethods,
   GPUConfettiProps,
   GPUContinuousConfettiProps,
+  GPUDeviceProps,
   GPUTextureMode,
 } from './types';
-

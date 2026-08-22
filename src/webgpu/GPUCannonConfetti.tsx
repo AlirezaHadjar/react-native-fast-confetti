@@ -79,6 +79,7 @@ const CannonConfettiInner = forwardRef<
       flakeStyle = 'glossy',
       easing,
       reduceMotion,
+      device,
       ...textureRootProps
     },
     ref
@@ -326,6 +327,7 @@ const CannonConfettiInner = forwardRef<
 
     return (
       <GPUBurstConfettiCanvas
+        device={device}
         containerStyle={containerStyle}
         onContainerLayout={onContainerLayout}
         count={renderCount}
