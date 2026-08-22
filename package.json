@@ -187,5 +187,8 @@
     "languages": "js",
     "type": "library",
     "version": "0.50.2"
+  },
+  "patchedDependencies": {
+    "react-native-webgpu@0.8.4": "patches/react-native-webgpu@0.8.4.patch"
   }
 }

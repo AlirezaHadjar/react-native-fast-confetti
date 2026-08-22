@@ -116,6 +116,9 @@
       },
     },
   },
+  "patchedDependencies": {
+    "react-native-webgpu@0.8.4": "patches/react-native-webgpu@0.8.4.patch",
+  },
   "overrides": {
     "typescript": "npm:tsover@6.0.2",
     "zod-validation-error": "4.0.2",

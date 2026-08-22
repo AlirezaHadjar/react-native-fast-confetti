@@ -1,0 +1,614 @@
+diff --git a/cpp/rnwgpu/RNWebGPUManager.cpp b/cpp/rnwgpu/RNWebGPUManager.cpp
+index 871e31196605c9d260dbd24ce0f30d8309656f98..1f1d4f3a395059e8b340c8ecaf65396009c4f464 100644
+--- a/cpp/rnwgpu/RNWebGPUManager.cpp
++++ b/cpp/rnwgpu/RNWebGPUManager.cpp
+@@ -239,11 +239,19 @@ void RNWebGPUManager::installWebGPUWorkletHelpers(jsi::Runtime &runtime) {
+ 
+ void RNWebGPUManager::flushPendingSurfaceTransition(
+     std::shared_ptr<SurfaceInfo> info) {
+-  if (info == nullptr || _jsCallInvoker == nullptr) {
++  if (info == nullptr) {
++    return;
++  }
++#ifdef __APPLE__
++  RunOnMainThreadAsync(
++      [info = std::move(info)] { info->applyPendingAttach(); });
++#else
++  if (_jsCallInvoker == nullptr) {
+     return;
+   }
+   _jsCallInvoker->invokeAsync(
+       [info = std::move(info)] { info->applyPendingAttach(); });
++#endif
+ }
+ 
+ RNWebGPUManager::~RNWebGPUManager() {
+diff --git a/cpp/rnwgpu/RNWebGPUManager.h b/cpp/rnwgpu/RNWebGPUManager.h
+index cd2ea85a8c8206935ea468bb1ddc745c5f559d33..504de157657a84c403781824e7c3427319d8f975 100644
+--- a/cpp/rnwgpu/RNWebGPUManager.h
++++ b/cpp/rnwgpu/RNWebGPUManager.h
+@@ -36,10 +36,9 @@ public:
+ 
+   /**
+    * Applies a surface attach latched by the platform UI thread (see
+-   * SurfaceInfo::applyPendingAttach) from the JS thread. Surface attaches are
+-   * normally adopted at the next frame boundary by whichever thread renders;
+-   * this flush covers contexts that are not actively rendering (static
+-   * content), so the last offscreen frame still makes it on screen.
++   * SurfaceInfo::applyPendingAttach). Apple runs the transition on main;
++   * other platforms use the JS CallInvoker. This covers contexts that are not
++   * actively rendering, so the last offscreen frame still reaches the screen.
+    */
+   void flushPendingSurfaceTransition(std::shared_ptr<SurfaceInfo> info);
+ 
+diff --git a/cpp/rnwgpu/SurfaceRegistry.h b/cpp/rnwgpu/SurfaceRegistry.h
+index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..a0881ef7e1169d49fcfdf61ed32b5db10ec15348 100644
+--- a/cpp/rnwgpu/SurfaceRegistry.h
++++ b/cpp/rnwgpu/SurfaceRegistry.h
+@@ -1,11 +1,14 @@
+ #pragma once
+ 
+ #include <algorithm>
++#include <exception>
+ #include <functional>
+ #include <memory>
+ #include <mutex>
++#include <optional>
+ #include <shared_mutex>
+ #include <stdexcept>
++#include <type_traits>
+ #include <unordered_map>
+ #include <utility>
+ #include <vector>
+@@ -13,6 +16,9 @@
+ #include "webgpu/webgpu_cpp.h"
+ 
+ #ifdef __APPLE__
++#include <dispatch/dispatch.h>
++#include <pthread.h>
++
+ namespace dawn::native::metal {
+ void WaitForCommandsToBeScheduled(WGPUDevice device);
+ } // namespace dawn::native::metal
+@@ -20,6 +26,123 @@ void WaitForCommandsToBeScheduled(WGPUDevice device);
+ 
+ namespace rnwgpu {
+ 
++// Dawn's native queue owns mutable command-encoding state. A GPUQueue can be
++// boxed into several JSI runtimes, while SurfaceInfo also reaches the same
++// native queue directly for its offscreen-to-onscreen blit. Serialize those
++// entry points by native queue identity so two runtimes cannot mutate one
++// Dawn queue concurrently.
++class QueueSynchronization {
++public:
++  using Mutex = std::mutex;
++
++  static std::shared_ptr<Mutex> mutexFor(const wgpu::Queue &queue) {
++    const auto handle = queue.Get();
++    std::lock_guard<std::mutex> registryLock(registryMutex());
++    auto &locks = registry();
++
++    auto existing = locks.find(handle);
++    if (existing != locks.end()) {
++      if (auto mutex = existing->second.lock()) {
++        return mutex;
++      }
++      locks.erase(existing);
++    }
++
++    // Queue handles are few, but remove expired entries opportunistically so
++    // repeated device loss/recreation cannot grow this process-wide registry.
++    for (auto it = locks.begin(); it != locks.end();) {
++      if (it->second.expired()) {
++        it = locks.erase(it);
++      } else {
++        ++it;
++      }
++    }
++
++    auto mutex = std::make_shared<Mutex>();
++    locks.emplace(handle, mutex);
++    return mutex;
++  }
++
++private:
++  static std::unordered_map<WGPUQueue, std::weak_ptr<Mutex>> &registry() {
++    static std::unordered_map<WGPUQueue, std::weak_ptr<Mutex>> locks;
++    return locks;
++  }
++
++  static std::mutex &registryMutex() {
++    static std::mutex mutex;
++    return mutex;
++  }
++};
++
++#ifdef __APPLE__
++namespace detail {
++inline void RunOnMainThreadInvoke(void *context) {
++  auto *function = static_cast<std::function<void()> *>(context);
++  (*function)();
++}
++} // namespace detail
++
++// Dispatch before acquiring SurfaceInfo locks. Dispatching while holding one
++// can deadlock against a main-thread frame waiting for the same surface.
++template <typename Function>
++auto RunOnMainThreadSync(Function &&function)
++    -> std::invoke_result_t<Function> {
++  using Result = std::invoke_result_t<Function>;
++  if (pthread_main_np() != 0) {
++    return std::forward<Function>(function)();
++  }
++
++  std::exception_ptr error;
++  if constexpr (std::is_void_v<Result>) {
++    std::function<void()> callable = [&]() {
++      try {
++        std::forward<Function>(function)();
++      } catch (...) {
++        error = std::current_exception();
++      }
++    };
++    dispatch_sync_f(dispatch_get_main_queue(), &callable,
++                    detail::RunOnMainThreadInvoke);
++    if (error) {
++      std::rethrow_exception(error);
++    }
++  } else {
++    std::optional<Result> result;
++    std::function<void()> callable = [&]() {
++      try {
++        result.emplace(std::forward<Function>(function)());
++      } catch (...) {
++        error = std::current_exception();
++      }
++    };
++    dispatch_sync_f(dispatch_get_main_queue(), &callable,
++                    detail::RunOnMainThreadInvoke);
++    if (error) {
++      std::rethrow_exception(error);
++    }
++    return std::move(*result);
++  }
++}
++
++inline void RunOnMainThreadAsync(std::function<void()> function) {
++  if (!function) {
++    return;
++  }
++  if (pthread_main_np() != 0) {
++    function();
++    return;
++  }
++
++  auto *ownedFunction = new std::function<void()>(std::move(function));
++  dispatch_async_f(dispatch_get_main_queue(), ownedFunction, [](void *context) {
++    std::unique_ptr<std::function<void()>> function(
++        static_cast<std::function<void()> *>(context));
++    (*function)();
++  });
++}
++#endif
++
+ #ifdef __APPLE__
+ // Tags the CAMetalLayer with the colorspace matching the configured texture
+ // format. Implemented in apple/MetalLayerColorSpace.mm.
+@@ -58,13 +181,12 @@ using NativeSurfaceReleaser = std::function<void(void *)>;
+ //   destruction alone (backgrounding, TextureView teardown) never removes an
+ //   entry; it only detaches the surface.
+ // - Attaching a surface is LATCHED: the UI thread stores it as pending
+-//   (attachSurface) and it is adopted at the next frame boundary — start of
+-//   getCurrentTexture or end of presentFrame — on whichever thread renders
+-//   (main JS, Reanimated UI, or a worklet runtime). This preserves Dawn
+-//   surface thread-affinity and guarantees a surface is never swapped in the
+-//   middle of a frame. For contexts that are not actively rendering,
+-//   RNWebGPUManager::flushPendingSurfaceTransition applies the attach from the
+-//   JS thread instead.
++//   (attachSurface) and it is adopted at a frame boundary, never in the middle
++//   of a frame. Apple adoption/configuration is marshalled to the main thread
++//   because it mutates CAMetalLayer state; normal acquire, encode, and present
++//   stay on the rendering runtime. Other platforms adopt on the caller.
++//   RNWebGPUManager::flushPendingSurfaceTransition also covers contexts that
++//   are not actively rendering.
+ // - Detaching (switchToOffscreen) is IMMEDIATE, because the platform destroys
+ //   the surface as soon as its callback returns. A configured context falls
+ //   back to rendering into an offscreen texture, so a running render loop
+@@ -137,8 +259,8 @@ public:
+     _height = newHeight;
+   }
+ 
+-  // --- Frame boundary (rendering thread, or the JS thread via
+-  // RNWebGPUManager::flushPendingSurfaceTransition) ---------------------------
++  // --- Frame boundary (rendering runtime; Apple surface transitions are
++  // marshalled to main) ------------------------------------------------------
+ 
+   // Adopt a pending surface if no frame is in flight: configure it and, if
+   // frames were rendered offscreen, blit the most recent one onto it and
+@@ -150,9 +272,29 @@ public:
+   // block adoption. The flush path (other threads) leaves it false so it never
+   // swaps the surface under a frame that is genuinely in flight.
+   void applyPendingAttach(bool supersedeInFlightFrame = false) {
++#ifdef __APPLE__
++    if (pthread_main_np() == 0) {
++      // Keep the hot frame path on its rendering runtime. Only a real native
++      // surface transition needs the Apple main thread: Dawn's Configure and
++      // the CAMetalLayer property updates below both mutate the view's layer.
++      // Reset an abandoned frame here first so the synchronous main-thread
++      // adoption observes the same state as the single-threaded path.
++      {
++        std::unique_lock<std::shared_mutex> lock(_mutex);
++        if (supersedeInFlightFrame) {
++          _frameInFlight = false;
++          _acquiredFromSurface = false;
++        }
++        if (!_hasPendingAttach) {
++          return;
++        }
++      }
++      RunOnMainThreadSync([this]() { applyPendingAttach(); });
++      return;
++    }
++#endif
+     bool presentBlit = false;
+     uint64_t blitEpoch = 0;
+-    wgpu::Device device = nullptr;
+     void *replacedSurface = nullptr;
+     NativeSurfaceReleaser replacedReleaser;
+     {
+@@ -187,13 +329,15 @@ public:
+         if (blit) {
+           config.usage |= wgpu::TextureUsage::CopyDst;
+         }
+-        _surface.Configure(&config);
++        {
++          auto queueLock = acquireQueueLockLocked();
++          _surface.Configure(&config);
++        }
+ #ifdef __APPLE__
+         applyCAMetalLayerColorSpace(_nativeSurface, _config.format);
+ #endif
+         if (blit) {
+           presentBlit = blitOffscreenToSurfaceLocked();
+-          device = _config.device;
+           // Consumed either way; on failure the next frame renders fresh.
+           _texture = nullptr;
+           blitEpoch = _frameEpoch;
+@@ -204,11 +348,6 @@ public:
+       replacedReleaser(replacedSurface);
+     }
+     if (presentBlit) {
+-#ifdef __APPLE__
+-      if (device) {
+-        dawn::native::metal::WaitForCommandsToBeScheduled(device.Get());
+-      }
+-#endif
+       std::unique_lock<std::shared_mutex> lock(_mutex);
+       // Present only if the blitted texture is still the surface's current
+       // one. The epoch changes on any acquire, present, configure, detach, or
+@@ -217,7 +356,7 @@ public:
+       // (their newer content stands; presenting here would be a Dawn
+       // present-without-acquire error).
+       if (_surface && !_frameInFlight && _frameEpoch == blitEpoch) {
+-        _surface.Present();
++        presentSurfaceLocked();
+       }
+     }
+   }
+@@ -228,7 +367,12 @@ public:
+   void configure(wgpu::SurfaceConfiguration &newConfig,
+                  std::vector<wgpu::TextureFormat> viewFormats) {
+     applyPendingAttach(/* supersedeInFlightFrame = */ true);
++    auto queueMutex =
++        newConfig.device != nullptr
++            ? QueueSynchronization::mutexFor(newConfig.device.GetQueue())
++            : nullptr;
+     std::unique_lock<std::shared_mutex> lock(_mutex);
++    _queueMutex = std::move(queueMutex);
+     _viewFormats = std::move(viewFormats);
+     _config = newConfig;
+     // The caller's viewFormats storage dies with the call; point the stored
+@@ -261,6 +405,7 @@ public:
+   void unconfigure() {
+     std::unique_lock<std::shared_mutex> lock(_mutex);
+     if (_surface) {
++      auto queueLock = acquireQueueLockLocked();
+       _surface.Unconfigure();
+     }
+     _texture = nullptr;
+@@ -323,22 +468,10 @@ public:
+   // acquire failure) are dropped. This is also the end-of-frame boundary: it
+   // adopts a surface that attached while the frame was in flight.
+   void presentFrame() {
+-#ifdef __APPLE__
+-    // Ensure command buffers are scheduled before presenting. Read the device
+-    // under a shared lock, then wait without holding it (the wait can block).
+-    wgpu::Device device;
+-    {
+-      std::shared_lock<std::shared_mutex> lock(_mutex);
+-      device = _config.device;
+-    }
+-    if (device) {
+-      dawn::native::metal::WaitForCommandsToBeScheduled(device.Get());
+-    }
+-#endif
+     {
+       std::unique_lock<std::shared_mutex> lock(_mutex);
+       if (_surface && _acquiredFromSurface) {
+-        _surface.Present();
++        presentSurfaceLocked();
+       }
+       _acquiredFromSurface = false;
+       _frameInFlight = false;
+@@ -365,6 +498,31 @@ public:
+   }
+ 
+ private:
++  // The SurfaceInfo mutex is always acquired before this queue mutex. Public
++  // GPUQueue operations never acquire SurfaceInfo, so this order cannot
++  // invert. Keeping the lock cached also avoids a registry lookup every frame.
++  std::unique_lock<QueueSynchronization::Mutex> acquireQueueLockLocked() {
++    if (_queueMutex) {
++      return std::unique_lock<QueueSynchronization::Mutex>(*_queueMutex);
++    }
++    return {};
++  }
++
++  // Dawn's Metal surface presentation submits the queue's pending command
++  // buffer. The scheduling wait and Present must be one queue-critical
++  // section: releasing the lock between them allows another runtime's
++  // WriteBuffer to leave an encoder open and Metal aborts in encodeSignalEvent.
++  void presentSurfaceLocked() {
++    if (!_surface || _config.device == nullptr || !_queueMutex) {
++      return;
++    }
++    auto queueLock = acquireQueueLockLocked();
++#ifdef __APPLE__
++    dawn::native::metal::WaitForCommandsToBeScheduled(_config.device.Get());
++#endif
++    _surface.Present();
++  }
++
+   void detach(bool createFallbackTexture) {
+     void *releasedSurfaces[2] = {nullptr, nullptr};
+     NativeSurfaceReleaser releasers[2];
+@@ -419,12 +577,14 @@ private:
+     descriptor.size.height = std::max(1u, _config.height);
+     descriptor.viewFormats = _config.viewFormats;
+     descriptor.viewFormatCount = _config.viewFormatCount;
++    auto queueLock = acquireQueueLockLocked();
+     return _config.device.CreateTexture(&descriptor);
+   }
+ 
+   // Acquire the surface's current texture, reconfiguring once when the surface
+   // reports it is stale (rotation, resize, coming back from background).
+   wgpu::Texture acquireSurfaceTextureLocked() {
++    auto queueLock = acquireQueueLockLocked();
+     wgpu::SurfaceTexture surfaceTexture;
+     _surface.GetCurrentTexture(&surfaceTexture);
+     if (!isAcquireSuccess(surfaceTexture)) {
+@@ -452,6 +612,7 @@ private:
+   // Copy the last offscreen frame onto the freshly attached surface. Returns
+   // true when the copy was submitted and the surface should be presented.
+   bool blitOffscreenToSurfaceLocked() {
++    auto queueLock = acquireQueueLockLocked();
+     wgpu::SurfaceTexture surfaceTexture;
+     _surface.GetCurrentTexture(&surfaceTexture);
+     if (!isAcquireSuccess(surfaceTexture)) {
+@@ -480,6 +641,7 @@ private:
+ 
+   void _configureLocked() {
+     if (_surface) {
++      auto queueLock = acquireQueueLockLocked();
+       _surface.Configure(&_config);
+ #ifdef __APPLE__
+       applyCAMetalLayerColorSpace(_nativeSurface, _config.format);
+@@ -513,6 +675,9 @@ private:
+   // that _config.viewFormats points at.
+   wgpu::SurfaceConfiguration _config;
+   std::vector<wgpu::TextureFormat> _viewFormats;
++  // Stable for the configured device and shared with every GPUQueue wrapper
++  // that resolves to the same native WGPUQueue.
++  std::shared_ptr<QueueSynchronization::Mutex> _queueMutex;
+   // Keeps the Dawn instance alive for as long as any canvas exists.
+   wgpu::Instance _gpu;
+   // Native view size in dp (surfaced as clientWidth/clientHeight on the JS
+diff --git a/cpp/rnwgpu/api/GPUCanvasContext.cpp b/cpp/rnwgpu/api/GPUCanvasContext.cpp
+index 8ca6ede146de264e3852d708e1c4cb830330b8f7..1e11047d59a64e55e318c1da06cd6ec976acbbd1 100644
+--- a/cpp/rnwgpu/api/GPUCanvasContext.cpp
++++ b/cpp/rnwgpu/api/GPUCanvasContext.cpp
+@@ -28,10 +28,23 @@ void GPUCanvasContext::configure(
+   surfaceConfiguration.alphaMode = configuration->alphaMode;
+ #endif
+   surfaceConfiguration.presentMode = wgpu::PresentMode::Fifo;
++#ifdef __APPLE__
++  RunOnMainThreadSync([this, surfaceConfiguration,
++                       viewFormats = std::move(viewFormats)]() mutable {
++    _surfaceInfo->configure(surfaceConfiguration, std::move(viewFormats));
++  });
++#else
+   _surfaceInfo->configure(surfaceConfiguration, std::move(viewFormats));
++#endif
+ }
+ 
+-void GPUCanvasContext::unconfigure() { _surfaceInfo->unconfigure(); }
++void GPUCanvasContext::unconfigure() {
++#ifdef __APPLE__
++  RunOnMainThreadSync([this]() { _surfaceInfo->unconfigure(); });
++#else
++  _surfaceInfo->unconfigure();
++#endif
++}
+ 
+ std::shared_ptr<GPUTexture> GPUCanvasContext::getCurrentTexture() {
+   if (!_surfaceInfo->isConfigured()) {
+@@ -49,7 +62,14 @@ std::shared_ptr<GPUTexture> GPUCanvasContext::getCurrentTexture() {
+   auto sizeHasChanged = prevSize.width != static_cast<uint32_t>(width) ||
+                         prevSize.height != static_cast<uint32_t>(height);
+   if (sizeHasChanged) {
++#ifdef __APPLE__
++    // Resizing reconfigures CAMetalLayer-backed state. It is rare; keep the
++    // normal acquire/present hot path on the rendering runtime.
++    RunOnMainThreadSync(
++        [this, width, height]() { _surfaceInfo->reconfigure(width, height); });
++#else
+     _surfaceInfo->reconfigure(width, height);
++#endif
+   }
+ 
+   auto texture = _surfaceInfo->getCurrentTexture();
+diff --git a/cpp/rnwgpu/api/GPUDevice.cpp b/cpp/rnwgpu/api/GPUDevice.cpp
+index 13ce67eb5dd18ad1719efe5fd918587e3d77fe92..dd14f44234864523912a9d622d40d149cfe7055e 100644
+--- a/cpp/rnwgpu/api/GPUDevice.cpp
++++ b/cpp/rnwgpu/api/GPUDevice.cpp
+@@ -105,6 +105,7 @@ void GPUDevice::notifyDeviceLost(wgpu::DeviceLostReason reason,
+ 
+ void GPUDevice::forceLossForTesting() {
+   // wgpu::StringView view("forceLossForTesting invoked from JS");
++  std::lock_guard<QueueSynchronization::Mutex> lock(*_queueMutex);
+   _instance.ForceLoss(wgpu::DeviceLostReason::Unknown,
+                       "forceLossForTesting invoked from JS");
+ }
+@@ -149,6 +150,7 @@ std::shared_ptr<GPUCommandEncoder> GPUDevice::createCommandEncoder(
+ }
+ 
+ void GPUDevice::destroy() {
++  std::lock_guard<QueueSynchronization::Mutex> lock(*_queueMutex);
+   _instance.Destroy();
+   notifyDeviceLost(wgpu::DeviceLostReason::Destroyed, "device was destroyed");
+ }
+diff --git a/cpp/rnwgpu/api/GPUDevice.h b/cpp/rnwgpu/api/GPUDevice.h
+index 1f55f135febd6adf84c4a9de81ec1d670eb1c732..f26e229b51bbdabb1ebbd152805a7a04c9eadcee 100644
+--- a/cpp/rnwgpu/api/GPUDevice.h
++++ b/cpp/rnwgpu/api/GPUDevice.h
+@@ -67,7 +67,8 @@ public:
+                      std::shared_ptr<async::RuntimeContext> async,
+                      std::string label)
+       : NativeObject(CLASS_NAME), _instance(instance), _async(async),
+-        _label(label) {}
++        _label(label),
++        _queueMutex(QueueSynchronization::mutexFor(_instance.GetQueue())) {}
+ 
+   ~GPUDevice() override {
+     // Unregister from the static registry
+@@ -285,6 +286,7 @@ private:
+   wgpu::Device _instance;
+   std::shared_ptr<async::RuntimeContext> _async;
+   std::string _label;
++  std::shared_ptr<QueueSynchronization::Mutex> _queueMutex;
+   // Guards the device-lost state below. getLost() runs on a JS thread, but
+   // Dawn's AllowSpontaneous device-lost callback (and device destruction) can
+   // fire notifyDeviceLost() from other threads, so the mutex keeps these
+diff --git a/cpp/rnwgpu/api/GPUQueue.cpp b/cpp/rnwgpu/api/GPUQueue.cpp
+index 4ef347e1163e2cdd167d1c428cef39ebf4694470..482736e31d8a39a1c298c6f710d7be1bd657e8fb 100644
+--- a/cpp/rnwgpu/api/GPUQueue.cpp
++++ b/cpp/rnwgpu/api/GPUQueue.cpp
+@@ -25,6 +25,7 @@ void GPUQueue::submit(
+   if (!conv(bufs_size, bufs.size())) {
+     return;
+   }
++  std::lock_guard<QueueSynchronization::Mutex> lock(*_queueMutex);
+   _instance.Submit(bufs_size, bufs.data());
+ }
+ 
+@@ -74,19 +75,23 @@ void GPUQueue::writeBuffer(std::shared_ptr<GPUBuffer> buffer,
+   }
+ 
+   assert(size64 <= std::numeric_limits<size_t>::max());
++  std::lock_guard<QueueSynchronization::Mutex> lock(*_queueMutex);
+   _instance.WriteBuffer(buf, bufferOffset, src.data,
+                         static_cast<size_t>(size64));
+ }
+ 
+ async::AsyncTaskHandle GPUQueue::onSubmittedWorkDone(jsi::Runtime &runtime) {
+   auto queue = _instance;
++  auto queueMutex = _queueMutex;
+   // Post to the CALLING runtime's context so the promise settles on the
+   // thread that requested it (see GPUBuffer::mapAsync).
+   auto context =
+       async::RuntimeContext::getOrCreate(runtime, _async->instance());
+   return context->postTask(
+-      [queue](const async::AsyncTaskHandle::ResolveFunction &resolve,
+-              const async::AsyncTaskHandle::RejectFunction &reject) {
++      [queue,
++       queueMutex](const async::AsyncTaskHandle::ResolveFunction &resolve,
++                   const async::AsyncTaskHandle::RejectFunction &reject) {
++        std::lock_guard<QueueSynchronization::Mutex> lock(*queueMutex);
+         queue.OnSubmittedWorkDone(
+             wgpu::CallbackMode::AllowProcessEvents,
+             [resolve, reject](wgpu::QueueWorkDoneStatus status,
+@@ -139,10 +144,8 @@ void GPUQueue::copyExternalImageToTexture(
+     throw std::runtime_error(
+         "The source origin must be a non-negative integer coordinate.");
+   }
+-  const size_t sourceOriginX =
+-      origin ? static_cast<size_t>(origin->x) : 0;
+-  const size_t sourceOriginY =
+-      origin ? static_cast<size_t>(origin->y) : 0;
++  const size_t sourceOriginX = origin ? static_cast<size_t>(origin->x) : 0;
++  const size_t sourceOriginY = origin ? static_cast<size_t>(origin->y) : 0;
+   if (sourceOriginX > source->source->getWidth() ||
+       sz.width > source->source->getWidth() - sourceOriginX ||
+       sourceOriginY > source->source->getHeight() ||
+@@ -186,8 +189,10 @@ void GPUQueue::copyExternalImageToTexture(
+     }
+     layout.bytesPerRow = rowSize;
+     layout.rowsPerImage = sz.height;
++    std::lock_guard<QueueSynchronization::Mutex> lock(*_queueMutex);
+     _instance.WriteTexture(&dst, staged.data(), totalSize, &layout, &sz);
+   } else {
++    std::lock_guard<QueueSynchronization::Mutex> lock(*_queueMutex);
+     _instance.WriteTexture(&dst, source->source->getData(),
+                            source->source->getSize(), &layout, &sz);
+   }
+@@ -207,6 +212,7 @@ void GPUQueue::writeTexture(std::shared_ptr<GPUImageCopyTexture> destination,
+     throw std::runtime_error("Invalid input for GPUQueue::writeTexture()");
+   }
+ 
++  std::lock_guard<QueueSynchronization::Mutex> lock(*_queueMutex);
+   _instance.WriteTexture(&dst, data->_data, data->_size, &layout, &sz);
+ }
+ 
+diff --git a/cpp/rnwgpu/api/GPUQueue.h b/cpp/rnwgpu/api/GPUQueue.h
+index 37a30a2fa43e4abe517ae68796c2d85f5ce7ae8e..45f8d9ca1719454aec8d6d96e80469bcddb915ff 100644
+--- a/cpp/rnwgpu/api/GPUQueue.h
++++ b/cpp/rnwgpu/api/GPUQueue.h
+@@ -8,6 +8,7 @@
+ 
+ #include "NativeObject.h"
+ 
++#include "SurfaceRegistry.h"
+ #include "rnwgpu/async/AsyncTaskHandle.h"
+ #include "rnwgpu/async/RuntimeContext.h"
+ 
+@@ -31,7 +32,7 @@ public:
+                     std::shared_ptr<async::RuntimeContext> async,
+                     std::string label)
+       : NativeObject(CLASS_NAME), _instance(instance), _async(async),
+-        _label(label) {}
++        _label(label), _queueMutex(QueueSynchronization::mutexFor(_instance)) {}
+ 
+ public:
+   std::string getBrand() { return CLASS_NAME; }
+@@ -51,8 +52,12 @@ public:
+       std::shared_ptr<GPUImageCopyTextureTagged> destination,
+       std::shared_ptr<GPUExtent3D> copySize);
+ 
+-  std::string getLabel() { return _label; }
++  std::string getLabel() {
++    std::lock_guard<QueueSynchronization::Mutex> lock(*_queueMutex);
++    return _label;
++  }
+   void setLabel(const std::string &label) {
++    std::lock_guard<QueueSynchronization::Mutex> lock(*_queueMutex);
+     _label = label;
+     _instance.SetLabel(_label.c_str());
+   }
+@@ -76,6 +81,7 @@ private:
+   wgpu::Queue _instance;
+   std::shared_ptr<async::RuntimeContext> _async;
+   std::string _label;
++  std::shared_ptr<QueueSynchronization::Mutex> _queueMutex;
+ };
+ 
+ } // namespace rnwgpu
