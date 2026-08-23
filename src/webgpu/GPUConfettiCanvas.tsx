@@ -139,6 +139,7 @@ type RawFrameState = {
   initPipeline: GPUComputePipeline;
   computePipeline: GPUComputePipeline;
   renderPipeline: GPURenderPipeline;
+  textureRenderPipeline: GPURenderPipeline | null;
   computeBindGroup: GPUBindGroup;
   initBindGroup: GPUBindGroup;
   renderBindGroup: GPUBindGroup;
@@ -399,8 +400,16 @@ const GPUConfettiRenderer = ({
     const dpr = PixelRatio.get();
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
 
-    const { initPipeline, computePipeline, renderPipeline } =
-      createConfettiPipelines(resources.root, presentationFormat);
+    const {
+      initPipeline,
+      computePipeline,
+      renderPipeline,
+      textureRenderPipeline,
+    } = createConfettiPipelines(
+      resources.root,
+      presentationFormat,
+      resources.canUseTextureOnlyPipeline
+    );
 
     elapsed.set(0);
     lastSimSeconds.set(0);
@@ -416,6 +425,9 @@ const GPUConfettiRenderer = ({
       initPipeline: resources.root.unwrap(initPipeline),
       computePipeline: resources.root.unwrap(computePipeline),
       renderPipeline: resources.root.unwrap(renderPipeline),
+      textureRenderPipeline: textureRenderPipeline
+        ? resources.root.unwrap(textureRenderPipeline)
+        : null,
       computeBindGroup: resources.root.unwrap(resources.computeBindGroup),
       initBindGroup: resources.root.unwrap(resources.initBindGroup),
       renderBindGroup: resources.root.unwrap(resources.renderBindGroup),
@@ -694,7 +706,11 @@ const GPUConfettiRenderer = ({
         .getCurrentTexture()
         .createView();
       const renderPass = encoder.beginRenderPass(target.descriptor);
-      renderPass.setPipeline(activeRawFrameState.renderPipeline);
+      renderPass.setPipeline(
+        params.textureMode === 0 && activeRawFrameState.textureRenderPipeline
+          ? activeRawFrameState.textureRenderPipeline
+          : activeRawFrameState.renderPipeline
+      );
       renderPass.setBindGroup(0, activeRawFrameState.renderBindGroup);
       renderPass.draw(VERTS_PER_FLAKE, activeRawFrameState.count);
       renderPass.end();

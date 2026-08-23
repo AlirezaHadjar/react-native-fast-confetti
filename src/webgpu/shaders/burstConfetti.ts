@@ -504,7 +504,7 @@ export const burstConfettiFragment = tgpu.fragmentFn({
       input.uv,
       d.i32(input.flagsAndLayers.z),
       0
-    ).a;
+    ).r;
   }
   const paletteRgb = input.color.rgb;
   const texAlpha = std.select(d.f32(1), texColor.a, isTextured);
@@ -520,6 +520,22 @@ export const burstConfettiFragment = tgpu.fragmentFn({
   return d.vec4f(outputColor, input.color.a * maskAlpha * texAlpha);
 });
 
+export const burstTextureFragment = tgpu.fragmentFn({
+  in: VertexOut,
+  out: d.vec4f,
+})((input) => {
+  'use gpu';
+
+  const texColor = std.textureSampleLevel(
+    burstRenderLayout.$.textures,
+    burstRenderLayout.$.sampler,
+    input.uv,
+    d.i32(input.flagsAndLayers.y),
+    0
+  );
+  return d.vec4f(texColor.rgb, input.color.a * texColor.a);
+});
+
 export type BurstConfettiPipelines = {
   initPipeline: TgpuComputePipeline;
   renderPipeline: TgpuRenderPipeline;
@@ -527,14 +543,15 @@ export type BurstConfettiPipelines = {
 
 export const createBurstConfettiPipelines = (
   root: TgpuRoot,
-  presentationFormat: GPUTextureFormat
+  presentationFormat: GPUTextureFormat,
+  useTexturePipeline: boolean
 ): BurstConfettiPipelines => ({
   initPipeline: root.createComputePipeline({
     compute: burstConfettiInit,
   }),
   renderPipeline: root.createRenderPipeline({
     vertex: burstConfettiVertex,
-    fragment: burstConfettiFragment,
+    fragment: useTexturePipeline ? burstTextureFragment : burstConfettiFragment,
     targets: {
       format: presentationFormat,
       blend: {

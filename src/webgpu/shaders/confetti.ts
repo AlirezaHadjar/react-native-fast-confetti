@@ -967,7 +967,7 @@ export const confettiFragment = tgpu.fragmentFn({
       input.uv,
       d.i32(input.flagsAndLayers.z),
       0
-    ).a;
+    ).r;
   }
   const paletteRgb = input.color.rgb;
   const texAlpha = std.select(d.f32(1), texColor.a, isTextured);
@@ -1155,15 +1155,33 @@ export const confettiFragment = tgpu.fragmentFn({
   return d.vec4f(lit, finalAlpha);
 });
 
+export const confettiTextureFragment = tgpu.fragmentFn({
+  in: VertexOut,
+  out: d.vec4f,
+})((input) => {
+  'use gpu';
+
+  const texColor = std.textureSampleLevel(
+    renderLayout.$.textures,
+    renderLayout.$.sampler,
+    input.uv,
+    d.i32(input.flagsAndLayers.y),
+    0
+  );
+  return d.vec4f(texColor.rgb, input.color.a * texColor.a);
+});
+
 export type ConfettiPipelines = {
   initPipeline: TgpuComputePipeline;
   computePipeline: TgpuComputePipeline;
   renderPipeline: TgpuRenderPipeline;
+  textureRenderPipeline: TgpuRenderPipeline | null;
 };
 
 export const createConfettiPipelines = (
   root: TgpuRoot,
-  presentationFormat: GPUTextureFormat
+  presentationFormat: GPUTextureFormat,
+  includeTexturePipeline: boolean
 ): ConfettiPipelines => ({
   initPipeline: root.createComputePipeline({
     compute: confettiInit,
@@ -1193,4 +1211,28 @@ export const createConfettiPipelines = (
       topology: 'triangle-list',
     },
   }),
+  textureRenderPipeline: includeTexturePipeline
+    ? root.createRenderPipeline({
+        vertex: confettiVertex,
+        fragment: confettiTextureFragment,
+        targets: {
+          format: presentationFormat,
+          blend: {
+            color: {
+              srcFactor: 'src-alpha',
+              dstFactor: 'one-minus-src-alpha',
+              operation: 'add',
+            },
+            alpha: {
+              srcFactor: 'one',
+              dstFactor: 'one-minus-src-alpha',
+              operation: 'add',
+            },
+          },
+        },
+        primitive: {
+          topology: 'triangle-list',
+        },
+      })
+    : null,
 });

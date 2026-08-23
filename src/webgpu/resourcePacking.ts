@@ -11,22 +11,45 @@ export const SIZE_FLAG_TEXTURE_LAYER_SHIFT = 8;
 export const SIZE_FLAG_MASK_LAYER_SHIFT = 16;
 export const SIZE_FLAG_LAYER_MASK = 0xff;
 
+export const canUseTextureOnlyPipeline = (sizes: SizeVariation[]) =>
+  sizes.length > 0 &&
+  sizes.every((size) => size.texture !== undefined && size.radius <= 0);
+
 export const computeSizeFlags = (sizes: SizeVariation[]): number[] => {
   const flags: number[] = [];
+  const textureLayers = new Map<object, number>();
+  const maskLayers = new Map<string, number>();
   let textureLayer = 0;
+  let maskLayer = 0;
   for (let index = 0; index < sizes.length; index++) {
     const size = sizes[index]!;
     let flag = 0;
     if (size.flakeStyle === 'glossy') flag |= SIZE_FLAG_GLOSSY;
     if (size.texture) {
+      const textureKey = size.texture.content as object;
+      let layer = textureLayers.get(textureKey);
+      if (layer === undefined) {
+        layer = textureLayer++;
+        if (layer > SIZE_FLAG_LAYER_MASK) {
+          throw new Error('WebGPU supports at most 256 unique flake textures');
+        }
+        textureLayers.set(textureKey, layer);
+      }
       flag |= SIZE_FLAG_TEXTURED;
-      flag |=
-        (textureLayer & SIZE_FLAG_LAYER_MASK) << SIZE_FLAG_TEXTURE_LAYER_SHIFT;
-      textureLayer++;
+      flag |= (layer & SIZE_FLAG_LAYER_MASK) << SIZE_FLAG_TEXTURE_LAYER_SHIFT;
     }
     if (size.radius > 0) {
+      const maskKey = `${size.width}:${size.height}:${size.radius}`;
+      let layer = maskLayers.get(maskKey);
+      if (layer === undefined) {
+        layer = maskLayer++;
+        if (layer > SIZE_FLAG_LAYER_MASK) {
+          throw new Error('WebGPU supports at most 256 unique flake masks');
+        }
+        maskLayers.set(maskKey, layer);
+      }
       flag |= SIZE_FLAG_SHAPE_MASK;
-      flag |= (index & SIZE_FLAG_LAYER_MASK) << SIZE_FLAG_MASK_LAYER_SHIFT;
+      flag |= (layer & SIZE_FLAG_LAYER_MASK) << SIZE_FLAG_MASK_LAYER_SHIFT;
     }
     flags.push(flag);
   }

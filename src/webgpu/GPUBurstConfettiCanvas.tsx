@@ -254,7 +254,8 @@ const GPUBurstConfettiRenderer = ({
 
     const { initPipeline, renderPipeline } = createBurstConfettiPipelines(
       resources.root,
-      presentationFormat
+      presentationFormat,
+      resources.canUseTextureOnlyPipeline
     );
 
     const nextRawFrameState: RawFrameState = {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
+import type { SkImage } from '@shopify/react-native-skia';
 import { tgpu } from 'typegpu';
 
 import type { SizeVariation } from '../hooks/useConfettiFlakes';
@@ -8,12 +9,22 @@ import {
   toPIBurstOrigins,
 } from '../webgpu/burstResourcePacking';
 import {
+  canUseTextureOnlyPipeline,
   computeSizeFlags,
   createPhasePermutation,
+  SIZE_FLAG_MASK_LAYER_SHIFT,
+  SIZE_FLAG_TEXTURE_LAYER_SHIFT,
   toInitSizeInputs,
 } from '../webgpu/resourcePacking';
-import { burstConfettiInit } from '../webgpu/shaders/burstConfetti';
-import { confettiInit, confettiVertex } from '../webgpu/shaders/confetti';
+import {
+  burstConfettiInit,
+  burstTextureFragment,
+} from '../webgpu/shaders/burstConfetti';
+import {
+  confettiInit,
+  confettiTextureFragment,
+  confettiVertex,
+} from '../webgpu/shaders/confetti';
 
 const sizes: SizeVariation[] = [
   {
@@ -53,7 +64,54 @@ describe('GPU-native particle initialization', () => {
 
     expect(inputs).toHaveLength(sizes.length);
     expect(inputs[0]!.selection).toEqual([0, 5, 1, 0]);
-    expect(inputs[1]!.selection).toEqual([7, 3, 2 ** 2 + 2 ** 16, 0]);
+    expect(inputs[1]!.selection).toEqual([7, 3, 2 ** 2, 0]);
+  });
+
+  it('deduplicates texture and shape-mask layers by immutable content', () => {
+    const sharedTexture = {} as SkImage;
+    const uniqueTexture = {} as SkImage;
+    const layerSizes: SizeVariation[] = [
+      {
+        width: 10,
+        height: 10,
+        radius: 2,
+        flakeStyle: 'solid',
+        texture: { type: 'image', content: sharedTexture },
+      },
+      {
+        width: 10,
+        height: 10,
+        radius: 2,
+        flakeStyle: 'glossy',
+        texture: { type: 'image', content: sharedTexture },
+      },
+      {
+        width: 20,
+        height: 12,
+        radius: 3,
+        flakeStyle: 'solid',
+        texture: { type: 'image', content: uniqueTexture },
+      },
+    ];
+
+    const flags = computeSizeFlags(layerSizes);
+    const textureLayer = (index: number) =>
+      (flags[index]! >> SIZE_FLAG_TEXTURE_LAYER_SHIFT) & 0xff;
+    const maskLayer = (index: number) =>
+      (flags[index]! >> SIZE_FLAG_MASK_LAYER_SHIFT) & 0xff;
+
+    expect(textureLayer(0)).toBe(0);
+    expect(textureLayer(1)).toBe(0);
+    expect(textureLayer(2)).toBe(1);
+    expect(maskLayer(0)).toBe(0);
+    expect(maskLayer(1)).toBe(0);
+    expect(maskLayer(2)).toBe(1);
+    expect(canUseTextureOnlyPipeline(layerSizes)).toBe(false);
+    expect(
+      canUseTextureOnlyPipeline(
+        layerSizes.map((size) => ({ ...size, radius: 0 }))
+      )
+    ).toBe(true);
   });
 
   it('packs PI origins with prefix ranges instead of expanding particles', () => {
@@ -166,6 +224,8 @@ describe('GPU-native particle initialization', () => {
     const fallingWGSL = tgpu.resolve([confettiInit]);
     const burstWGSL = tgpu.resolve([burstConfettiInit]);
     const fallingVertexWGSL = tgpu.resolve([confettiVertex]);
+    const textureFragmentWGSL = tgpu.resolve([confettiTextureFragment]);
+    const burstTextureFragmentWGSL = tgpu.resolve([burstTextureFragment]);
 
     expect(fallingWGSL).toContain('@compute @workgroup_size(64)');
     expect(fallingWGSL).toContain('fn confettiInit');
@@ -173,5 +233,8 @@ describe('GPU-native particle initialization', () => {
     expect(burstWGSL).toContain('@compute @workgroup_size(64)');
     expect(burstWGSL).toContain('fn burstConfettiInit');
     expect(fallingVertexWGSL).toContain('@vertex');
+    expect(textureFragmentWGSL).toContain('textureSampleLevel');
+    expect(textureFragmentWGSL).not.toContain('fbm');
+    expect(burstTextureFragmentWGSL).toContain('textureSampleLevel');
   });
 });
