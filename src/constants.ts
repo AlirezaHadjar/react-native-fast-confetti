@@ -1,11 +1,10 @@
 import { Easing } from 'react-native-reanimated';
-import type {
-  Rotation,
-  Range,
-  FlakeSize,
-} from './types';
+import type { FlakeStyle, Rotation, Range, FlakeSize } from './types';
 
 export const DEFAULT_BOXES_COUNT = 200;
+export const DEFAULT_FLAKE_STYLE: FlakeStyle = 'glossy';
+export const DEFAULT_INITIAL_SCALE = 0.3;
+export const DEFAULT_FLIP_INTENSITY = 0.85;
 
 export const DEFAULT_FLAKE_SIZE: FlakeSize[] = [
   { width: 8, height: 16, radius: undefined },

@@ -28,6 +28,8 @@ export type GPUDeviceProps = {
    * The library never destroys an injected device.
    */
   device?: GPUDevice;
+  /** Reports GPU device acquisition and renderer resource failures. */
+  onError?: (error: unknown) => void;
 };
 
 export type SettleOnFloorConfig = {

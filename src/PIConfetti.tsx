@@ -17,6 +17,9 @@ import {
   DEFAULT_PI_CONFETTI_GRAVITY,
   DEFAULT_PI_CONFETTI_DRAG,
   DEFAULT_PI_CONFETTI_LAUNCH_DELAY_MAX,
+  DEFAULT_FLAKE_STYLE,
+  DEFAULT_FLIP_INTENSITY,
+  DEFAULT_INITIAL_SCALE,
 } from './constants';
 import type {
   PIConfettiMethods,
@@ -69,9 +72,9 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       rotation: rootRotation,
       depth: rootDepth,
       speedVariation: rootSpeedVariation,
-      flakeStyle = 'glossy',
-      initialScale = 0.3,
-      flipIntensity = 0.85,
+      flakeStyle = DEFAULT_FLAKE_STYLE,
+      initialScale = DEFAULT_INITIAL_SCALE,
+      flipIntensity = DEFAULT_FLIP_INTENSITY,
       easing,
       sprayDuration,
       reduceMotion,

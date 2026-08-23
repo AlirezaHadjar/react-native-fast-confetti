@@ -1,18 +1,20 @@
 import { useEffect, useSyncExternalStore } from 'react';
+import { useLatestCallback } from '../../hooks/useLatestCallback';
 
 type Listener = () => void;
 
 type GPUDeviceStore = {
   acquire: () => Promise<GPUDevice | null>;
+  getErrorSnapshot: () => unknown;
   getSnapshot: () => GPUDevice | null;
   subscribe: (listener: Listener) => () => void;
 };
 
 export const createGPUDeviceStore = (
-  requestDevice: () => Promise<GPUDevice | null>,
-  onError: (error: unknown) => void = console.error
+  requestDevice: () => Promise<GPUDevice | null>
 ): GPUDeviceStore => {
   let device: GPUDevice | null = null;
+  let error: unknown = null;
   let devicePromise: Promise<GPUDevice | null> | null = null;
   const listeners = new Set<Listener>();
 
@@ -26,14 +28,19 @@ export const createGPUDeviceStore = (
     let pendingDevice: Promise<GPUDevice | null>;
     pendingDevice = Promise.resolve()
       .then(requestDevice)
-      .catch((error) => {
-        onError(error);
+      .catch((nextError: unknown) => {
+        if (devicePromise === pendingDevice) {
+          error = nextError;
+          devicePromise = null;
+          notify();
+        }
         return null;
       })
       .then((nextDevice) => {
         if (devicePromise !== pendingDevice) return nextDevice;
 
         device = nextDevice;
+        error = null;
         notify();
 
         if (nextDevice) {
@@ -56,6 +63,7 @@ export const createGPUDeviceStore = (
 
   return {
     acquire,
+    getErrorSnapshot: () => error,
     getSnapshot: () => device,
     subscribe: (listener) => {
       listeners.add(listener);
@@ -76,16 +84,26 @@ const sharedGPUDeviceStore = createGPUDeviceStore(async () => {
 
 const subscribeToNothing = () => () => {};
 const getNullSnapshot = () => null;
+const reportDefaultError = (error: unknown) => console.error(error);
 
 /**
  * Borrows an injected device or lazily acquires the package-wide shared device.
  * Injected devices remain entirely owned by the caller.
  */
-export const useGPUDevice = (injectedDevice?: GPUDevice) => {
+export const useGPUDevice = (
+  injectedDevice?: GPUDevice,
+  onError: (error: unknown) => void = reportDefaultError
+) => {
   const useSharedDevice = injectedDevice === undefined;
+  const reportError = useLatestCallback(onError);
   const sharedDevice = useSyncExternalStore(
     useSharedDevice ? sharedGPUDeviceStore.subscribe : subscribeToNothing,
     useSharedDevice ? sharedGPUDeviceStore.getSnapshot : getNullSnapshot,
+    getNullSnapshot
+  );
+  const sharedError = useSyncExternalStore(
+    useSharedDevice ? sharedGPUDeviceStore.subscribe : subscribeToNothing,
+    useSharedDevice ? sharedGPUDeviceStore.getErrorSnapshot : getNullSnapshot,
     getNullSnapshot
   );
 
@@ -93,6 +111,10 @@ export const useGPUDevice = (injectedDevice?: GPUDevice) => {
     if (!useSharedDevice) return;
     void sharedGPUDeviceStore.acquire();
   }, [useSharedDevice]);
+
+  useEffect(() => {
+    if (sharedError !== null) reportError(sharedError);
+  }, [reportError, sharedError]);
 
   return injectedDevice ?? sharedDevice;
 };

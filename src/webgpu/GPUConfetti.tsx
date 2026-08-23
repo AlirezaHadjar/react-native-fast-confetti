@@ -1,10 +1,8 @@
 import {
   forwardRef,
   useCallback,
-  useEffect,
   useImperativeHandle,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import { useSharedValue } from 'react-native-reanimated';
@@ -19,6 +17,9 @@ import {
   DEFAULT_CONFETTI_GRAVITY,
   DEFAULT_CONFETTI_ROTATION,
   DEFAULT_CONFETTI_WOBBLE,
+  DEFAULT_FLAKE_STYLE,
+  DEFAULT_FLIP_INTENSITY,
+  DEFAULT_INITIAL_SCALE,
   DEFAULT_VERTICAL_SPACING,
 } from '../constants';
 import {
@@ -28,6 +29,7 @@ import {
 } from './constants';
 import { Flake } from '../FlakeComponent';
 import { useSimulationLifecycle } from './hooks/useSimulationLifecycle';
+import { useRendererAutoplay } from './hooks/useRendererAutoplay';
 import { useConfettiFlakes } from '../hooks/useConfettiFlakes';
 import { useContainerDimensions } from '../hooks/useContainerDimensions';
 import { useTextureProps } from '../hooks/useTextureProps';
@@ -41,11 +43,8 @@ import type {
   InternalGPUConfettiProps,
 } from './types';
 import type { FixedLengthArray } from '../typeHelpers';
-import {
-  computeSpawnGrid,
-  estimateFallingDuration,
-  resolveRange,
-} from './utils';
+import { computeSpawnGrid, estimateFallingDuration } from './utils';
+import { resolveRange } from '../utils';
 import {
   estimateFloorSettlingDuration,
   resolveSettleOnFloor,
@@ -71,9 +70,9 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       rotation,
       depth,
       verticalSpacing = DEFAULT_VERTICAL_SPACING,
-      flakeStyle = 'glossy',
-      initialScale = 0.3,
-      flipIntensity = 0.85,
+      flakeStyle = DEFAULT_FLAKE_STYLE,
+      initialScale = DEFAULT_INITIAL_SCALE,
+      flipIntensity = DEFAULT_FLIP_INTENSITY,
       easing = DEFAULT_CONFETTI_FALL_EASING,
       reduceMotion,
       windStrength = DEFAULT_WIND_STRENGTH,
@@ -86,6 +85,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       textureMode = 0,
       gravityDir: externalGravityDir,
       device,
+      onError,
       ...textureRootProps
     },
     ref
@@ -157,20 +157,8 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
     const [seed, setSeed] = useState(0);
     const [resetRevision, setResetRevision] = useState(0);
     const [rendererReady, setRendererReady] = useState(false);
-    const autoplayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const autoplaySuppressedRef = useRef(false);
-    const autoplayConfigRef = useRef({ autoplay, autoStartDelay });
     const notifyAnimationStart = useLatestCallback(onAnimationStart);
     const notifyAnimationEnd = useLatestCallback(onAnimationEnd);
-    const clearPendingAutoplay = useCallback(() => {
-      if (autoplayTimerRef.current === null) return;
-      clearTimeout(autoplayTimerRef.current);
-      autoplayTimerRef.current = null;
-    }, []);
-    const suppressPendingAutoplay = useCallback(() => {
-      autoplaySuppressedRef.current = true;
-      clearPendingAutoplay();
-    }, [clearPendingAutoplay]);
     const bumpSeed = useCallback(() => setSeed((s) => s + 1), []);
     const bumpResetRevision = useCallback(
       () => setResetRevision((revision) => revision + 1),
@@ -279,6 +267,15 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       containerWidth > 0 &&
       containerHeight > 0;
 
+    const suppressPendingAutoplay = useRendererAutoplay({
+      enabled: hasParticles && rendererReady,
+      autoplay,
+      autoStartDelay,
+      running,
+      beginCycle,
+      onAnimationStart: notifyAnimationStart,
+    });
+
     const restart = useCallback(() => {
       'worklet';
       scheduleOnRN(handleRestart);
@@ -325,50 +322,6 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       notifyAnimationEnd();
     }, [infinite, notifyAnimationEnd, running]);
 
-    useEffect(() => {
-      const previousConfig = autoplayConfigRef.current;
-      if (
-        previousConfig.autoplay !== autoplay ||
-        previousConfig.autoStartDelay !== autoStartDelay
-      ) {
-        autoplayConfigRef.current = { autoplay, autoStartDelay };
-        autoplaySuppressedRef.current = false;
-      }
-
-      clearPendingAutoplay();
-      if (
-        ready &&
-        reduceMotionReady &&
-        hasParticles &&
-        rendererReady &&
-        autoplay &&
-        !autoplaySuppressedRef.current
-      ) {
-        autoplayTimerRef.current = setTimeout(() => {
-          autoplayTimerRef.current = null;
-          if (autoplaySuppressedRef.current || running.get()) return;
-          scheduleOnUI(beginCycle);
-          notifyAnimationStart();
-        }, autoStartDelay);
-      }
-      return () => {
-        if (autoplayTimerRef.current === null) return;
-        clearTimeout(autoplayTimerRef.current);
-        autoplayTimerRef.current = null;
-      };
-    }, [
-      ready,
-      autoplay,
-      autoStartDelay,
-      running,
-      beginCycle,
-      hasParticles,
-      reduceMotionReady,
-      rendererReady,
-      clearPendingAutoplay,
-      notifyAnimationStart,
-    ]);
-
     // Default gravity direction is +Y (down). Caller can override with a
     // SharedValue (e.g. driven by gyroscope).
     const defaultGravityDir = useSharedValue<FixedLengthArray<number, 3>>([
@@ -414,6 +367,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
     return (
       <GPUConfettiCanvas
         device={device}
+        onError={onError}
         containerStyle={containerStyle}
         onContainerLayout={onContainerLayout}
         count={hasParticles ? visibleCount : 0}

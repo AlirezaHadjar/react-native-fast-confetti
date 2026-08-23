@@ -19,7 +19,9 @@ import type {
   PIConfettiMethods,
   PIConfettiProps,
   PIOriginProps,
-} from './types';
+} from '../gpu/types';
+
+// Compile-time assertions only; this fixture is excluded from published builds.
 
 type AllKeys<T> = T extends unknown ? keyof T : never;
 type MissingKeys<Base, Candidate> = Exclude<AllKeys<Base>, AllKeys<Candidate>>;
@@ -30,11 +32,13 @@ type IncompatibleKeys<Base, Candidate> = {
 }[AllKeys<Base> & AllKeys<Candidate>];
 type AssertNever<T extends never> = T;
 
-export type AssertGpuConfettiPropsIncludeCore =
-  AssertNever<MissingKeys<CoreConfettiProps, ConfettiProps>>;
+export type AssertGpuConfettiPropsIncludeCore = AssertNever<
+  MissingKeys<CoreConfettiProps, ConfettiProps>
+>;
 
-export type AssertGpuConfettiPropsMatchCore =
-  AssertNever<IncompatibleKeys<CoreConfettiProps, ConfettiProps>>;
+export type AssertGpuConfettiPropsMatchCore = AssertNever<
+  IncompatibleKeys<CoreConfettiProps, ConfettiProps>
+>;
 
 export type AssertGpuContinuousConfettiPropsIncludeCore = AssertNever<
   MissingKeys<CoreContinuousConfettiProps, ContinuousConfettiProps>
@@ -48,46 +52,57 @@ export type AssertGpuContinuousConfettiOmitsFloor = AssertNever<
   Extract<'settleOnFloor', AllKeys<ContinuousConfettiProps>>
 >;
 
-export type AssertGpuConfettiMethodsIncludeCore =
-  AssertNever<MissingKeys<CoreConfettiMethods, ConfettiMethods>>;
+export type AssertGpuConfettiMethodsIncludeCore = AssertNever<
+  MissingKeys<CoreConfettiMethods, ConfettiMethods>
+>;
 
-export type AssertGpuPIConfettiPropsIncludeCore =
-  AssertNever<MissingKeys<CorePIConfettiProps, PIConfettiProps>>;
+export type AssertGpuPIConfettiPropsIncludeCore = AssertNever<
+  MissingKeys<CorePIConfettiProps, PIConfettiProps>
+>;
 
-export type AssertGpuPIConfettiPropsMatchCore =
-  AssertNever<IncompatibleKeys<CorePIConfettiProps, PIConfettiProps>>;
+export type AssertGpuPIConfettiPropsMatchCore = AssertNever<
+  IncompatibleKeys<CorePIConfettiProps, PIConfettiProps>
+>;
 
 export type AssertGpuPIConfettiIncludesFloor = AssertNever<
   Exclude<'settleOnFloor', AllKeys<PIConfettiProps>>
 >;
 
-export type AssertGpuCannonConfettiPropsIncludeCore =
-  AssertNever<MissingKeys<CoreCannonConfettiProps, CannonConfettiProps>>;
+export type AssertGpuCannonConfettiPropsIncludeCore = AssertNever<
+  MissingKeys<CoreCannonConfettiProps, CannonConfettiProps>
+>;
 
-export type AssertGpuCannonConfettiPropsMatchCore =
-  AssertNever<IncompatibleKeys<CoreCannonConfettiProps, CannonConfettiProps>>;
+export type AssertGpuCannonConfettiPropsMatchCore = AssertNever<
+  IncompatibleKeys<CoreCannonConfettiProps, CannonConfettiProps>
+>;
 
 export type AssertGpuCannonConfettiIncludesFloor = AssertNever<
   Exclude<'settleOnFloor', AllKeys<CannonConfettiProps>>
 >;
 
-export type AssertGpuPIConfettiMethodsIncludeCore =
-  AssertNever<MissingKeys<CorePIConfettiMethods, PIConfettiMethods>>;
+export type AssertGpuPIConfettiMethodsIncludeCore = AssertNever<
+  MissingKeys<CorePIConfettiMethods, PIConfettiMethods>
+>;
 
-export type AssertGpuCannonConfettiMethodsIncludeCore =
-  AssertNever<MissingKeys<CoreCannonConfettiMethods, CannonConfettiMethods>>;
+export type AssertGpuCannonConfettiMethodsIncludeCore = AssertNever<
+  MissingKeys<CoreCannonConfettiMethods, CannonConfettiMethods>
+>;
 
-export type AssertGpuPIOriginPropsIncludeCore =
-  AssertNever<MissingKeys<CorePIOriginProps, PIOriginProps>>;
+export type AssertGpuPIOriginPropsIncludeCore = AssertNever<
+  MissingKeys<CorePIOriginProps, PIOriginProps>
+>;
 
-export type AssertGpuPIOriginPropsMatchCore =
-  AssertNever<IncompatibleKeys<CorePIOriginProps, PIOriginProps>>;
+export type AssertGpuPIOriginPropsMatchCore = AssertNever<
+  IncompatibleKeys<CorePIOriginProps, PIOriginProps>
+>;
 
-export type AssertGpuCannonOriginPropsIncludeCore =
-  AssertNever<MissingKeys<CoreCannonOriginProps, CannonOriginProps>>;
+export type AssertGpuCannonOriginPropsIncludeCore = AssertNever<
+  MissingKeys<CoreCannonOriginProps, CannonOriginProps>
+>;
 
-export type AssertGpuCannonOriginPropsMatchCore =
-  AssertNever<IncompatibleKeys<CoreCannonOriginProps, CannonOriginProps>>;
+export type AssertGpuCannonOriginPropsMatchCore = AssertNever<
+  IncompatibleKeys<CoreCannonOriginProps, CannonOriginProps>
+>;
 
 export const implementedConfettiProps = {
   autoStartDelay: true,

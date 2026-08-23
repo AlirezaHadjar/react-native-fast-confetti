@@ -1,12 +1,6 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
-import { PixelRatio, StyleSheet, View } from 'react-native';
+import { PixelRatio } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import { Canvas, type CanvasRef } from 'react-native-webgpu';
 
@@ -15,9 +9,11 @@ import type { GPUBurstInitialization } from './burstResourcePacking';
 import {
   createBurstConfettiResources,
   destroyBurstConfettiResources,
+  type BurstConfettiResourceConfig,
   type BurstConfettiResources,
-} from './hooks/useBurstConfettiResources';
+} from './resources/burstConfettiResources';
 import {
+  BURST_UNIFORM_FLOAT_OFFSETS,
   BURST_UNIFORMS_BYTES,
   BURST_VERTS_PER_FLAKE,
   createBurstConfettiPipelines,
@@ -27,25 +23,18 @@ import {
   type DedicatedGPUFrameTarget,
 } from './hooks/useDedicatedGPUFrame';
 import { useGPUDevice } from './hooks/useGPUDevice';
-import {
-  configureCanvasSurface,
-  unconfigureCanvasSurface,
-} from './configureCanvasSurface';
+import { configureCanvasSurface } from './configureCanvasSurface';
 import {
   createGPUFrameRetirement,
-  retireGPUResourceSet,
   type GPUFrameRetirement,
 } from './resourceCleanup';
 import { useLazyRef } from '../hooks/useLazyRef';
 import type { ResolvedSettleOnFloor } from './settleOnFloor';
-
-type NumericValue = {
-  get: () => number;
-};
-
-type BooleanValue = {
-  get: () => boolean;
-};
+import { useGPUResources } from './hooks/useGPUResources';
+import { useGPUResourceRetirement } from './hooks/useGPUResourceRetirement';
+import { GPUCanvasHost, gpuCanvasStyles } from './GPUCanvasHost';
+import type { ReadableValue } from './controlValues';
+import { useGPUCanvasSurfaceCleanup } from './hooks/useGPUCanvasSurfaceCleanup';
 
 type Props = {
   device?: GPUDevice;
@@ -61,9 +50,9 @@ type Props = {
   cycleDuration: number;
   flightDuration: number;
   floor: ResolvedSettleOnFloor;
-  progress: NumericValue;
-  running: BooleanValue;
-  opacity: NumericValue;
+  progress: ReadableValue<number>;
+  running: ReadableValue<boolean>;
+  opacity: ReadableValue<number>;
   gravityPxPerSec2: number;
   horizontalDrag: number;
   verticalDrag: number;
@@ -72,6 +61,7 @@ type Props = {
   viewportWidth: number;
   viewportHeight: number;
   onReadyChange: (ready: boolean) => void;
+  onError?: (error: unknown) => void;
 };
 
 type RendererProps = Omit<
@@ -82,6 +72,7 @@ type RendererProps = Omit<
 };
 
 type RawFrameState = {
+  config: FrameConfig;
   device: GPUDevice;
   queue: GPUQueue;
   context: GPUCanvasContext & { present?: () => void };
@@ -92,6 +83,12 @@ type RawFrameState = {
   renderBindGroup: GPUBindGroup;
   workgroupCount: number;
   count: number;
+  viewportWidth: number;
+  viewportHeight: number;
+};
+
+type FrameConfig = {
+  resources: BurstConfettiResourceConfig;
   viewportWidth: number;
   viewportHeight: number;
 };
@@ -155,11 +152,9 @@ const GPUBurstConfettiRenderer = ({
   viewportWidth,
   viewportHeight,
   onReadyChange,
+  onError,
 }: RendererProps) => {
   const canvasRef = useRef<CanvasRef>(null);
-  const [resources, setResources] = useState<BurstConfettiResources | null>(
-    null
-  );
   const [frameRegistration, setFrameRegistration] =
     useState<FrameRegistration | null>(null);
   const uniformDataRef = useLazyRef(
@@ -178,60 +173,40 @@ const GPUBurstConfettiRenderer = ({
 
   const reportReady = useCallback(() => onReadyChange(true), [onReadyChange]);
 
-  useEffect(() => {
-    onReadyChange(false);
-    if (!device || count <= 0 || initialization.origins.length === 0) {
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await createBurstConfettiResources({
-          device,
-          count,
-          originCount: initialization.origins.length,
-          sizeVariations,
-          allColors,
-          colorOverrides,
-          parentColorCount,
-          isCancelled: () => cancelled,
-        });
-        if (cancelled) {
-          destroyBurstConfettiResources(res);
-          return;
-        }
-        setResources(res);
-      } catch (error) {
-        if (!cancelled) console.error(error);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    device,
-    count,
-    initialization.origins.length,
-    sizeVariations,
-    allColors,
-    colorOverrides,
-    parentColorCount,
+  const resourceConfig = useMemo<BurstConfettiResourceConfig>(
+    () => ({
+      device,
+      count,
+      originCount: initialization.origins.length,
+      sizeVariations,
+      allColors,
+      colorOverrides,
+      parentColorCount,
+    }),
+    [
+      device,
+      count,
+      initialization.origins.length,
+      sizeVariations,
+      allColors,
+      colorOverrides,
+      parentColorCount,
+    ]
+  );
+  const resources = useGPUResources({
+    config: resourceConfig,
+    create: createBurstConfettiResources,
+    destroy: destroyBurstConfettiResources,
     onReadyChange,
-  ]);
+    onError,
+  });
+  const frameConfig = useMemo<FrameConfig>(
+    () => ({ resources: resourceConfig, viewportWidth, viewportHeight }),
+    [resourceConfig, viewportWidth, viewportHeight]
+  );
 
   useEffect(() => {
-    if (!device || !resources) {
-      return;
-    }
-    if (
-      resources.device !== device ||
-      resources.count !== count ||
-      resources.originCount !== initialization.origins.length ||
-      resources.sizeVariations !== sizeVariations ||
-      resources.allColors !== allColors ||
-      resources.colorOverrides !== colorOverrides ||
-      resources.parentColorCount !== parentColorCount
-    ) {
+    if (!resources || resources.config !== resourceConfig) {
       return;
     }
     if (viewportWidth <= 0 || viewportHeight <= 0) {
@@ -242,11 +217,9 @@ const GPUBurstConfettiRenderer = ({
     }
     const currentFrame = initializedRef.current?.state;
     if (
-      currentFrame?.device === device &&
-      currentFrame.uniformBuffer === resources.uniforms.buffer.buffer &&
-      currentFrame.count === count &&
-      currentFrame.viewportWidth === viewportWidth &&
-      currentFrame.viewportHeight === viewportHeight
+      currentFrame &&
+      currentFrame.config === frameConfig &&
+      currentFrame.uniformBuffer === resources.uniforms.buffer.buffer
     ) {
       return;
     }
@@ -265,6 +238,7 @@ const GPUBurstConfettiRenderer = ({
     );
 
     const nextRawFrameState: RawFrameState = {
+      config: frameConfig,
       device,
       queue: resources.queue,
       context,
@@ -299,6 +273,8 @@ const GPUBurstConfettiRenderer = ({
   }, [
     device,
     resources,
+    resourceConfig,
+    frameConfig,
     count,
     viewportWidth,
     viewportHeight,
@@ -307,44 +283,22 @@ const GPUBurstConfettiRenderer = ({
     reportReady,
     initialization.origins.length,
     sizeVariations,
-    allColors,
-    colorOverrides,
-    parentColorCount,
     initialization,
   ]);
 
   const rawFrameState = frameRegistration?.rawFrameState ?? null;
 
-  const resourcesAreCurrent =
-    resources?.device === device &&
-    resources.count === count &&
-    resources.originCount === initialization.origins.length &&
-    resources.sizeVariations === sizeVariations &&
-    resources.allColors === allColors &&
-    resources.colorOverrides === colorOverrides &&
-    resources.parentColorCount === parentColorCount;
   const activeRawFrameState =
-    resourcesAreCurrent &&
-    rawFrameState?.device === device &&
-    rawFrameState.uniformBuffer === resources.uniforms.buffer.buffer &&
-    rawFrameState.count === count &&
-    rawFrameState.viewportWidth === viewportWidth &&
-    rawFrameState.viewportHeight === viewportHeight
+    resources &&
+    rawFrameState &&
+    resources.config === resourceConfig &&
+    rawFrameState.config === frameConfig &&
+    rawFrameState.uniformBuffer === resources.uniforms.buffer.buffer
       ? rawFrameState
       : null;
 
   useEffect(() => {
     if (!activeRawFrameState || !resources) return;
-    if (
-      resources.count !== count ||
-      resources.originCount !== initialization.origins.length ||
-      resources.sizeVariations !== sizeVariations ||
-      resources.allColors !== allColors ||
-      resources.colorOverrides !== colorOverrides ||
-      resources.parentColorCount !== parentColorCount
-    ) {
-      return;
-    }
     const initialized = initializedRef.current;
     if (
       initialized?.state === activeRawFrameState &&
@@ -364,12 +318,7 @@ const GPUBurstConfettiRenderer = ({
   }, [
     activeRawFrameState,
     resources,
-    count,
     initialization,
-    sizeVariations,
-    allColors,
-    colorOverrides,
-    parentColorCount,
     lastRenderedProgress,
     onReadyChange,
   ]);
@@ -392,6 +341,9 @@ const GPUBurstConfettiRenderer = ({
     () => activeFrameRetirement?.resolve(),
     [activeFrameRetirement]
   );
+  const clearInitialized = useCallback(() => {
+    initializedRef.current = null;
+  }, []);
 
   const renderFrame = useCallback(
     (
@@ -410,29 +362,30 @@ const GPUBurstConfettiRenderer = ({
       lastRenderedProgress.set(currentProgress);
 
       const uniformData = uniformDataRef.current;
-      uniformData[0] = activeRawFrameState.viewportWidth;
-      uniformData[1] = activeRawFrameState.viewportHeight;
-      uniformData[2] = opacity.get();
-      uniformData[3] =
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.viewportX] =
+        activeRawFrameState.viewportWidth;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.viewportY] =
+        activeRawFrameState.viewportHeight;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.opacity] = opacity.get();
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.progress] =
         totalDuration > 0
           ? (currentProgress * cycleDuration) / totalDuration
           : currentProgress;
-      uniformData[4] = totalDuration;
-      uniformData[5] = flightDuration;
-      uniformData[6] = gravityPxPerSec2;
-      uniformData[7] = initialScale;
-      uniformData[8] = flipIntensity;
-      uniformData[9] = 0;
-      uniformData[10] = horizontalDrag;
-      uniformData[11] = verticalDrag;
-      uniformData[12] = 0;
-      uniformData[13] = 0;
-      uniformData[14] = 0;
-      uniformData[15] = 0;
-      uniformData[16] = floor.enabled ? 1 : 0;
-      uniformData[17] = floor.restitution;
-      uniformData[18] = floor.friction;
-      uniformData[19] = floor.variation;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.totalDuration] = totalDuration;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.flightDuration] = flightDuration;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.gravity] = gravityPxPerSec2;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.initialScale] = initialScale;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.flipIntensity] = flipIntensity;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.dragX] = horizontalDrag;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.dragY] = verticalDrag;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.padding] = 0;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.floorEnabled] = floor.enabled
+        ? 1
+        : 0;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.floorRestitution] =
+        floor.restitution;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.floorFriction] = floor.friction;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.floorVariation] = floor.variation;
       activeRawFrameState.queue.writeBuffer(
         activeRawFrameState.uniformBuffer,
         0,
@@ -482,32 +435,24 @@ const GPUBurstConfettiRenderer = ({
     activeFrameRetirement ? reportFrameRetired : undefined
   );
 
-  useLayoutEffect(() => {
-    if (!activeRawFrameState) return;
-    return () => {
-      onReadyChange(false);
-      initializedRef.current = null;
-      unconfigureCanvasSurface(activeRawFrameState.context, surfaceReady);
-    };
-  }, [activeRawFrameState, onReadyChange, surfaceReady]);
+  useGPUCanvasSurfaceCleanup(
+    activeRawFrameState,
+    surfaceReady,
+    onReadyChange,
+    clearInitialized
+  );
 
-  useEffect(() => {
-    if (!resources) return;
-    const frameRetirements = frameRetirementsRef.current;
-    return () => {
-      void retireGPUResourceSet(
-        resources.queue,
-        () => destroyBurstConfettiResources(resources),
-        frameRetirements.get(resources)?.promise
-      );
-    };
-  }, [resources]);
+  useGPUResourceRetirement(
+    resources,
+    frameRetirementsRef,
+    destroyBurstConfettiResources
+  );
 
-  return <Canvas ref={canvasRef} style={styles.canvas} transparent />;
+  return <Canvas ref={canvasRef} style={gpuCanvasStyles.canvas} transparent />;
 };
 
 export const GPUBurstConfettiCanvas = (props: Props) => {
-  const device = useGPUDevice(props.device);
+  const device = useGPUDevice(props.device, props.onError);
   const canRender =
     device !== null &&
     props.count > 0 &&
@@ -516,19 +461,13 @@ export const GPUBurstConfettiCanvas = (props: Props) => {
     props.viewportHeight > 0;
 
   return (
-    <View
-      pointerEvents="none"
-      onLayout={props.onContainerLayout}
-      style={[styles.container, props.containerStyle]}
+    <GPUCanvasHost
+      onContainerLayout={props.onContainerLayout}
+      containerStyle={props.containerStyle}
     >
       {canRender ? (
         <GPUBurstConfettiRenderer {...props} device={device} />
       ) : null}
-    </View>
+    </GPUCanvasHost>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { ...StyleSheet.absoluteFill },
-  canvas: { flex: 1 },
-});

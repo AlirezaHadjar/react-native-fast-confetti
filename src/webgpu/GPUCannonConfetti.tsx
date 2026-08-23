@@ -1,14 +1,13 @@
 import {
   forwardRef,
   useCallback,
-  useEffect,
   useImperativeHandle,
   useMemo,
   useState,
   type ForwardRefExoticComponent,
   type RefAttributes,
 } from 'react';
-import { scheduleOnRN, scheduleOnUI } from 'react-native-worklets';
+import { scheduleOnUI } from 'react-native-worklets';
 
 import {
   DEFAULT_CANNON_CONFETTI_DRAG,
@@ -17,9 +16,11 @@ import {
   DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX,
   DEFAULT_CANNON_CONFETTI_SPEED_VARIATION,
   DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE,
+  DEFAULT_FLAKE_STYLE,
+  DEFAULT_FLIP_INTENSITY,
+  DEFAULT_INITIAL_SCALE,
 } from '../constants';
 import { Flake, Origin } from '../CannonConfettiComponents';
-import { useAnimationLifecycle } from '../hooks/useAnimationLifecycle';
 import { useCannonOrigins } from '../hooks/useCannonOrigins';
 import { useContainerDimensions } from '../hooks/useContainerDimensions';
 import { useTextureProps } from '../hooks/useTextureProps';
@@ -43,17 +44,12 @@ import {
   estimateFloorSettlingDuration,
   resolveSettleOnFloor,
 } from './settleOnFloor';
+import { useBurstConfettiController } from './hooks/useBurstConfettiController';
 
 type RestartState = {
   seed: number;
   positions: Position[] | null;
   configs: CannonConfig[] | null;
-};
-
-type StartRequest = {
-  nonce: number;
-  delay: number;
-  notifyStart: boolean;
 };
 
 const CannonConfettiInner = forwardRef<
@@ -78,13 +74,14 @@ const CannonConfettiInner = forwardRef<
       speedVariation: rootSpeedVariation,
       target: rootTarget,
       sprayDuration = 300,
-      initialScale = 0.3,
-      flipIntensity = 0.85,
-      flakeStyle = 'glossy',
+      initialScale = DEFAULT_INITIAL_SCALE,
+      flipIntensity = DEFAULT_FLIP_INTENSITY,
+      flakeStyle = DEFAULT_FLAKE_STYLE,
       easing,
       reduceMotion,
       settleOnFloor,
       device,
+      onError,
       ...textureRootProps
     },
     ref
@@ -133,21 +130,6 @@ const CannonConfettiInner = forwardRef<
       positions: null,
       configs: null,
     });
-    const [startRequest, setStartRequest] = useState<StartRequest>({
-      nonce: 0,
-      delay: 0,
-      notifyStart: true,
-    });
-    const [rendererReady, setRendererReady] = useState(false);
-
-    const requestStart = useCallback((delay = 0, notifyStart = true) => {
-      setStartRequest((request) => ({
-        nonce: request.nonce + 1,
-        delay,
-        notifyStart,
-      }));
-    }, []);
-
     const currentCannonsPositions = restartState.positions ?? cannonsPositions;
     const currentCannonConfigs = restartState.configs ?? cannonConfigs;
 
@@ -178,29 +160,32 @@ const CannonConfettiInner = forwardRef<
       duration / 1000 +
       settlingDurationSeconds / Math.max(1 - launchDelayMax, 0.05);
 
-    const prepareNextCycle = useCallback(() => {
-      setRendererReady(false);
+    const advanceCycle = useCallback(() => {
       setRestartState((state) => ({ ...state, seed: state.seed + 1 }));
-      requestStart(0, false);
-    }, [requestStart]);
-
-    const onCycleEnd = useCallback(() => {
-      'worklet';
-      scheduleOnRN(prepareNextCycle);
-    }, [prepareNextCycle]);
-
-    const { progress, running, opacity, pause, reset, resume, runAnimation } =
-      useAnimationLifecycle({
-        duration: cycleDuration,
-        infinite,
-        opacityAnimation,
-        easing,
-        onAnimationStart,
-        onAnimationEnd,
-        onCycleEnd,
-        deferInfiniteRestart: true,
-        disabled: visibleCount === 0,
-      });
+    }, []);
+    const renderCount = ready && reduceMotionReady ? visibleCount : 0;
+    const {
+      progress,
+      running,
+      opacity,
+      pause,
+      reset,
+      resume,
+      requestStart,
+      setRendererReady,
+    } = useBurstConfettiController({
+      duration: cycleDuration,
+      infinite,
+      opacityAnimation,
+      easing,
+      onAnimationStart,
+      onAnimationEnd,
+      advanceCycle,
+      visibleCount,
+      renderCount,
+      autoplay,
+      autoStartDelay,
+    });
 
     const initialization = useMemo(
       () => ({
@@ -236,8 +221,6 @@ const CannonConfettiInner = forwardRef<
         currentCannonsPositions,
       ]
     );
-    const renderCount = ready && reduceMotionReady ? visibleCount : 0;
-
     const jsRestart = useCallback(
       (options: CannonConfettiRestartOptions = {}) => {
         let resolvedPositions: Position[] | null = null;
@@ -304,6 +287,7 @@ const CannonConfettiInner = forwardRef<
         containerHeight,
         requestStart,
         reduceMotionFactor,
+        setRendererReady,
         rootTarget,
         sizeVariations.length,
         totalCount,
@@ -317,42 +301,10 @@ const CannonConfettiInner = forwardRef<
       restart: jsRestart,
     }));
 
-    useEffect(() => {
-      if (!ready || !reduceMotionReady || !rendererReady || renderCount === 0)
-        return;
-      if (!autoplay) return;
-      if (startRequest.nonce !== 0) return;
-      if (running.get()) return;
-      scheduleOnUI(runAnimation, autoStartDelay);
-    }, [
-      ready,
-      renderCount,
-      autoplay,
-      autoStartDelay,
-      running,
-      runAnimation,
-      reduceMotionReady,
-      rendererReady,
-      startRequest.nonce,
-    ]);
-
-    useEffect(() => {
-      if (startRequest.nonce === 0) return;
-      if (!ready || !reduceMotionReady || !rendererReady || renderCount === 0)
-        return;
-      scheduleOnUI(runAnimation, startRequest.delay, startRequest.notifyStart);
-    }, [
-      startRequest,
-      ready,
-      reduceMotionReady,
-      renderCount,
-      rendererReady,
-      runAnimation,
-    ]);
-
     return (
       <GPUBurstConfettiCanvas
         device={device}
+        onError={onError}
         containerStyle={containerStyle}
         onContainerLayout={onContainerLayout}
         count={renderCount}

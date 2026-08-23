@@ -9,12 +9,11 @@ import {
   buildAtlasColors,
   parseFlakeChildren,
 } from '../hooks/useConfettiFlakes';
-import { toRuntimeInputs } from '../webgpu/resourcePacking';
+import { computeSpawnGrid, estimateFallingDuration } from '../webgpu/utils';
 import {
-  computeSpawnGrid,
-  estimateFallingDuration,
-  generateSpawnsArray,
-} from '../webgpu/utils';
+  generateReferenceSpawns,
+  toReferenceRuntimeInputs,
+} from '../__fixtures__/gpuConfettiReference';
 
 const CONTAINER = {
   width: 393,
@@ -44,18 +43,16 @@ const expectPhaseOffsetsAreStratified = (phaseOffsets: number[]) => {
   const sorted = [...phaseOffsets].sort((a, b) => a - b);
   for (let index = 0; index < sorted.length; index++) {
     expect(sorted[index]!).toBeGreaterThanOrEqual(index / sorted.length);
-    expect(sorted[index]!).toBeLessThanOrEqual(
-      (index + 1) / sorted.length
-    );
+    expect(sorted[index]!).toBeLessThanOrEqual((index + 1) / sorted.length);
   }
 };
 
 const createContinuousSpawns = (seed: number) => {
   const sizeVariations = parseFlakeChildren(undefined, 'glossy');
-  const {
-    colorOverrides,
-    parentColorCount,
-  } = buildAtlasColors(sizeVariations, DEFAULT_COLORS);
+  const { colorOverrides, parentColorCount } = buildAtlasColors(
+    sizeVariations,
+    DEFAULT_COLORS
+  );
   const maxFlakeWidth = Math.max(...sizeVariations.map((s) => s.width));
   const maxFlakeHeight = Math.max(...sizeVariations.map((s) => s.height));
   const grid = computeSpawnGrid({
@@ -76,7 +73,7 @@ const createContinuousSpawns = (seed: number) => {
   return {
     cycleDurationSeconds: duration / 1000,
     spawns: withSeededRandom(seed, () =>
-      generateSpawnsArray({
+      generateReferenceSpawns({
         count: COUNT,
         sizeVariations: sizeVariations.length,
         sizeColorOverrides: colorOverrides,
@@ -105,9 +102,7 @@ describe('continuous GPU confetti parity framework', () => {
     const { spawns } = createContinuousSpawns(0xabc123);
 
     expect(spawns).toHaveLength(COUNT);
-    expectPhaseOffsetsAreStratified(
-      spawns.map((spawn) => spawn.meta[3])
-    );
+    expectPhaseOffsetsAreStratified(spawns.map((spawn) => spawn.meta[3]));
   });
 
   it('reseeds phase offsets and runtime life on restart', () => {
@@ -122,7 +117,7 @@ describe('continuous GPU confetti parity framework', () => {
       restarted.spawns.map((spawn) => spawn.meta[3])
     );
 
-    const runtimeInputs = toRuntimeInputs(
+    const runtimeInputs = toReferenceRuntimeInputs(
       restarted.spawns,
       restarted.cycleDurationSeconds
     );
@@ -134,4 +129,3 @@ describe('continuous GPU confetti parity framework', () => {
     }
   });
 });
-

@@ -24,6 +24,9 @@ import {
   DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE,
   DEFAULT_CANNON_CONFETTI_SPEED_VARIATION,
   DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX,
+  DEFAULT_FLAKE_STYLE,
+  DEFAULT_FLIP_INTENSITY,
+  DEFAULT_INITIAL_SCALE,
 } from './constants';
 import type {
   CannonConfettiMethods,
@@ -84,9 +87,9 @@ const CannonConfettiInner = forwardRef<
       speedVariation: rootSpeedVariation,
       target: rootTarget,
       sprayDuration = 300,
-      initialScale = 0.3,
-      flipIntensity = 0.85,
-      flakeStyle = 'glossy',
+      initialScale = DEFAULT_INITIAL_SCALE,
+      flipIntensity = DEFAULT_FLIP_INTENSITY,
+      flakeStyle = DEFAULT_FLAKE_STYLE,
       easing,
       reduceMotion,
       ...textureRootProps

@@ -1,15 +1,11 @@
 import { useCallback } from 'react';
 import { useSharedValue } from 'react-native-reanimated';
 
-type Params = {
-  enabled?: boolean;
-};
-
 /**
  * Control-only lifecycle for the stateful GPU simulation. The canvas owns the
  * sole frame clock, so this hook deliberately registers no UI frame callback.
  */
-export const useSimulationLifecycle = ({ enabled = true }: Params = {}) => {
+export const useSimulationLifecycle = () => {
   const running = useSharedValue(false);
   const opacity = useSharedValue(1);
 
@@ -20,9 +16,8 @@ export const useSimulationLifecycle = ({ enabled = true }: Params = {}) => {
 
   const resume = useCallback(() => {
     'worklet';
-    if (!enabled) return;
     running.set(true);
-  }, [enabled, running]);
+  }, [running]);
 
   const reset = useCallback(() => {
     'worklet';
@@ -32,10 +27,9 @@ export const useSimulationLifecycle = ({ enabled = true }: Params = {}) => {
 
   const beginCycle = useCallback(() => {
     'worklet';
-    if (!enabled) return;
     running.set(true);
     opacity.set(1);
-  }, [enabled, running, opacity]);
+  }, [running, opacity]);
 
   return {
     running,

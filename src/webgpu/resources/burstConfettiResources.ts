@@ -1,7 +1,7 @@
 import { tgpu } from 'typegpu';
 
 import type { ColorRange, SizeVariation } from '../../hooks/useConfettiFlakes';
-import { toPaletteInputs } from './useConfettiResources';
+import { toPaletteInputs } from './palette';
 import { toBurstSizeInputs } from '../burstResourcePacking';
 import {
   canUseTextureOnlyPipeline,
@@ -28,7 +28,7 @@ import {
   prepareShapeMasksArray,
 } from '../textureResources';
 
-export type BurstConfettiResourcesInput = {
+export type BurstConfettiResourceConfig = {
   device: GPUDevice;
   count: number;
   originCount: number;
@@ -36,19 +36,21 @@ export type BurstConfettiResourcesInput = {
   allColors: string[];
   colorOverrides: (ColorRange | null)[];
   parentColorCount: number;
-  isCancelled?: () => boolean;
 };
 
-const createBurstConfettiResourcesImpl = async ({
-  device,
-  count,
-  originCount,
-  sizeVariations,
-  allColors,
-  colorOverrides,
-  parentColorCount,
-  isCancelled,
-}: BurstConfettiResourcesInput) => {
+export const createBurstConfettiResources = async (
+  config: BurstConfettiResourceConfig,
+  isCancelled?: () => boolean
+) => {
+  const {
+    device,
+    count,
+    originCount,
+    sizeVariations,
+    allColors,
+    colorOverrides,
+    parentColorCount,
+  } = config;
   const maxFlakeWidth = Math.max(...sizeVariations.map((s) => s.width));
   const maxFlakeHeight = Math.max(...sizeVariations.map((s) => s.height));
   const sizeFlags = computeSizeFlags(sizeVariations);
@@ -111,6 +113,7 @@ const createBurstConfettiResourcesImpl = async ({
     });
 
     return {
+      config,
       root,
       device,
       queue,
@@ -126,12 +129,6 @@ const createBurstConfettiResourcesImpl = async ({
       texturesArray,
       shapeMasksArray,
       sampler,
-      count,
-      originCount,
-      sizeVariations,
-      allColors,
-      colorOverrides,
-      parentColorCount,
       maxFlakeWidth,
       maxFlakeHeight,
       canUseTextureOnlyPipeline: canUseTextureOnlyPipeline(sizeVariations),
@@ -143,7 +140,7 @@ const createBurstConfettiResourcesImpl = async ({
 };
 
 export type BurstConfettiResources = Awaited<
-  ReturnType<typeof createBurstConfettiResourcesImpl>
+  ReturnType<typeof createBurstConfettiResources>
 >;
 
 export const destroyBurstConfettiResources = (
@@ -163,5 +160,3 @@ export const destroyBurstConfettiResources = (
     root: resources.root,
   });
 };
-
-export const createBurstConfettiResources = createBurstConfettiResourcesImpl;

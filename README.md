@@ -513,17 +513,18 @@ For exact app support, check the compatibility pages for the installed versions 
 
 ## WebGPU features
 
-| Prop               | Components                                 | Default     | Description                                          |
-| ------------------ | ------------------------------------------ | ----------- | ---------------------------------------------------- |
-| `settleOnFloor`    | `Confetti`, `PIConfetti`, `CannonConfetti` | `undefined` | Configures floor collision, bounce, and settling.    |
-| `windStrength`     | `Confetti`, `ContinuousConfetti`           | `0`         | Adds procedural wind.                                |
-| `magnusStrength`   | `Confetti`, `ContinuousConfetti`           | `0`         | Adds spin-driven lateral movement.                   |
-| `motionBlurAmount` | `Confetti`, `ContinuousConfetti`           | `0`         | Stretches fast particles along their velocity.       |
-| `iridescence`      | `Confetti`, `ContinuousConfetti`           | `0`         | Adds shader-based rim iridescence.                   |
-| `textureMode`      | `Confetti`, `ContinuousConfetti`           | `0`         | Selects a procedural material for untextured flakes. |
-| `gravityDir`       | `Confetti`, `ContinuousConfetti`           | `[0, 1, 0]` | Accepts a shared value for dynamic gravity.          |
-| `autoRestart`      | `Confetti`, `ContinuousConfetti`           | `true`      | Controls automatic simulation restarts.              |
-| `device`           | All WebGPU components                      | `undefined` | Borrows an app-owned `GPUDevice`.                    |
+| Prop               | Components                                 | Default         | Description                                             |
+| ------------------ | ------------------------------------------ | --------------- | ------------------------------------------------------- |
+| `settleOnFloor`    | `Confetti`, `PIConfetti`, `CannonConfetti` | `undefined`     | Configures floor collision, bounce, and settling.       |
+| `windStrength`     | `Confetti`, `ContinuousConfetti`           | `0`             | Adds procedural wind.                                   |
+| `magnusStrength`   | `Confetti`, `ContinuousConfetti`           | `0`             | Adds spin-driven lateral movement.                      |
+| `motionBlurAmount` | `Confetti`, `ContinuousConfetti`           | `0`             | Stretches fast particles along their velocity.          |
+| `iridescence`      | `Confetti`, `ContinuousConfetti`           | `0`             | Adds shader-based rim iridescence.                      |
+| `textureMode`      | `Confetti`, `ContinuousConfetti`           | `0`             | Selects a procedural material for untextured flakes.    |
+| `gravityDir`       | `Confetti`, `ContinuousConfetti`           | `[0, 1, 0]`     | Accepts a shared value for dynamic gravity.             |
+| `autoRestart`      | `Confetti`, `ContinuousConfetti`           | `true`          | Controls automatic simulation restarts.                 |
+| `device`           | All WebGPU components                      | `undefined`     | Borrows an app-owned `GPUDevice`.                       |
+| `onError`          | All WebGPU components                      | `console.error` | Reports device acquisition and renderer setup failures. |
 
 ## WebGPU caveats
 

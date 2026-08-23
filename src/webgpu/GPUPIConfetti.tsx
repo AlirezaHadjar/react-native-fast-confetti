@@ -1,22 +1,23 @@
 import {
   forwardRef,
   useCallback,
-  useEffect,
   useImperativeHandle,
   useMemo,
   useState,
   type ForwardRefExoticComponent,
   type RefAttributes,
 } from 'react';
-import { scheduleOnRN, scheduleOnUI } from 'react-native-worklets';
+import { scheduleOnUI } from 'react-native-worklets';
 
 import {
   DEFAULT_PI_CONFETTI_DRAG,
   DEFAULT_PI_CONFETTI_GRAVITY,
   DEFAULT_PI_CONFETTI_LAUNCH_DELAY_MAX,
+  DEFAULT_FLAKE_STYLE,
+  DEFAULT_FLIP_INTENSITY,
+  DEFAULT_INITIAL_SCALE,
 } from '../constants';
 import { Flake, Origin } from '../PIConfettiComponents';
-import { useAnimationLifecycle } from '../hooks/useAnimationLifecycle';
 import { useContainerDimensions } from '../hooks/useContainerDimensions';
 import { usePIOrigins } from '../hooks/usePIOrigins';
 import { useTextureProps } from '../hooks/useTextureProps';
@@ -35,17 +36,12 @@ import {
   estimateFloorSettlingDuration,
   resolveSettleOnFloor,
 } from './settleOnFloor';
+import { useBurstConfettiController } from './hooks/useBurstConfettiController';
 
 type RestartState = {
   seed: number;
   positions: Position[] | null;
   delays: number[] | null;
-};
-
-type StartRequest = {
-  nonce: number;
-  delay: number;
-  notifyStart: boolean;
 };
 
 const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
@@ -62,9 +58,9 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
       rotation: rootRotation,
       depth: rootDepth,
       speedVariation: rootSpeedVariation,
-      flakeStyle = 'glossy',
-      initialScale = 0.3,
-      flipIntensity = 0.85,
+      flakeStyle = DEFAULT_FLAKE_STYLE,
+      initialScale = DEFAULT_INITIAL_SCALE,
+      flipIntensity = DEFAULT_FLIP_INTENSITY,
       easing,
       sprayDuration,
       reduceMotion,
@@ -73,6 +69,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
       containerStyle,
       settleOnFloor,
       device,
+      onError,
       ...textureRootProps
     },
     ref
@@ -121,21 +118,6 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
       positions: null,
       delays: null,
     });
-    const [startRequest, setStartRequest] = useState<StartRequest>({
-      nonce: 0,
-      delay: 0,
-      notifyStart: true,
-    });
-    const [rendererReady, setRendererReady] = useState(false);
-
-    const requestStart = useCallback((delay = 0, notifyStart = true) => {
-      setStartRequest((request) => ({
-        nonce: request.nonce + 1,
-        delay,
-        notifyStart,
-      }));
-    }, []);
-
     const currentBlastPositions = restartState.positions ?? blastPositions;
     const currentOriginDelays = restartState.delays ?? originDelays;
 
@@ -164,29 +146,32 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
       flightDuration / 1000 +
       settlingDurationSeconds / Math.max(1 - launchDelayMax, 0.05);
 
-    const prepareNextCycle = useCallback(() => {
-      setRendererReady(false);
+    const advanceCycle = useCallback(() => {
       setRestartState((state) => ({ ...state, seed: state.seed + 1 }));
-      requestStart(0, false);
-    }, [requestStart]);
-
-    const onCycleEnd = useCallback(() => {
-      'worklet';
-      scheduleOnRN(prepareNextCycle);
-    }, [prepareNextCycle]);
-
-    const { progress, running, opacity, pause, reset, resume, runAnimation } =
-      useAnimationLifecycle({
-        duration: cycleDuration,
-        infinite,
-        opacityAnimation,
-        easing,
-        onAnimationStart,
-        onAnimationEnd,
-        onCycleEnd,
-        deferInfiniteRestart: true,
-        disabled: visibleCount === 0,
-      });
+    }, []);
+    const renderCount = ready && reduceMotionReady ? visibleCount : 0;
+    const {
+      progress,
+      running,
+      opacity,
+      pause,
+      reset,
+      resume,
+      requestStart,
+      setRendererReady,
+    } = useBurstConfettiController({
+      duration: cycleDuration,
+      infinite,
+      opacityAnimation,
+      easing,
+      onAnimationStart,
+      onAnimationEnd,
+      advanceCycle,
+      visibleCount,
+      renderCount,
+      autoplay,
+      autoStartDelay,
+    });
 
     const initialization = useMemo(
       () => ({
@@ -224,8 +209,6 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
         currentOriginDelays,
       ]
     );
-    const renderCount = ready && reduceMotionReady ? visibleCount : 0;
-
     const jsRestart = useCallback(
       (options: PIConfettiRestartOptions = {}) => {
         let resolvedPositions: Position[] | null = null;
@@ -249,7 +232,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
         }));
         requestStart();
       },
-      [containerWidth, containerHeight, requestStart]
+      [containerWidth, containerHeight, requestStart, setRendererReady]
     );
 
     useImperativeHandle(ref, () => ({
@@ -259,42 +242,10 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
       restart: jsRestart,
     }));
 
-    useEffect(() => {
-      if (!ready || !reduceMotionReady || !rendererReady || renderCount === 0)
-        return;
-      if (!autoplay) return;
-      if (startRequest.nonce !== 0) return;
-      if (running.get()) return;
-      scheduleOnUI(runAnimation, autoStartDelay);
-    }, [
-      ready,
-      renderCount,
-      autoplay,
-      autoStartDelay,
-      running,
-      runAnimation,
-      reduceMotionReady,
-      rendererReady,
-      startRequest.nonce,
-    ]);
-
-    useEffect(() => {
-      if (startRequest.nonce === 0) return;
-      if (!ready || !reduceMotionReady || !rendererReady || renderCount === 0)
-        return;
-      scheduleOnUI(runAnimation, startRequest.delay, startRequest.notifyStart);
-    }, [
-      startRequest,
-      ready,
-      reduceMotionReady,
-      renderCount,
-      rendererReady,
-      runAnimation,
-    ]);
-
     return (
       <GPUBurstConfettiCanvas
         device={device}
+        onError={onError}
         containerStyle={containerStyle}
         onContainerLayout={onContainerLayout}
         count={renderCount}

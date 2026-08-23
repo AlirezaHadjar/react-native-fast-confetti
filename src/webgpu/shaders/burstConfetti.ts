@@ -11,18 +11,19 @@ import {
   FLOOR_SPRING_DAMPING_PER_SECOND,
   FLOOR_TANGENTIAL_RETENTION,
 } from '../constants';
+import { random01, randomRange } from './gpuMath';
+import { InitSizeSchema } from './sharedSchemas';
 import {
-  InitSizeSchema,
-  gpuRandom01,
-  gpuRandomRange,
-} from './confetti';
+  SIZE_FLAG_GLOSSY,
+  SIZE_FLAG_LAYER_MASK,
+  SIZE_FLAG_MASK_LAYER_SHIFT,
+  SIZE_FLAG_SHAPE_MASK,
+  SIZE_FLAG_TEXTURED,
+  SIZE_FLAG_TEXTURE_LAYER_SHIFT,
+} from '../resourcePacking';
+import { createAlphaBlendTarget } from './blendTarget';
 
 export const BURST_VERTS_PER_FLAKE = 6;
-const SIZE_FLAG_TEXTURED = 1 << 1;
-const SIZE_FLAG_SHAPE_MASK = 1 << 2;
-const SIZE_FLAG_TEXTURE_LAYER_SHIFT = 8;
-const SIZE_FLAG_MASK_LAYER_SHIFT = 16;
-const SIZE_FLAG_LAYER_MASK = 0xff;
 
 export const BurstUniformsSchema = d.struct({
   viewport: d.vec2f,
@@ -72,6 +73,68 @@ export const BurstPaletteColorSchema = d.vec4f;
 export const BURST_PARTICLE_BYTES = d.sizeOf(BurstParticleSchema);
 export const BURST_SIZE_META_BYTES = d.sizeOf(BurstSizeSchema);
 export const BURST_UNIFORMS_BYTES = d.sizeOf(BurstUniformsSchema);
+
+const toFloatOffset = (byteOffset: number) =>
+  byteOffset / Float32Array.BYTES_PER_ELEMENT;
+
+/** Float32 indices derived from the TypeGPU schema used by the hot-path upload. */
+export const BURST_UNIFORM_FLOAT_OFFSETS = {
+  viewportX: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.viewport.x)
+      .offset
+  ),
+  viewportY: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.viewport.y)
+      .offset
+  ),
+  opacity: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.opacity).offset
+  ),
+  progress: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.progress)
+      .offset
+  ),
+  totalDuration: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.totalDuration)
+      .offset
+  ),
+  flightDuration: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.flightDuration)
+      .offset
+  ),
+  gravity: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.gravity).offset
+  ),
+  initialScale: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.initialScale)
+      .offset
+  ),
+  flipIntensity: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.flipIntensity)
+      .offset
+  ),
+  dragX: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.drag.x).offset
+  ),
+  dragY: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.drag.y).offset
+  ),
+  padding: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms._pad0).offset
+  ),
+  floorEnabled: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.floor.x).offset
+  ),
+  floorRestitution: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.floor.y).offset
+  ),
+  floorFriction: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.floor.z).offset
+  ),
+  floorVariation: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.floor.w).offset
+  ),
+} as const;
 
 export const BurstParticleArraySchema = (count: number) =>
   d.arrayOf(BurstParticleSchema, count);
@@ -193,10 +256,7 @@ export const burstConfettiInit = tgpu.computeFn({
   const layoutCount = std.max(u.counts.y, d.u32(1));
   const originCount = std.max(u.counts.z, d.u32(1));
   const layoutIndex = d.u32(
-    std.div(
-      (idx + d.u32(1)) * layoutCount + count - d.u32(1),
-      count
-    ) - 1
+    std.div((idx + d.u32(1)) * layoutCount + count - d.u32(1), count) - 1
   );
 
   let low = d.u32(0);
@@ -229,56 +289,40 @@ export const burstConfettiInit = tgpu.computeFn({
   if (mode < 0.5) {
     const turns = d.f32(localIndex) * (137.5 / 360);
     const centeredDegrees = std.fract(turns) * 360 - 180;
-    angle =
-      -1.57079632679 +
-      centeredDegrees * (halfSpread / 180);
+    angle = -1.57079632679 + centeredDegrees * (halfSpread / 180);
   } else {
-    const targetDelta =
-      origin.targetStartAndMode.xy - origin.originAndCount.xy;
+    const targetDelta = origin.targetStartAndMode.xy - origin.originAndCount.xy;
     const baseAngle = std.atan2(targetDelta.y, targetDelta.x);
     angle =
       baseAngle +
-      gpuRandomRange(
-        layoutIndex,
-        d.u32(0),
-        seed,
-        -halfSpread,
-        halfSpread
-      );
+      randomRange(layoutIndex, d.u32(0), seed, -halfSpread, halfSpread);
   }
 
-  const speedMultiplier = gpuRandomRange(
+  const speedMultiplier = randomRange(
     layoutIndex,
     d.u32(1),
     seed,
     origin.motion.z,
     origin.motion.w
   );
-  const depthScale = gpuRandomRange(
+  const depthScale = randomRange(
     layoutIndex,
     d.u32(2),
     seed,
     origin.depth.x,
     origin.depth.y
   );
-  const speed =
-    origin.motion.y * u.globals.x * speedMultiplier * depthScale;
+  const speed = origin.motion.y * u.globals.x * speedMultiplier * depthScale;
   const velocity = d.vec2f(speed * std.cos(angle), speed * std.sin(angle));
-  const launchDelay = gpuRandomRange(
-    layoutIndex,
-    d.u32(3),
-    seed,
-    0,
-    u.globals.y
-  );
-  const maxRotationX = gpuRandomRange(
+  const launchDelay = randomRange(layoutIndex, d.u32(3), seed, 0, u.globals.y);
+  const maxRotationX = randomRange(
     layoutIndex,
     d.u32(4),
     seed,
     origin.rotation.x,
     origin.rotation.y
   );
-  const maxRotationZ = gpuRandomRange(
+  const maxRotationZ = randomRange(
     layoutIndex,
     d.u32(5),
     seed,
@@ -288,9 +332,9 @@ export const burstConfettiInit = tgpu.computeFn({
   const rotationDirection = std.select(
     d.f32(-1),
     d.f32(1),
-    gpuRandom01(layoutIndex, d.u32(6), seed) >= 0.5
+    random01(layoutIndex, d.u32(6), seed) >= 0.5
   );
-  const initialRotation = gpuRandomRange(
+  const initialRotation = randomRange(
     layoutIndex,
     d.u32(7),
     seed,
@@ -305,8 +349,7 @@ export const burstConfettiInit = tgpu.computeFn({
     std.min(
       d.u32(
         std.round(
-          gpuRandom01(layoutIndex, d.u32(8), seed) *
-            d.f32(sizeCount - d.u32(1))
+          random01(layoutIndex, d.u32(8), seed) * d.f32(sizeCount - d.u32(1))
         )
       ),
       sizeCount - d.u32(1)
@@ -319,8 +362,7 @@ export const burstConfettiInit = tgpu.computeFn({
     std.min(
       d.u32(
         std.round(
-          gpuRandom01(layoutIndex, d.u32(9), seed) *
-            d.f32(colorCount - d.u32(1))
+          random01(layoutIndex, d.u32(9), seed) * d.f32(colorCount - d.u32(1))
         )
       ),
       colorCount - d.u32(1)
@@ -336,8 +378,7 @@ export const burstConfettiInit = tgpu.computeFn({
   let floorImpactTime = trajectoryDuration + 1;
   if (u.floorImpact.w > 0.5) {
     const dimensions = burstInitLayout.$.sizes[sizeIndex]!.dims;
-    const floorY =
-      u.globals.x - std.length(dimensions.xy) * 0.5 * depthScale;
+    const floorY = u.globals.x - std.length(dimensions.xy) * 0.5 * depthScale;
     const endY = burstYAtTime(
       origin.originAndCount.y,
       velocity.y,
@@ -375,11 +416,7 @@ export const burstConfettiInit = tgpu.computeFn({
       std.select(d.f32(0), origin.originAndCount.z, mode < 0.5),
       launchDelay
     ),
-    velocityAndDepth: d.vec4f(
-      velocity,
-      depthScale,
-      initialRotation
-    ),
+    velocityAndDepth: d.vec4f(velocity, depthScale, initialRotation),
     rotationAndMeta: d.vec4f(
       maxRotationX,
       maxRotationZ,
@@ -395,7 +432,10 @@ export const burstConfettiInit = tgpu.computeFn({
   });
 });
 
-const toClip = tgpu.fn([d.vec2f], d.vec2f)((screen) => {
+const toClip = tgpu.fn(
+  [d.vec2f],
+  d.vec2f
+)((screen) => {
   'use gpu';
 
   const u = burstRenderLayout.$.uniforms;
@@ -472,10 +512,7 @@ export const burstConfettiVertex = tgpu.vertexFn({
   if (mode < 0.5) {
     const elapsedMs = u.progress * u.totalDuration;
     const localMs = elapsedMs - particle.originAndTiming.z;
-    const localProgress = std.max(
-      localMs / std.max(u.flightDuration, 1),
-      0
-    );
+    const localProgress = std.max(localMs / std.max(u.flightDuration, 1), 0);
     rotationProgress = std.min(localProgress, 1);
     const rawEffectiveProgress = std.max(
       (localProgress - launchDelay) / std.max(1 - launchDelay, 0.0001),
@@ -494,13 +531,7 @@ export const burstConfettiVertex = tgpu.vertexFn({
     const hExpDecay = 1 - std.exp(-safeHDrag * trajectoryTime);
     center = d.vec2f(
       origin.x + (velocity.x / safeHDrag) * hExpDecay,
-      burstYAtTime(
-        origin.y,
-        velocity.y,
-        u.gravity,
-        safeVDrag,
-        trajectoryTime
-      )
+      burstYAtTime(origin.y, velocity.y, u.gravity, safeVDrag, trajectoryTime)
     );
   } else {
     const rawEffectiveProgress = std.max(
@@ -525,21 +556,14 @@ export const burstConfettiVertex = tgpu.vertexFn({
     center = d.vec2f(
       origin.x +
         ((velocity.x * trajectoryDuration) / (safeHDrag + 1)) * hDecayFactor,
-      burstYAtTime(
-        origin.y,
-        velocity.y,
-        u.gravity,
-        safeVDrag,
-        trajectoryTime
-      )
+      burstYAtTime(origin.y, velocity.y, u.gravity, safeVDrag, trajectoryTime)
     );
   }
 
   const floorImpactTime = particle.indices.w;
   if (u.floor.x > 0.5 && trajectoryTime >= floorImpactTime) {
     const depthScale = particle.velocityAndDepth.z;
-    const floorY =
-      u.viewport.y - std.length(size.dims.xy) * 0.5 * depthScale;
+    const floorY = u.viewport.y - std.length(size.dims.xy) * 0.5 * depthScale;
     const postImpactTime = trajectoryTime - floorImpactTime;
     const floorRandom = std.fract(
       particle.velocityAndDepth.w * 17.17 + d.f32(sizeIdx) * 0.37
@@ -573,15 +597,13 @@ export const burstConfettiVertex = tgpu.vertexFn({
     if (mode < 0.5) {
       impactX =
         origin.x +
-        (velocity.x / safeHDrag) *
-          (1 - std.exp(-safeHDrag * floorImpactTime));
+        (velocity.x / safeHDrag) * (1 - std.exp(-safeHDrag * floorImpactTime));
     } else {
       const impactNormalized = std.min(
         floorImpactTime / std.max(trajectoryDuration, 0.0001),
         1
       );
-      const impactDecay =
-        1 - std.pow(1 - impactNormalized, safeHDrag + 1);
+      const impactDecay = 1 - std.pow(1 - impactNormalized, safeHDrag + 1);
       impactX =
         origin.x +
         ((velocity.x * trajectoryDuration) / (safeHDrag + 1)) * impactDecay;
@@ -593,8 +615,7 @@ export const burstConfettiVertex = tgpu.vertexFn({
     const horizontalDamping = 1 + (1 - frictionRetention) * 6;
     center.x =
       impactX +
-      (center.x - impactX) *
-        std.exp(-horizontalDamping * postImpactTime);
+      (center.x - impactX) * std.exp(-horizontalDamping * postImpactTime);
 
     const impactRotationProgress =
       launchDelay +
@@ -605,10 +626,7 @@ export const burstConfettiVertex = tgpu.vertexFn({
     rotationProgress =
       impactRotationProgress +
       (rotationRate *
-        (1 -
-          std.exp(
-            -FLOOR_ANGULAR_DAMPING_PER_SECOND * postImpactTime
-          ))) /
+        (1 - std.exp(-FLOOR_ANGULAR_DAMPING_PER_SECOND * postImpactTime))) /
         FLOOR_ANGULAR_DAMPING_PER_SECOND;
   }
 
@@ -633,7 +651,8 @@ export const burstConfettiVertex = tgpu.vertexFn({
   const local = (uv - d.vec2f(0.5)) * d.vec2f(width, height);
   const s = std.sin(rz) * scale;
   const c = std.cos(rz) * scale;
-  const screen = center + d.vec2f(c * local.x - s * local.y, s * local.x + c * local.y);
+  const screen =
+    center + d.vec2f(c * local.x - s * local.y, s * local.x + c * local.y);
   const clip = toClip(screen);
 
   return {
@@ -654,7 +673,7 @@ export const burstConfettiFragment = tgpu.fragmentFn({
   'use gpu';
 
   const flags = d.u32(input.flagsAndLayers.x);
-  const isGlossy = (flags & 1) !== 0;
+  const isGlossy = (flags & d.u32(SIZE_FLAG_GLOSSY)) !== 0;
   const isTextured = (flags & d.u32(SIZE_FLAG_TEXTURED)) !== 0;
   const hasShapeMask = (flags & d.u32(SIZE_FLAG_SHAPE_MASK)) !== 0;
 
@@ -686,7 +705,11 @@ export const burstConfettiFragment = tgpu.fragmentFn({
     outputColor = d.vec3f(texColor.rgb);
   } else if (isGlossy) {
     const lighter = paletteRgb + (d.vec3f(1) - paletteRgb) * 0.35;
-    outputColor = std.mix(lighter, paletteRgb, std.clamp(input.uv.y / 0.6, 0, 1));
+    outputColor = std.mix(
+      lighter,
+      paletteRgb,
+      std.clamp(input.uv.y / 0.6, 0, 1)
+    );
   }
 
   return d.vec4f(outputColor, input.color.a * maskAlpha * texAlpha);
@@ -724,21 +747,7 @@ export const createBurstConfettiPipelines = (
   renderPipeline: root.createRenderPipeline({
     vertex: burstConfettiVertex,
     fragment: useTexturePipeline ? burstTextureFragment : burstConfettiFragment,
-    targets: {
-      format: presentationFormat,
-      blend: {
-        color: {
-          srcFactor: 'src-alpha',
-          dstFactor: 'one-minus-src-alpha',
-          operation: 'add',
-        },
-        alpha: {
-          srcFactor: 'one',
-          dstFactor: 'one-minus-src-alpha',
-          operation: 'add',
-        },
-      },
-    },
+    targets: createAlphaBlendTarget(presentationFormat),
     primitive: {
       topology: 'triangle-list',
     },

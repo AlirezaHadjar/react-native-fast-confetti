@@ -1,8 +1,4 @@
-import type {
-  ColorRange,
-  SizeVariation,
-} from '../hooks/useConfettiFlakes';
-import type { Spawn } from './utils';
+import type { ColorRange, SizeVariation } from '../hooks/useConfettiFlakes';
 
 export const SIZE_FLAG_GLOSSY = 1 << 0;
 export const SIZE_FLAG_TEXTURED = 1 << 1;
@@ -56,10 +52,7 @@ export const computeSizeFlags = (sizes: SizeVariation[]): number[] => {
   return flags;
 };
 
-export const toSizeInputs = (
-  sizes: SizeVariation[],
-  flags: number[]
-) =>
+export const toSizeInputs = (sizes: SizeVariation[], flags: number[]) =>
   sizes.map((size, index) => ({
     dims: [size.width, size.height, size.radius, flags[index] ?? 0] as const,
   }));
@@ -110,28 +103,3 @@ export const createPhasePermutation = (count: number, seed: number) => {
     (Math.imul((seed + 1) >>> 0, 0xc2b2ae35) >>> 0) % normalizedCount;
   return { stride, offset };
 };
-
-export const toSpawnInputs = (spawns: Spawn[]) =>
-  spawns.map((spawn) => ({
-    pos0: spawn.pos0,
-    vel0: spawn.vel0,
-    quat0: spawn.quat0,
-    omega0: spawn.omega0,
-    drag: spawn.drag,
-    info: spawn.meta,
-  }));
-
-export const toRuntimeInputs = (
-  spawns: Spawn[],
-  cycleDuration: number
-) =>
-  spawns.map((spawn) => ({
-    pos: spawn.pos0,
-    life: -(spawn.meta[3] ?? 0) * cycleDuration,
-    prevPos: spawn.pos0,
-    prevLife: -(spawn.meta[3] ?? 0) * cycleDuration,
-    vel: spawn.vel0,
-    quat: spawn.quat0,
-    prevQuat: spawn.quat0,
-    omega: spawn.omega0,
-  }));

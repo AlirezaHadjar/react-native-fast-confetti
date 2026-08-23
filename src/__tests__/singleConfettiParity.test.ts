@@ -16,12 +16,7 @@ import {
   estimateFallingDuration as estimateSkiaFallingDuration,
   generateFallingBoxesArray,
 } from '../utils';
-import {
-  computeSizeFlags,
-  toRuntimeInputs,
-  toSizeInputs,
-  toSpawnInputs,
-} from '../webgpu/resourcePacking';
+import { computeSizeFlags, toSizeInputs } from '../webgpu/resourcePacking';
 import {
   RUNTIME_BYTES,
   SIZE_META_BYTES,
@@ -35,8 +30,12 @@ import {
 import {
   computeSpawnGrid as computeGpuSpawnGrid,
   estimateFallingDuration as estimateGpuFallingDuration,
-  generateSpawnsArray,
 } from '../webgpu/utils';
+import {
+  generateReferenceSpawns,
+  toReferenceRuntimeInputs,
+  toReferenceSpawnInputs,
+} from '../__fixtures__/gpuConfettiReference';
 
 const CONTAINER = {
   width: 393,
@@ -105,19 +104,11 @@ const expectFloat32 = (actual: number | undefined, expected: number) => {
 
 const createSingleScenario = (count = DEFAULT_COUNT): Scenario => {
   const sizeVariations = parseFlakeChildren(undefined, 'glossy');
-  const {
-    allColors,
-    colorOverrides,
-    parentColorCount,
-    sizeIsTextured,
-  } = buildAtlasColors(sizeVariations, DEFAULT_COLORS);
+  const { allColors, colorOverrides, parentColorCount, sizeIsTextured } =
+    buildAtlasColors(sizeVariations, DEFAULT_COLORS);
 
-  const maxFlakeWidth = Math.max(
-    ...sizeVariations.map((size) => size.width)
-  );
-  const maxFlakeHeight = Math.max(
-    ...sizeVariations.map((size) => size.height)
-  );
+  const maxFlakeWidth = Math.max(...sizeVariations.map((size) => size.width));
+  const maxFlakeHeight = Math.max(...sizeVariations.map((size) => size.height));
   const skiaGrid = computeSkiaSpawnGrid({
     count,
     containerHeight: CONTAINER.height,
@@ -195,7 +186,7 @@ const createSkiaState = (scenario: Scenario, continuous = false) =>
 
 const createGpuState = (scenario: Scenario, continuous = false) =>
   withSeededRandom(DEFAULT_SEED, () =>
-    generateSpawnsArray({
+    generateReferenceSpawns({
       columnWidth: scenario.columnWidth,
       columnsNum: scenario.columnsNum,
       containerHeight: CONTAINER.height,
@@ -327,9 +318,7 @@ describe('single confetti engine parity framework', () => {
     expectPhaseOffsetsAreStratified(
       skiaState.boxes.map((box) => box.phaseOffset)
     );
-    expectPhaseOffsetsAreStratified(
-      gpuSpawns.map((spawn) => spawn.meta[3])
-    );
+    expectPhaseOffsetsAreStratified(gpuSpawns.map((spawn) => spawn.meta[3]));
   });
 
   it('maps GPU host data to the TypeGPU schemas', () => {
@@ -337,8 +326,8 @@ describe('single confetti engine parity framework', () => {
     const gpuSpawns = createGpuState(scenario);
     const sizeFlags = computeSizeFlags(scenario.sizeVariations);
     const sizeInputs = toSizeInputs(scenario.sizeVariations, sizeFlags);
-    const spawnInputs = toSpawnInputs(gpuSpawns);
-    const runtimeInputs = toRuntimeInputs(
+    const spawnInputs = toReferenceSpawnInputs(gpuSpawns);
+    const runtimeInputs = toReferenceRuntimeInputs(
       gpuSpawns,
       scenario.cycleDurationSeconds
     );

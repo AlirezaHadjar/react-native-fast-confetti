@@ -1,34 +1,25 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
-import { PixelRatio, StyleSheet, View } from 'react-native';
+import { PixelRatio } from 'react-native';
 import {
   Easing,
   useSharedValue,
   type EasingFunction,
   type EasingFunctionFactory,
-  type SharedValue,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { Canvas, type CanvasRef } from 'react-native-webgpu';
 
 import type { ColorRange, SizeVariation } from '../hooks/useConfettiFlakes';
-import {
-  DEFAULT_FOCAL_LENGTH_RATIO,
-  DEFAULT_LIGHT_DIR,
-} from './constants';
+import { DEFAULT_FOCAL_LENGTH_RATIO, DEFAULT_LIGHT_DIR } from './constants';
 import {
   createConfettiResources,
   destroyConfettiResources,
+  type ConfettiResourceConfig,
   type ConfettiResources,
-} from './hooks/useConfettiResources';
+} from './resources/confettiResources';
 import {
+  UNIFORM_FLOAT_OFFSETS,
   UNIFORMS_BYTES,
   VERTS_PER_FLAKE,
   createConfettiPipelines,
@@ -52,14 +43,10 @@ import {
   type DedicatedGPUFrameTarget,
 } from './hooks/useDedicatedGPUFrame';
 import { useGPUDevice } from './hooks/useGPUDevice';
-import {
-  configureCanvasSurface,
-  unconfigureCanvasSurface,
-} from './configureCanvasSurface';
+import { configureCanvasSurface } from './configureCanvasSurface';
 import { createPhasePermutation } from './resourcePacking';
 import {
   createGPUFrameRetirement,
-  retireGPUResourceSet,
   type GPUFrameRetirement,
 } from './resourceCleanup';
 import type {
@@ -67,10 +54,12 @@ import type {
   ReadonlyFixedLengthArray,
 } from '../typeHelpers';
 import { useLazyRef } from '../hooks/useLazyRef';
-import {
-  interpolateOpacity,
-  type ResolvedOpacityAnimation,
-} from '../fadeOut';
+import { interpolateOpacity, type ResolvedOpacityAnimation } from '../fadeOut';
+import { useGPUResources } from './hooks/useGPUResources';
+import { useGPUResourceRetirement } from './hooks/useGPUResourceRetirement';
+import { GPUCanvasHost, gpuCanvasStyles } from './GPUCanvasHost';
+import type { ReadableValue } from './controlValues';
+import { useGPUCanvasSurfaceCleanup } from './hooks/useGPUCanvasSurfaceCleanup';
 
 export type GPUConfettiInitialization = {
   seed: number;
@@ -105,7 +94,7 @@ export type GPUConfettiCanvasParams = {
   iridescence: number;
   textureMode: number;
   easing: EasingFunction | EasingFunctionFactory;
-  gravityDir: SharedValue<FixedLengthArray<number, 3>>;
+  gravityDir: ReadableValue<FixedLengthArray<number, 3>>;
 };
 
 type Props = {
@@ -120,8 +109,8 @@ type Props = {
   initialization: GPUConfettiInitialization;
   cycleDuration: number;
   motionDuration: number;
-  running: SharedValue<boolean>;
-  opacity: SharedValue<number>;
+  running: ReadableValue<boolean>;
+  opacity: ReadableValue<number>;
   drift: number;
   initialScale: number;
   continuous: boolean;
@@ -133,6 +122,7 @@ type Props = {
   params: GPUConfettiCanvasParams;
   onCycleEnd: () => void;
   onReadyChange: (ready: boolean) => void;
+  onError?: (error: unknown) => void;
 };
 
 type RendererProps = Omit<
@@ -143,6 +133,7 @@ type RendererProps = Omit<
 };
 
 type RawFrameState = {
+  config: FrameConfig;
   device: GPUDevice;
   queue: GPUQueue;
   context: GPUCanvasContext & { present?: () => void };
@@ -157,6 +148,12 @@ type RawFrameState = {
   workgroupCount: number;
   count: number;
   focalLength: number;
+  viewportWidth: number;
+  viewportHeight: number;
+};
+
+type FrameConfig = {
+  resources: ConfettiResourceConfig;
   viewportWidth: number;
   viewportHeight: number;
 };
@@ -290,9 +287,9 @@ const GPUConfettiRenderer = ({
   params,
   onCycleEnd,
   onReadyChange,
+  onError,
 }: RendererProps) => {
   const canvasRef = useRef<CanvasRef>(null);
-  const [resources, setResources] = useState<ConfettiResources | null>(null);
   const [frameRegistration, setFrameRegistration] =
     useState<FrameRegistration | null>(null);
   const uniformDataRef = useLazyRef(
@@ -324,7 +321,31 @@ const GPUConfettiRenderer = ({
 
   const reportReady = useCallback(() => onReadyChange(true), [onReadyChange]);
 
-  useEffect(() => {
+  const resourceConfig = useMemo<ConfettiResourceConfig>(
+    () => ({
+      device,
+      count,
+      sizeVariations,
+      allColors,
+      colorOverrides,
+      parentColorCount,
+    }),
+    [device, count, sizeVariations, allColors, colorOverrides, parentColorCount]
+  );
+  const resources = useGPUResources({
+    config: resourceConfig,
+    create: createConfettiResources,
+    destroy: destroyConfettiResources,
+    onReadyChange,
+    onError,
+  });
+  const frameConfig = useMemo<FrameConfig>(
+    () => ({ resources: resourceConfig, viewportWidth, viewportHeight }),
+    [resourceConfig, viewportWidth, viewportHeight]
+  );
+
+  const resetClock = useCallback(() => {
+    'worklet';
     elapsed.set(0);
     lastSimSeconds.set(0);
     simulatedSeconds.set(0);
@@ -332,7 +353,6 @@ const GPUConfettiRenderer = ({
     wasRunning.set(false);
     lastFrameTimestampMs.set(0);
   }, [
-    cycleDuration,
     elapsed,
     lastFrameTimestampMs,
     lastSimSeconds,
@@ -342,54 +362,11 @@ const GPUConfettiRenderer = ({
   ]);
 
   useEffect(() => {
-    onReadyChange(false);
-    if (!device || count <= 0) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await createConfettiResources({
-          device,
-          count,
-          sizeVariations,
-          allColors,
-          colorOverrides,
-          parentColorCount,
-          isCancelled: () => cancelled,
-        });
-        if (cancelled) {
-          destroyConfettiResources(res);
-          return;
-        }
-        setResources(res);
-      } catch (error) {
-        if (!cancelled) console.error(error);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    device,
-    count,
-    sizeVariations,
-    allColors,
-    colorOverrides,
-    parentColorCount,
-    onReadyChange,
-  ]);
+    resetClock();
+  }, [cycleDuration, resetClock]);
 
   useEffect(() => {
-    if (!device || !resources) {
-      return;
-    }
-    if (
-      resources.device !== device ||
-      resources.count !== count ||
-      resources.sizeVariations !== sizeVariations ||
-      resources.allColors !== allColors ||
-      resources.colorOverrides !== colorOverrides ||
-      resources.parentColorCount !== parentColorCount
-    ) {
+    if (!resources || resources.config !== resourceConfig) {
       return;
     }
     if (viewportWidth <= 0 || viewportHeight <= 0) {
@@ -397,11 +374,9 @@ const GPUConfettiRenderer = ({
     }
     const currentFrame = initializedRef.current?.state;
     if (
-      currentFrame?.device === device &&
-      currentFrame.uniformBuffer === resources.uniforms.buffer.buffer &&
-      currentFrame.count === count &&
-      currentFrame.viewportWidth === viewportWidth &&
-      currentFrame.viewportHeight === viewportHeight
+      currentFrame &&
+      currentFrame.config === frameConfig &&
+      currentFrame.uniformBuffer === resources.uniforms.buffer.buffer
     ) {
       return;
     }
@@ -424,13 +399,9 @@ const GPUConfettiRenderer = ({
       resources.canUseTextureOnlyPipeline
     );
 
-    elapsed.set(0);
-    lastSimSeconds.set(0);
-    simulatedSeconds.set(0);
-    simulationAccumulator.set(0);
-    wasRunning.set(false);
-    lastFrameTimestampMs.set(0);
+    resetClock();
     const nextRawFrameState: RawFrameState = {
+      config: frameConfig,
       device,
       queue: resources.queue,
       context,
@@ -478,57 +449,34 @@ const GPUConfettiRenderer = ({
   }, [
     device,
     resources,
+    resourceConfig,
+    frameConfig,
     count,
     viewportWidth,
     viewportHeight,
-    elapsed,
-    lastFrameTimestampMs,
-    lastSimSeconds,
-    simulatedSeconds,
-    simulationAccumulator,
     surfaceReady,
     reportReady,
-    wasRunning,
+    resetClock,
     continuous,
     infinite,
     sizeVariations,
-    allColors,
-    colorOverrides,
-    parentColorCount,
     needsRender,
     initialization,
   ]);
 
   const rawFrameState = frameRegistration?.rawFrameState ?? null;
 
-  const resourcesAreCurrent =
-    resources?.device === device &&
-    resources.count === count &&
-    resources.sizeVariations === sizeVariations &&
-    resources.allColors === allColors &&
-    resources.colorOverrides === colorOverrides &&
-    resources.parentColorCount === parentColorCount;
   const activeRawFrameState =
-    resourcesAreCurrent &&
-    rawFrameState?.device === device &&
-    rawFrameState.uniformBuffer === resources.uniforms.buffer.buffer &&
-    rawFrameState.count === count &&
-    rawFrameState.viewportWidth === viewportWidth &&
-    rawFrameState.viewportHeight === viewportHeight
+    resources &&
+    rawFrameState &&
+    resources.config === resourceConfig &&
+    rawFrameState.config === frameConfig &&
+    rawFrameState.uniformBuffer === resources.uniforms.buffer.buffer
       ? rawFrameState
       : null;
 
   useEffect(() => {
     if (!activeRawFrameState || !resources) return;
-    if (
-      resources.count !== count ||
-      resources.sizeVariations !== sizeVariations ||
-      resources.allColors !== allColors ||
-      resources.colorOverrides !== colorOverrides ||
-      resources.parentColorCount !== parentColorCount
-    ) {
-      return;
-    }
     const initialized = initializedRef.current;
     if (
       initialized?.state === activeRawFrameState &&
@@ -551,32 +499,18 @@ const GPUConfettiRenderer = ({
       state: activeRawFrameState,
       initialization,
     };
-    elapsed.set(0);
-    lastSimSeconds.set(0);
-    simulatedSeconds.set(0);
-    simulationAccumulator.set(0);
-    wasRunning.set(false);
-    lastFrameTimestampMs.set(0);
+    resetClock();
     onReadyChange(true);
   }, [
     activeRawFrameState,
     resources,
-    count,
     initialization,
     continuous,
     infinite,
     sizeVariations,
-    allColors,
-    colorOverrides,
-    parentColorCount,
-    elapsed,
-    lastFrameTimestampMs,
-    lastSimSeconds,
     needsRender,
     onReadyChange,
-    simulatedSeconds,
-    simulationAccumulator,
-    wasRunning,
+    resetClock,
   ]);
 
   const shouldScheduleFrame = useCallback(() => {
@@ -595,6 +529,9 @@ const GPUConfettiRenderer = ({
     () => activeFrameRetirement?.resolve(),
     [activeFrameRetirement]
   );
+  const clearInitialized = useCallback(() => {
+    initializedRef.current = null;
+  }, []);
 
   const renderFrame = useCallback(
     (
@@ -687,38 +624,46 @@ const GPUConfettiRenderer = ({
       );
 
       const uniformData = uniformDataRef.current;
-      uniformData[0] = activeRawFrameState.viewportWidth;
-      uniformData[1] = activeRawFrameState.viewportHeight;
-      uniformData[2] = activeRawFrameState.focalLength;
-      uniformData[3] = opacity.get() * animatedOpacity;
-      uniformData[4] = FIXED_SIMULATION_STEP_SECONDS;
-      uniformData[5] = simulationTimeBeforeFrame;
-      uniformData[6] = drift;
-      uniformData[7] = initialScale;
-      uniformData[8] = params.windStrength;
-      uniformData[9] = params.magnusStrength;
-      uniformData[10] = continuous ? 1 : 0;
-      uniformData[11] = infinite ? 1 : 0;
-      uniformData[12] = interpolationAlpha;
-      uniformData[13] = simulationSteps;
-      uniformData[14] = motionDuration;
-      uniformData[15] = params.floorVariation;
-      uniformData[16] = 0;
-      uniformData[17] = params.floorRestitution;
-      uniformData[18] = params.floorFriction;
-      uniformData[19] = params.motionBlurAmount;
-      uniformData[20] = params.shadowOpacity;
-      uniformData[21] = params.iridescence;
-      uniformData[22] = gravityPxPerSec2;
-      uniformData[23] = params.textureMode;
-      uniformData[24] = DEFAULT_LIGHT_DIR[0];
-      uniformData[25] = DEFAULT_LIGHT_DIR[1];
-      uniformData[26] = DEFAULT_LIGHT_DIR[2];
-      uniformData[27] = minVisibleScale;
-      uniformData[28] = gDir[0];
-      uniformData[29] = gDir[1];
-      uniformData[30] = gDir[2];
-      uniformData[31] = params.settleOnFloor && !continuous ? 1 : 0;
+      uniformData[UNIFORM_FLOAT_OFFSETS.viewportX] =
+        activeRawFrameState.viewportWidth;
+      uniformData[UNIFORM_FLOAT_OFFSETS.viewportY] =
+        activeRawFrameState.viewportHeight;
+      uniformData[UNIFORM_FLOAT_OFFSETS.focalLength] =
+        activeRawFrameState.focalLength;
+      uniformData[UNIFORM_FLOAT_OFFSETS.opacity] =
+        opacity.get() * animatedOpacity;
+      uniformData[UNIFORM_FLOAT_OFFSETS.dt] = FIXED_SIMULATION_STEP_SECONDS;
+      uniformData[UNIFORM_FLOAT_OFFSETS.time] = simulationTimeBeforeFrame;
+      uniformData[UNIFORM_FLOAT_OFFSETS.drift] = drift;
+      uniformData[UNIFORM_FLOAT_OFFSETS.initialScale] = initialScale;
+      uniformData[UNIFORM_FLOAT_OFFSETS.windStrength] = params.windStrength;
+      uniformData[UNIFORM_FLOAT_OFFSETS.magnusStrength] = params.magnusStrength;
+      uniformData[UNIFORM_FLOAT_OFFSETS.continuous] = continuous ? 1 : 0;
+      uniformData[UNIFORM_FLOAT_OFFSETS.infinite] = infinite ? 1 : 0;
+      uniformData[UNIFORM_FLOAT_OFFSETS.interpolationAlpha] =
+        interpolationAlpha;
+      uniformData[UNIFORM_FLOAT_OFFSETS.stepsThisFrame] = simulationSteps;
+      uniformData[UNIFORM_FLOAT_OFFSETS.motionDuration] = motionDuration;
+      uniformData[UNIFORM_FLOAT_OFFSETS.floorVariation] = params.floorVariation;
+      uniformData[UNIFORM_FLOAT_OFFSETS.reserved] = 0;
+      uniformData[UNIFORM_FLOAT_OFFSETS.floorRestitution] =
+        params.floorRestitution;
+      uniformData[UNIFORM_FLOAT_OFFSETS.floorFriction] = params.floorFriction;
+      uniformData[UNIFORM_FLOAT_OFFSETS.motionBlurAmount] =
+        params.motionBlurAmount;
+      uniformData[UNIFORM_FLOAT_OFFSETS.shadowOpacity] = params.shadowOpacity;
+      uniformData[UNIFORM_FLOAT_OFFSETS.iridescence] = params.iridescence;
+      uniformData[UNIFORM_FLOAT_OFFSETS.gravityMagnitude] = gravityPxPerSec2;
+      uniformData[UNIFORM_FLOAT_OFFSETS.textureMode] = params.textureMode;
+      uniformData[UNIFORM_FLOAT_OFFSETS.lightDirectionX] = DEFAULT_LIGHT_DIR[0];
+      uniformData[UNIFORM_FLOAT_OFFSETS.lightDirectionY] = DEFAULT_LIGHT_DIR[1];
+      uniformData[UNIFORM_FLOAT_OFFSETS.lightDirectionZ] = DEFAULT_LIGHT_DIR[2];
+      uniformData[UNIFORM_FLOAT_OFFSETS.minVisibleScale] = minVisibleScale;
+      uniformData[UNIFORM_FLOAT_OFFSETS.gravityDirectionX] = gDir[0];
+      uniformData[UNIFORM_FLOAT_OFFSETS.gravityDirectionY] = gDir[1];
+      uniformData[UNIFORM_FLOAT_OFFSETS.gravityDirectionZ] = gDir[2];
+      uniformData[UNIFORM_FLOAT_OFFSETS.settleOnFloor] =
+        params.settleOnFloor && !continuous ? 1 : 0;
       activeRawFrameState.queue.writeBuffer(
         activeRawFrameState.uniformBuffer,
         0,
@@ -766,12 +711,7 @@ const GPUConfettiRenderer = ({
           rawElapsed >= cycleDuration &&
           accumulator < FIXED_SIMULATION_STEP_SECONDS;
         if (done) {
-          elapsed.set(0);
-          lastSimSeconds.set(0);
-          simulatedSeconds.set(0);
-          simulationAccumulator.set(0);
-          wasRunning.set(false);
-          lastFrameTimestampMs.set(0);
+          resetClock();
           scheduleOnRN(onCycleEnd);
         }
       }
@@ -798,6 +738,7 @@ const GPUConfettiRenderer = ({
       params,
       activeRawFrameState,
       running,
+      resetClock,
       scheduleDataRef,
       simulatedSeconds,
       simulationAccumulator,
@@ -815,32 +756,24 @@ const GPUConfettiRenderer = ({
     activeFrameRetirement ? reportFrameRetired : undefined
   );
 
-  useLayoutEffect(() => {
-    if (!activeRawFrameState) return;
-    return () => {
-      onReadyChange(false);
-      initializedRef.current = null;
-      unconfigureCanvasSurface(activeRawFrameState.context, surfaceReady);
-    };
-  }, [activeRawFrameState, onReadyChange, surfaceReady]);
+  useGPUCanvasSurfaceCleanup(
+    activeRawFrameState,
+    surfaceReady,
+    onReadyChange,
+    clearInitialized
+  );
 
-  useEffect(() => {
-    if (!resources) return;
-    const frameRetirements = frameRetirementsRef.current;
-    return () => {
-      void retireGPUResourceSet(
-        resources.queue,
-        () => destroyConfettiResources(resources),
-        frameRetirements.get(resources)?.promise
-      );
-    };
-  }, [resources]);
+  useGPUResourceRetirement(
+    resources,
+    frameRetirementsRef,
+    destroyConfettiResources
+  );
 
-  return <Canvas ref={canvasRef} style={styles.canvas} transparent />;
+  return <Canvas ref={canvasRef} style={gpuCanvasStyles.canvas} transparent />;
 };
 
 export const GPUConfettiCanvas = (props: Props) => {
-  const device = useGPUDevice(props.device);
+  const device = useGPUDevice(props.device, props.onError);
   const canRender =
     device !== null &&
     props.count > 0 &&
@@ -848,17 +781,11 @@ export const GPUConfettiCanvas = (props: Props) => {
     props.viewportHeight > 0;
 
   return (
-    <View
-      pointerEvents="none"
-      onLayout={props.onContainerLayout}
-      style={[styles.container, props.containerStyle]}
+    <GPUCanvasHost
+      onContainerLayout={props.onContainerLayout}
+      containerStyle={props.containerStyle}
     >
       {canRender ? <GPUConfettiRenderer {...props} device={device} /> : null}
-    </View>
+    </GPUCanvasHost>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { ...StyleSheet.absoluteFill },
-  canvas: { flex: 1 },
-});

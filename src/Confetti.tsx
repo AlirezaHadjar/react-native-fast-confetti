@@ -20,6 +20,9 @@ import {
   DEFAULT_CONFETTI_FALL_EASING,
   DEFAULT_CONFETTI_GRAVITY,
   DEFAULT_CONFETTI_WOBBLE,
+  DEFAULT_FLAKE_STYLE,
+  DEFAULT_FLIP_INTENSITY,
+  DEFAULT_INITIAL_SCALE,
   DEFAULT_VERTICAL_SPACING,
   TRAJECTORY_SAMPLE_COUNT,
 } from './constants';
@@ -68,9 +71,9 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       rotation,
       depth,
       verticalSpacing = DEFAULT_VERTICAL_SPACING,
-      flakeStyle = 'glossy',
-      initialScale = 0.3,
-      flipIntensity = 0.85,
+      flakeStyle = DEFAULT_FLAKE_STYLE,
+      initialScale = DEFAULT_INITIAL_SCALE,
+      flipIntensity = DEFAULT_FLIP_INTENSITY,
       easing = DEFAULT_CONFETTI_FALL_EASING,
       reduceMotion,
       ...textureRootProps

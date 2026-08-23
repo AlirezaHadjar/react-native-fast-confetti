@@ -1,4 +1,3 @@
-import { Skia } from '@shopify/react-native-skia';
 import { tgpu } from 'typegpu';
 
 import type { ColorRange, SizeVariation } from '../../hooks/useConfettiFlakes';
@@ -20,7 +19,6 @@ import {
   initLayout,
   renderLayout,
 } from '../shaders/confetti';
-import type { FixedLengthArray } from '../../typeHelpers';
 import { destroyGPUResourceSet } from '../resourceCleanup';
 import {
   createFlakeTexturesArray,
@@ -29,34 +27,29 @@ import {
   prepareFlakeTexturesArray,
   prepareShapeMasksArray,
 } from '../textureResources';
+import { toPaletteInputs } from './palette';
 
-const HEX_TO_RGBA = (hex: string): FixedLengthArray<number, 4> => {
-  const c = Skia.Color(hex);
-  return [c[0] ?? 0, c[1] ?? 0, c[2] ?? 0, c[3] ?? 1];
-};
-
-export const toPaletteInputs = (colors: string[]) =>
-  (colors.length > 0 ? colors : ['#ffffff']).map(HEX_TO_RGBA);
-
-export type ConfettiResourcesInput = {
+export type ConfettiResourceConfig = {
   device: GPUDevice;
   count: number;
   sizeVariations: SizeVariation[];
   allColors: string[];
   colorOverrides: (ColorRange | null)[];
   parentColorCount: number;
-  isCancelled?: () => boolean;
 };
 
-const createConfettiResourcesImpl = async ({
-  device,
-  count,
-  sizeVariations,
-  allColors,
-  colorOverrides,
-  parentColorCount,
-  isCancelled,
-}: ConfettiResourcesInput) => {
+export const createConfettiResources = async (
+  config: ConfettiResourceConfig,
+  isCancelled?: () => boolean
+) => {
+  const {
+    device,
+    count,
+    sizeVariations,
+    allColors,
+    colorOverrides,
+    parentColorCount,
+  } = config;
   const maxFlakeWidth = Math.max(...sizeVariations.map((s) => s.width));
   const maxFlakeHeight = Math.max(...sizeVariations.map((s) => s.height));
   const sizeFlags = computeSizeFlags(sizeVariations);
@@ -127,6 +120,7 @@ const createConfettiResourcesImpl = async ({
     });
 
     return {
+      config,
       root,
       device,
       queue,
@@ -143,11 +137,6 @@ const createConfettiResourcesImpl = async ({
       texturesArray,
       shapeMasksArray,
       sampler,
-      count,
-      sizeVariations,
-      allColors,
-      colorOverrides,
-      parentColorCount,
       maxFlakeWidth,
       maxFlakeHeight,
       canUseTextureOnlyPipeline: canUseTextureOnlyPipeline(sizeVariations),
@@ -159,7 +148,7 @@ const createConfettiResourcesImpl = async ({
 };
 
 export type ConfettiResources = Awaited<
-  ReturnType<typeof createConfettiResourcesImpl>
+  ReturnType<typeof createConfettiResources>
 >;
 
 export const destroyConfettiResources = (resources: ConfettiResources) => {
@@ -177,5 +166,3 @@ export const destroyConfettiResources = (resources: ConfettiResources) => {
     root: resources.root,
   });
 };
-
-export const createConfettiResources = createConfettiResourcesImpl;

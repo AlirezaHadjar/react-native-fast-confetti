@@ -57,4 +57,21 @@ describe('shared GPU device store', () => {
 
     unsubscribe();
   });
+
+  it('exposes acquisition failures and permits a retry', async () => {
+    const { device } = createDevice();
+    const failure = new Error('adapter unavailable');
+    const requestDevice = jest
+      .fn<() => Promise<GPUDevice | null>>()
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce(device);
+    const store = createGPUDeviceStore(requestDevice);
+
+    await expect(store.acquire()).resolves.toBeNull();
+    expect(store.getErrorSnapshot()).toBe(failure);
+
+    await expect(store.acquire()).resolves.toBe(device);
+    expect(store.getErrorSnapshot()).toBeNull();
+    expect(requestDevice).toHaveBeenCalledTimes(2);
+  });
 });
