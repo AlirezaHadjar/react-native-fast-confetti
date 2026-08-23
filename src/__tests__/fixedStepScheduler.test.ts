@@ -1,12 +1,17 @@
 import { describe, expect, it } from '@jest/globals';
 
 import {
+  CYCLE_COMPLETIONS,
+  CYCLE_ELAPSED,
+  CYCLE_VALUE_COUNT,
   FIXED_SIMULATION_STEP_SECONDS,
   MAX_SIMULATION_STEPS_PER_FRAME,
   SCHEDULE_ACCUMULATOR,
   SCHEDULE_ALPHA,
   SCHEDULE_STEPS,
   SCHEDULE_VALUE_COUNT,
+  getLoopingCycleDuration,
+  writeCycleClock,
   writeFixedStepSchedule,
 } from '../webgpu/fixedStepScheduler';
 
@@ -68,5 +73,40 @@ describe('fixed-step GPU schedule', () => {
     expect(Number.isFinite(output[SCHEDULE_ALPHA])).toBe(true);
     expect(output[SCHEDULE_ALPHA]).toBeGreaterThanOrEqual(0);
     expect(output[SCHEDULE_ALPHA]).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('GPU simulation cycle clock', () => {
+  it('loops whole batches only for infinite non-continuous confetti', () => {
+    expect(getLoopingCycleDuration(true, false, 3)).toBe(3);
+    expect(getLoopingCycleDuration(true, true, 3)).toBe(0);
+    expect(getLoopingCycleDuration(false, false, 3)).toBe(0);
+  });
+
+  it('keeps finite and continuous clocks unbounded', () => {
+    const output = new Float64Array(CYCLE_VALUE_COUNT);
+
+    writeCycleClock(2.8, 0.4, 0, output);
+
+    expect(output[CYCLE_ELAPSED]).toBeCloseTo(3.2, 10);
+    expect(output[CYCLE_COMPLETIONS]).toBe(0);
+  });
+
+  it('restarts an infinite single animation as one whole cycle', () => {
+    const output = new Float64Array(CYCLE_VALUE_COUNT);
+
+    writeCycleClock(2.8, 0.4, 3, output);
+
+    expect(output[CYCLE_ELAPSED]).toBeCloseTo(0.2, 10);
+    expect(output[CYCLE_COMPLETIONS]).toBe(1);
+  });
+
+  it('preserves the remainder if more than one cycle completes', () => {
+    const output = new Float64Array(CYCLE_VALUE_COUNT);
+
+    writeCycleClock(0.25, 6.5, 3, output);
+
+    expect(output[CYCLE_ELAPSED]).toBeCloseTo(0.75, 10);
+    expect(output[CYCLE_COMPLETIONS]).toBe(2);
   });
 });

@@ -656,10 +656,7 @@ export const confettiCompute = tgpu.computeFn({
       rt.life += u.dt;
 
       if (rt.life >= 0) {
-        if (
-          (u.continuous > 0.5 || u.infinite > 0.5) &&
-          rt.pos.y > u.viewport.y + 128
-        ) {
+        if (u.continuous > 0.5 && rt.pos.y > u.viewport.y + 128) {
           rt = RuntimeSchema({
             pos: d.vec3f(spawn.pos0),
             life: d.f32(0),

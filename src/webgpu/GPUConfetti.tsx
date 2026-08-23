@@ -147,6 +147,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
     const autoplaySuppressedRef = useRef(false);
     const autoplayConfigRef = useRef({ autoplay, autoStartDelay });
     const notifyAnimationStart = useLatestCallback(onAnimationStart);
+    const notifyAnimationEnd = useLatestCallback(onAnimationEnd);
     const clearPendingAutoplay = useCallback(() => {
       if (autoplayTimerRef.current === null) return;
       clearTimeout(autoplayTimerRef.current);
@@ -300,19 +301,15 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       restart: imperativeRestart,
     }));
 
-    // onAllOffScreen: GPU reported every piece is off-viewport. Infinite mode
-    // recycles particles in the compute shader, so it should not re-seed.
-    const handleAllOffScreen = useCallback(() => {
-      if (infinite) {
-        return;
-      } else {
+    const handleCycleEnd = useCallback(() => {
+      if (!infinite) {
         scheduleOnUI(() => {
           'worklet';
           running.set(false);
         });
-        onAnimationEnd?.();
       }
-    }, [infinite, running, onAnimationEnd]);
+      notifyAnimationEnd();
+    }, [infinite, notifyAnimationEnd, running]);
 
     useEffect(() => {
       const previousConfig = autoplayConfigRef.current;
@@ -410,7 +407,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
         cycleDuration={autoRestart ? cycleDuration : 0}
         running={running}
         opacity={opacity}
-        onAllOffScreen={handleAllOffScreen}
+        onCycleEnd={handleCycleEnd}
         drift={effectiveDrift}
         initialScale={initialScale}
         continuous={continuous}

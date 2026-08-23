@@ -35,12 +35,17 @@ import {
   createConfettiPipelines,
 } from './shaders/confetti';
 import {
+  CYCLE_COMPLETIONS,
+  CYCLE_ELAPSED,
+  CYCLE_VALUE_COUNT,
   FIXED_SIMULATION_STEP_SECONDS,
   SCHEDULE_ACCUMULATOR,
   SCHEDULE_ALPHA,
   SCHEDULE_STEPS,
   SCHEDULE_VALUE_COUNT,
   SUSPENSION_GAP_SECONDS,
+  getLoopingCycleDuration,
+  writeCycleClock,
   writeFixedStepSchedule,
 } from './fixedStepScheduler';
 import {
@@ -120,7 +125,7 @@ type Props = {
   viewportWidth: number;
   viewportHeight: number;
   params: GPUConfettiCanvasParams;
-  onAllOffScreen: () => void;
+  onCycleEnd: () => void;
   onReadyChange: (ready: boolean) => void;
 };
 
@@ -276,7 +281,7 @@ const GPUConfettiRenderer = ({
   viewportWidth,
   viewportHeight,
   params,
-  onAllOffScreen,
+  onCycleEnd,
   onReadyChange,
 }: RendererProps) => {
   const canvasRef = useRef<CanvasRef>(null);
@@ -289,6 +294,7 @@ const GPUConfettiRenderer = ({
   const scheduleDataRef = useLazyRef(
     () => new Float64Array(SCHEDULE_VALUE_COUNT)
   );
+  const cycleDataRef = useLazyRef(() => new Float64Array(CYCLE_VALUE_COUNT));
   const initializedRef = useRef<{
     state: RawFrameState;
     initialization: GPUConfettiInitialization;
@@ -613,8 +619,22 @@ const GPUConfettiRenderer = ({
       lastFrameTimestampMs.set(isRunning ? timestamp : 0);
       wasRunning.set(isRunning);
 
-      const rawElapsed = elapsed.get() + rawDt;
+      const loopingDuration = getLoopingCycleDuration(
+        infinite,
+        continuous,
+        cycleDuration
+      );
+      const cycleData = cycleDataRef.current;
+      writeCycleClock(elapsed.get(), rawDt, loopingDuration, cycleData);
+      const rawElapsed = cycleData[CYCLE_ELAPSED]!;
+      const completedCycles = cycleData[CYCLE_COMPLETIONS]!;
       elapsed.set(rawElapsed);
+
+      if (completedCycles > 0) {
+        lastSimSeconds.set(0);
+        simulatedSeconds.set(0);
+        simulationAccumulator.set(0);
+      }
 
       const nowSim =
         continuous || infinite || cycleDuration <= 0
@@ -641,7 +661,7 @@ const GPUConfettiRenderer = ({
 
       const gDir = params.gravityDir.get();
       const cycleProgress =
-        !continuous && !infinite && cycleDuration > 0
+        !continuous && cycleDuration > 0
           ? clamp01(nowSim / cycleDuration)
           : 0;
       const fadeProgress =
@@ -694,6 +714,13 @@ const GPUConfettiRenderer = ({
       );
 
       const encoder = activeRawFrameState.device.createCommandEncoder();
+      if (completedCycles > 0) {
+        const initPass = encoder.beginComputePass();
+        initPass.setPipeline(activeRawFrameState.initPipeline);
+        initPass.setBindGroup(0, activeRawFrameState.initBindGroup);
+        initPass.dispatchWorkgroups(activeRawFrameState.workgroupCount);
+        initPass.end();
+      }
       if (simulationSteps > 0) {
         const computePass = encoder.beginComputePass();
         computePass.setPipeline(activeRawFrameState.computePipeline);
@@ -718,6 +745,10 @@ const GPUConfettiRenderer = ({
       const commandBuffer = encoder.finish();
       needsRender.set(false);
 
+      if (completedCycles > 0) {
+        scheduleOnRN(onCycleEnd);
+      }
+
       if (!continuous && !infinite && cycleDuration > 0) {
         const done =
           rawElapsed >= cycleDuration &&
@@ -729,7 +760,7 @@ const GPUConfettiRenderer = ({
           simulationAccumulator.set(0);
           wasRunning.set(false);
           lastFrameTimestampMs.set(0);
-          scheduleOnRN(onAllOffScreen);
+          scheduleOnRN(onCycleEnd);
         }
       }
 
@@ -737,6 +768,7 @@ const GPUConfettiRenderer = ({
     },
     [
       continuous,
+      cycleDataRef,
       cycleDuration,
       drift,
       elapsed,
@@ -748,7 +780,7 @@ const GPUConfettiRenderer = ({
       lastFrameTimestampMs,
       lastSimSeconds,
       needsRender,
-      onAllOffScreen,
+      onCycleEnd,
       opacity,
       params,
       activeRawFrameState,

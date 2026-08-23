@@ -7,6 +7,44 @@ export const SCHEDULE_STEPS = 1;
 export const SCHEDULE_ALPHA = 2;
 export const SCHEDULE_VALUE_COUNT = 3;
 
+export const CYCLE_ELAPSED = 0;
+export const CYCLE_COMPLETIONS = 1;
+export const CYCLE_VALUE_COUNT = 2;
+
+export const getLoopingCycleDuration = (
+  infinite: boolean,
+  continuous: boolean,
+  cycleDurationSeconds: number
+) => {
+  'worklet';
+  return infinite && !continuous ? cycleDurationSeconds : 0;
+};
+
+/**
+ * Advances a caller-owned cycle clock. A positive duration loops the clock at
+ * whole-cycle boundaries; zero keeps elapsed time unbounded. The output array
+ * keeps this helper allocation-free on the frame path.
+ */
+export const writeCycleClock = (
+  previousElapsedSeconds: number,
+  deltaSeconds: number,
+  loopingDurationSeconds: number,
+  output: Float64Array
+) => {
+  'worklet';
+  const elapsed = previousElapsedSeconds + Math.max(deltaSeconds, 0);
+  if (loopingDurationSeconds <= 0) {
+    output[CYCLE_ELAPSED] = elapsed;
+    output[CYCLE_COMPLETIONS] = 0;
+    return;
+  }
+
+  const completions = Math.floor(elapsed / loopingDurationSeconds);
+  output[CYCLE_ELAPSED] =
+    elapsed - completions * loopingDurationSeconds;
+  output[CYCLE_COMPLETIONS] = completions;
+};
+
 /**
  * Writes a fixed-step schedule into a caller-owned array to avoid allocating on
  * the frame path. Unprocessed time remains in the accumulator, so a bounded
@@ -36,4 +74,3 @@ export const writeFixedStepSchedule = (
     1
   );
 };
-
