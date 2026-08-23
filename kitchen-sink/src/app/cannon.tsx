@@ -1,5 +1,5 @@
-import { useRef } from 'react';
 import { useIsFocused } from 'expo-router';
+import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { CannonConfettiMethods } from 'react-native-fast-confetti';
 import { CannonConfetti as SkiaCannonConfetti } from '../../../src';
@@ -82,7 +82,6 @@ export default function CannonScreen() {
         <CannonConfetti
           key={confettiKey}
           ref={cannonConfettiRef}
-          fadeOutOnEnd
           autoplay
           infinite
           rotation={rotation}

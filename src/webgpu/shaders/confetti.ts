@@ -6,6 +6,15 @@ import {
   type TgpuRenderPipeline,
   type TgpuRoot,
 } from 'typegpu';
+import {
+  FLOOR_ANGULAR_DAMPING_PER_SECOND,
+  FLOOR_BOUNCE_DECAY,
+  FLOOR_DEPTH_DAMPING_PER_SECOND,
+  FLOOR_MAX_FAR_DEPTH_OFFSET,
+  FLOOR_MAX_NEAR_DEPTH_OFFSET,
+  FLOOR_SLEEP_BOUNCE_SCALE,
+  FLOOR_TANGENTIAL_RETENTION,
+} from '../constants';
 import { MAX_SIMULATION_STEPS_PER_FRAME } from '../fixedStepScheduler';
 
 export const TESS = 1;
@@ -34,10 +43,10 @@ export const UniformsSchema = d.struct({
   progress: d.f32,
   cycleCount: d.f32,
   cycleDuration: d.f32,
-  fadeOutOnEnd: d.f32,
+  floorVariation: d.f32,
 
-  fadeStart: d.f32,
-  bounceRestitution: d.f32,
+  reserved: d.f32,
+  floorRestitution: d.f32,
   floorFriction: d.f32,
   motionBlurAmount: d.f32,
 
@@ -50,7 +59,7 @@ export const UniformsSchema = d.struct({
   minVisibleScale: d.f32,
 
   gravityDir: d.vec3f,
-  _pad2: d.f32,
+  settleOnFloor: d.f32,
 });
 
 export const SpawnSchema = d.struct({
@@ -68,6 +77,7 @@ export const RuntimeSchema = d.struct({
   prevPos: d.vec3f,
   prevLife: d.f32,
   vel: d.vec3f,
+  floorBounceScale: d.f32,
   quat: d.vec4f,
   prevQuat: d.vec4f,
   omega: d.vec3f,
@@ -88,6 +98,7 @@ export const InitUniformsSchema = d.struct({
 
 export const InitSizeSchema = d.struct({
   selection: d.vec4f,
+  dims: d.vec4f,
 });
 
 export const SizeSchema = d.struct({
@@ -150,6 +161,11 @@ export const computeLayout = tgpu
     runtime: {
       storage: d.arrayOf(RuntimeSchema),
       access: 'mutable',
+      visibility: ['compute'],
+    },
+    sizes: {
+      storage: d.arrayOf(SizeSchema),
+      access: 'readonly',
       visibility: ['compute'],
     },
   })
@@ -439,7 +455,7 @@ export const confettiInit = tgpu.computeFn({
     info: d.vec4f(
       d.f32(sizeIndex),
       d.f32(colorIndex),
-      selection.z,
+      u1,
       phaseOffset
     ),
   });
@@ -451,6 +467,7 @@ export const confettiInit = tgpu.computeFn({
     prevPos: d.vec3f(spawn.pos0),
     prevLife: initialLife,
     vel: d.vec3f(spawn.vel0),
+    floorBounceScale: d.f32(1),
     quat: d.vec4f(spawn.quat0),
     prevQuat: d.vec4f(spawn.quat0),
     omega: d.vec3f(spawn.omega0),
@@ -663,6 +680,7 @@ export const confettiCompute = tgpu.computeFn({
             prevPos: d.vec3f(spawn.pos0),
             prevLife: d.f32(0),
             vel: d.vec3f(spawn.vel0),
+            floorBounceScale: d.f32(1),
             quat: d.vec4f(spawn.quat0),
             prevQuat: d.vec4f(spawn.quat0),
             omega: d.vec3f(spawn.omega0),
@@ -704,19 +722,53 @@ export const confettiCompute = tgpu.computeFn({
         rt.vel = d.vec3f(newVel);
         rt.pos = d.vec3f(rt.pos + rt.vel * u.dt);
 
-        if (
-          u.continuous < 0.5 &&
-          u.infinite < 0.5 &&
-          u.bounceRestitution > 0 &&
-          rt.pos.y > u.viewport.y &&
-          rt.vel.y > 0
-        ) {
-          rt.pos.y = u.viewport.y;
-          rt.vel.y = -rt.vel.y * std.clamp(u.bounceRestitution, 0, 1);
-          const floorFriction = std.clamp(u.floorFriction, 0, 1);
-          rt.vel.x *= floorFriction;
-          rt.vel.z *= floorFriction;
-          rt.omega *= floorFriction;
+        if (u.settleOnFloor > 0.5) {
+          const sizeIndex = d.u32(spawn.info.x);
+          const dimensions = computeLayout.$.sizes[sizeIndex]!.dims;
+          const perspectiveScale =
+            u.focalLength / std.max(rt.pos.z + u.focalLength, 1);
+          const floorInset =
+            std.length(dimensions.xy) * 0.5 * perspectiveScale;
+          const floorY = u.viewport.y - floorInset;
+          if (rt.pos.y > floorY && rt.vel.y > 0) {
+            const variation = std.clamp(u.floorVariation, 0, 1);
+            const restitution =
+              std.clamp(
+                u.floorRestitution + (spawn.info.z * 2 - 1) * variation,
+                0,
+                1
+              ) * rt.floorBounceScale;
+            rt.pos.y = floorY;
+            rt.vel.y = -rt.vel.y * restitution;
+            if (std.abs(rt.vel.y) <= u.gravityMag * u.dt * (1 + restitution)) {
+              rt.vel.y = 0;
+            }
+            const frictionRandom = std.fract(spawn.info.z * 17.17 + 0.37);
+            const floorFriction =
+              std.clamp(
+                u.floorFriction + (frictionRandom * 2 - 1) * variation,
+                0,
+                1
+              ) *
+              FLOOR_TANGENTIAL_RETENTION *
+              std.sqrt(rt.floorBounceScale);
+            rt.vel.x *= floorFriction;
+            rt.vel.z *= floorFriction;
+            rt.omega *= floorFriction;
+            rt.floorBounceScale *= FLOOR_BOUNCE_DECAY;
+          }
+
+          if (rt.floorBounceScale < 1) {
+            rt.vel.z *= std.max(
+              0,
+              1 - FLOOR_DEPTH_DAMPING_PER_SECOND * u.dt
+            );
+            rt.pos.z = std.clamp(
+              rt.pos.z,
+              spawn.pos0.z - u.focalLength * FLOOR_MAX_NEAR_DEPTH_OFFSET,
+              spawn.pos0.z + u.focalLength * FLOOR_MAX_FAR_DEPTH_OFFSET
+            );
+          }
         }
 
         const omega0Len = std.length(spawn.omega0);
@@ -725,13 +777,27 @@ export const confettiCompute = tgpu.computeFn({
           spawn.omega0 / std.max(omega0Len, 0.0001),
           omega0Len > 0.0001
         );
-        const tumbleBias = tumbleAxis * omega0Len * omega0Len * Crot;
+        let tumbleDrive = d.f32(1);
+        if (u.settleOnFloor > 0.5 && rt.floorBounceScale < 1) {
+          tumbleDrive = rt.floorBounceScale;
+        }
+        const tumbleBias =
+          tumbleAxis * omega0Len * omega0Len * Crot * tumbleDrive;
         const damping = -Crot * rt.omega * std.length(rt.omega);
         let newOmega = rt.omega + (tumbleBias + damping) * u.dt;
         const wMax = std.max(omega0Len * 1.5, 25);
         const wMagSq = std.dot(newOmega, newOmega);
         if (wMagSq > wMax * wMax) {
           newOmega = newOmega * (wMax * std.inverseSqrt(wMagSq));
+        }
+        if (u.settleOnFloor > 0.5 && rt.floorBounceScale < 1) {
+          newOmega *= std.max(
+            0,
+            1 - FLOOR_ANGULAR_DAMPING_PER_SECOND * u.dt
+          );
+          if (rt.floorBounceScale <= FLOOR_SLEEP_BOUNCE_SCALE) {
+            newOmega = d.vec3f(0);
+          }
         }
         rt.omega = d.vec3f(newOmega);
         rt.quat = d.vec4f(qIntegrate(rt.quat, rt.omega, u.dt));

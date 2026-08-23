@@ -39,6 +39,10 @@ import {
 import { toCannonBurstOrigins } from './burstResourcePacking';
 import { GPUBurstConfettiCanvas } from './GPUBurstConfettiCanvas';
 import type { GPUCannonConfettiProps } from './types';
+import {
+  estimateFloorSettlingDuration,
+  resolveSettleOnFloor,
+} from './settleOnFloor';
 
 type RestartState = {
   seed: number;
@@ -63,7 +67,7 @@ const CannonConfettiInner = forwardRef<
       drag: dragProp = DEFAULT_CANNON_CONFETTI_DRAG,
       autoplay = true,
       infinite = false,
-      fadeOutOnEnd = false,
+      opacityAnimation,
       autoStartDelay = 0,
       onAnimationEnd,
       onAnimationStart,
@@ -79,6 +83,7 @@ const CannonConfettiInner = forwardRef<
       flakeStyle = 'glossy',
       easing,
       reduceMotion,
+      settleOnFloor,
       device,
       ...textureRootProps
     },
@@ -162,6 +167,16 @@ const CannonConfettiInner = forwardRef<
       sprayDuration !== undefined
         ? Math.min(sprayDuration / duration, 1)
         : DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX;
+    const resolvedFloor = useMemo(
+      () => resolveSettleOnFloor(settleOnFloor),
+      [settleOnFloor]
+    );
+    const settlingDurationSeconds =
+      estimateFloorSettlingDuration(resolvedFloor);
+    const cycleDuration = duration + settlingDurationSeconds * 1000;
+    const floorSearchDuration =
+      duration / 1000 +
+      settlingDurationSeconds / Math.max(1 - launchDelayMax, 0.05);
 
     const prepareNextCycle = useCallback(() => {
       setRendererReady(false);
@@ -176,9 +191,9 @@ const CannonConfettiInner = forwardRef<
 
     const { progress, running, opacity, pause, reset, resume, runAnimation } =
       useAnimationLifecycle({
-        duration,
+        duration: cycleDuration,
         infinite,
-        fadeOutOnEnd,
+        opacityAnimation,
         easing,
         onAnimationStart,
         onAnimationEnd,
@@ -193,6 +208,12 @@ const CannonConfettiInner = forwardRef<
         layoutCount: totalCount,
         containerHeight,
         launchDelayMax,
+        floorImpact: [
+          gravity * containerHeight,
+          verticalDrag,
+          floorSearchDuration,
+          resolvedFloor.enabled ? 1 : 0,
+        ] as const,
         origins:
           ready && totalCount > 0
             ? toCannonBurstOrigins(
@@ -206,6 +227,10 @@ const CannonConfettiInner = forwardRef<
         totalCount,
         containerHeight,
         launchDelayMax,
+        gravity,
+        verticalDrag,
+        floorSearchDuration,
+        resolvedFloor.enabled,
         ready,
         currentCannonConfigs,
         currentCannonsPositions,
@@ -337,7 +362,9 @@ const CannonConfettiInner = forwardRef<
         colorOverrides={colorOverrides}
         parentColorCount={parentColorCount}
         totalDuration={duration}
+        cycleDuration={cycleDuration}
         flightDuration={duration}
+        floor={resolvedFloor}
         progress={progress}
         running={running}
         opacity={opacity}

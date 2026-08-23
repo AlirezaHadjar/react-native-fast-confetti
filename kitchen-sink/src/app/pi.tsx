@@ -1,5 +1,5 @@
-import { useRef } from 'react';
 import { useIsFocused } from 'expo-router';
+import { useRef } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import type { PIConfettiMethods } from 'react-native-fast-confetti';
 import { PIConfetti as SkiaPIConfetti } from '../../../src';

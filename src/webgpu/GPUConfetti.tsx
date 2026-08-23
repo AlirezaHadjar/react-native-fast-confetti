@@ -33,6 +33,7 @@ import { useContainerDimensions } from '../hooks/useContainerDimensions';
 import { useTextureProps } from '../hooks/useTextureProps';
 import { useReduceMotionFactor } from '../hooks/useReduceMotionFactor';
 import { useLatestCallback } from '../hooks/useLatestCallback';
+import { resolveOpacityAnimation } from '../fadeOut';
 import { reduceCountForMotion, scaleValueForMotion } from '../reduceMotion';
 import type {
   GPUConfettiMethods,
@@ -45,6 +46,10 @@ import {
   estimateFallingDuration,
   resolveRange,
 } from './utils';
+import {
+  estimateFloorSettlingDuration,
+  resolveSettleOnFloor,
+} from './settleOnFloor';
 
 const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
   (
@@ -58,7 +63,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       autoplay = true,
       infinite = false,
       continuous = false,
-      fadeOutOnEnd = false,
+      opacityAnimation,
       autoStartDelay = 0,
       onAnimationEnd,
       onAnimationStart,
@@ -74,8 +79,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       windStrength = DEFAULT_WIND_STRENGTH,
       magnusStrength = DEFAULT_MAGNUS_STRENGTH,
       autoRestart = true,
-      bounceRestitution = 0.3,
-      floorFriction = 0.92,
+      settleOnFloor,
       motionBlurAmount = 0.0,
       shadowOpacity = 0.35,
       iridescence = 0,
@@ -135,10 +139,20 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       verticalOffset,
       maxWobble,
     });
-    const cycleDuration = duration / 1000;
+    const motionDuration = duration / 1000;
 
+    const resolvedOpacityAnimation = useMemo(
+      () => resolveOpacityAnimation(opacityAnimation),
+      [opacityAnimation]
+    );
+    const resolvedFloor = useMemo(
+      () => resolveSettleOnFloor(settleOnFloor),
+      [settleOnFloor]
+    );
+    const cycleDuration =
+      motionDuration + estimateFloorSettlingDuration(resolvedFloor);
     const { running, opacity, pause, resume, reset, beginCycle } =
-      useSimulationLifecycle({ fadeOutOnEnd });
+      useSimulationLifecycle();
 
     const [seed, setSeed] = useState(0);
     const [resetRevision, setResetRevision] = useState(0);
@@ -232,7 +246,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
         depth: [depthRange.min, depthRange.max] as const,
         wobble: [wobbleRange.min, wobbleRange.max] as const,
         zRange: DEFAULT_Z_RANGE,
-        cycleDuration,
+        cycleDuration: motionDuration,
         gravity,
       };
     }, [
@@ -255,7 +269,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       wobbleMin,
       wobbleMax,
       reduceMotionFactor,
-      cycleDuration,
+      motionDuration,
       gravity,
     ]);
     const hasParticles =
@@ -369,8 +383,10 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
         windStrength: effectiveWindStrength,
         magnusStrength: effectiveMagnusStrength,
         flipIntensity: effectiveFlipIntensity,
-        bounceRestitution,
-        floorFriction,
+        settleOnFloor: resolvedFloor.enabled,
+        floorRestitution: resolvedFloor.restitution,
+        floorFriction: resolvedFloor.friction,
+        floorVariation: resolvedFloor.variation,
         motionBlurAmount,
         shadowOpacity,
         iridescence,
@@ -382,8 +398,10 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
         effectiveWindStrength,
         effectiveMagnusStrength,
         effectiveFlipIntensity,
-        bounceRestitution,
-        floorFriction,
+        resolvedFloor.enabled,
+        resolvedFloor.restitution,
+        resolvedFloor.friction,
+        resolvedFloor.variation,
         motionBlurAmount,
         shadowOpacity,
         iridescence,
@@ -405,6 +423,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
         parentColorCount={parentColorCount}
         initialization={initialization}
         cycleDuration={autoRestart ? cycleDuration : 0}
+        motionDuration={motionDuration}
         running={running}
         opacity={opacity}
         onCycleEnd={handleCycleEnd}
@@ -412,7 +431,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
         initialScale={initialScale}
         continuous={continuous}
         infinite={infinite}
-        fadeOutOnEnd={fadeOutOnEnd}
+        opacityAnimation={resolvedOpacityAnimation}
         gravityPxPerSec2={gravityPxPerSec2}
         viewportWidth={containerWidth}
         viewportHeight={containerHeight}

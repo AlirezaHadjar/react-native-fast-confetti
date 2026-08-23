@@ -7,6 +7,11 @@ import {
   type TgpuRoot,
 } from 'typegpu';
 import {
+  FLOOR_ANGULAR_DAMPING_PER_SECOND,
+  FLOOR_SPRING_DAMPING_PER_SECOND,
+  FLOOR_TANGENTIAL_RETENTION,
+} from '../constants';
+import {
   InitSizeSchema,
   gpuRandom01,
   gpuRandomRange,
@@ -32,6 +37,8 @@ export const BurstUniformsSchema = d.struct({
   flipIntensity: d.f32,
   drag: d.vec2f,
   _pad0: d.f32,
+
+  floor: d.vec4f,
 });
 
 export const BurstParticleSchema = d.struct({
@@ -44,6 +51,7 @@ export const BurstParticleSchema = d.struct({
 export const BurstInitUniformsSchema = d.struct({
   counts: d.vec4u,
   globals: d.vec4f,
+  floorImpact: d.vec4f,
 });
 
 export const BurstOriginSchema = d.struct({
@@ -137,6 +145,34 @@ export const burstRenderLayout = tgpu
     },
   })
   .$idx(0);
+
+const burstYAtTime = tgpu.fn(
+  [d.f32, d.f32, d.f32, d.f32, d.f32],
+  d.f32
+)((originY, initialVelocity, gravity, verticalDrag, time) => {
+  'use gpu';
+
+  const safeDrag = std.max(verticalDrag, 0.001);
+  const expDecay = 1 - std.exp(-safeDrag * time);
+  return (
+    originY +
+    (gravity / safeDrag) * time +
+    ((initialVelocity - gravity / safeDrag) / safeDrag) * expDecay
+  );
+});
+
+const burstVerticalVelocityAtTime = tgpu.fn(
+  [d.f32, d.f32, d.f32, d.f32],
+  d.f32
+)((initialVelocity, gravity, verticalDrag, time) => {
+  'use gpu';
+
+  const safeDrag = std.max(verticalDrag, 0.001);
+  return (
+    gravity / safeDrag +
+    (initialVelocity - gravity / safeDrag) * std.exp(-safeDrag * time)
+  );
+});
 
 export const burstConfettiInit = tgpu.computeFn({
   in: {
@@ -296,6 +332,43 @@ export const burstConfettiInit = tgpu.computeFn({
     (sizeFlags & d.u32(SIZE_FLAG_TEXTURED)) !== d.u32(0)
   );
 
+  const trajectoryDuration = u.floorImpact.z;
+  let floorImpactTime = trajectoryDuration + 1;
+  if (u.floorImpact.w > 0.5) {
+    const dimensions = burstInitLayout.$.sizes[sizeIndex]!.dims;
+    const floorY =
+      u.globals.x - std.length(dimensions.xy) * 0.5 * depthScale;
+    const endY = burstYAtTime(
+      origin.originAndCount.y,
+      velocity.y,
+      u.floorImpact.x,
+      u.floorImpact.y,
+      trajectoryDuration
+    );
+    if (endY >= floorY) {
+      let lowTime = d.f32(0);
+      let highTime = trajectoryDuration;
+      for (const step of std.range(12)) {
+        if (step < 12) {
+          const middleTime = (lowTime + highTime) * 0.5;
+          const middleY = burstYAtTime(
+            origin.originAndCount.y,
+            velocity.y,
+            u.floorImpact.x,
+            u.floorImpact.y,
+            middleTime
+          );
+          if (middleY >= floorY) {
+            highTime = middleTime;
+          } else {
+            lowTime = middleTime;
+          }
+        }
+      }
+      floorImpactTime = highTime;
+    }
+  }
+
   burstInitLayout.$.particles[idx] = BurstParticleSchema({
     originAndTiming: d.vec4f(
       origin.originAndCount.xy,
@@ -317,7 +390,7 @@ export const burstConfettiInit = tgpu.computeFn({
       d.f32(sizeIndex),
       d.f32(colorIndex),
       isTextured,
-      std.select(d.f32(originIndex), speedMultiplier, mode < 0.5)
+      floorImpactTime
     ),
   });
 });
@@ -393,51 +466,150 @@ export const burstConfettiVertex = tgpu.vertexFn({
   let effectiveProgress = d.f32(0);
   let rotationProgress = d.f32(0);
   let visibility = d.f32(1);
+  let trajectoryTime = d.f32(0);
+  let trajectoryDuration = d.f32(0);
 
   if (mode < 0.5) {
     const elapsedMs = u.progress * u.totalDuration;
     const localMs = elapsedMs - particle.originAndTiming.z;
-    const localProgress = std.clamp(
+    const localProgress = std.max(
       localMs / std.max(u.flightDuration, 1),
-      0,
-      1
+      0
     );
-    rotationProgress = localProgress;
-    effectiveProgress = std.clamp(
+    rotationProgress = std.min(localProgress, 1);
+    const rawEffectiveProgress = std.max(
       (localProgress - launchDelay) / std.max(1 - launchDelay, 0.0001),
-      0,
-      1
+      0
     );
+    effectiveProgress = std.min(rawEffectiveProgress, 1);
     visibility = std.select(d.f32(0), d.f32(1), localMs > 0);
 
-    const t = effectiveProgress * (u.flightDuration / 1000);
-    const hExpDecay = 1 - std.exp(-safeHDrag * t);
-    const vExpDecay = 1 - std.exp(-safeVDrag * t);
+    trajectoryDuration = u.flightDuration / 1000;
+    const trajectoryProgress = std.select(
+      effectiveProgress,
+      rawEffectiveProgress,
+      u.floor.x > 0.5
+    );
+    trajectoryTime = trajectoryProgress * trajectoryDuration;
+    const hExpDecay = 1 - std.exp(-safeHDrag * trajectoryTime);
     center = d.vec2f(
       origin.x + (velocity.x / safeHDrag) * hExpDecay,
-      origin.y +
-        (u.gravity / safeVDrag) * t +
-        ((velocity.y - u.gravity / safeVDrag) / safeVDrag) * vExpDecay
+      burstYAtTime(
+        origin.y,
+        velocity.y,
+        u.gravity,
+        safeVDrag,
+        trajectoryTime
+      )
     );
   } else {
-    effectiveProgress = std.clamp(
+    const rawEffectiveProgress = std.max(
       (u.progress - launchDelay) / std.max(1 - launchDelay, 0.0001),
+      0
+    );
+    effectiveProgress = std.min(rawEffectiveProgress, 1);
+    rotationProgress = std.min(u.progress, 1);
+
+    trajectoryDuration = u.totalDuration / 1000;
+    const trajectoryProgress = std.select(
+      effectiveProgress,
+      rawEffectiveProgress,
+      u.floor.x > 0.5
+    );
+    trajectoryTime = trajectoryProgress * trajectoryDuration;
+    const normalizedT = std.min(
+      trajectoryTime / std.max(trajectoryDuration, 0.0001),
+      1
+    );
+    const hDecayFactor = 1 - std.pow(1 - normalizedT, safeHDrag + 1);
+    center = d.vec2f(
+      origin.x +
+        ((velocity.x * trajectoryDuration) / (safeHDrag + 1)) * hDecayFactor,
+      burstYAtTime(
+        origin.y,
+        velocity.y,
+        u.gravity,
+        safeVDrag,
+        trajectoryTime
+      )
+    );
+  }
+
+  const floorImpactTime = particle.indices.w;
+  if (u.floor.x > 0.5 && trajectoryTime >= floorImpactTime) {
+    const depthScale = particle.velocityAndDepth.z;
+    const floorY =
+      u.viewport.y - std.length(size.dims.xy) * 0.5 * depthScale;
+    const postImpactTime = trajectoryTime - floorImpactTime;
+    const floorRandom = std.fract(
+      particle.velocityAndDepth.w * 17.17 + d.f32(sizeIdx) * 0.37
+    );
+    const variation = std.clamp(u.floor.w, 0, 1);
+    const restitution = std.clamp(
+      u.floor.y + (floorRandom * 2 - 1) * variation,
       0,
       1
     );
-    rotationProgress = u.progress;
-
-    const totalTime = u.totalDuration / 1000;
-    const t = effectiveProgress * totalTime;
-    const normalizedT = std.min(t / std.max(totalTime, 0.0001), 1);
-    const hDecayFactor = 1 - std.pow(1 - normalizedT, safeHDrag + 1);
-    const vExpDecay = 1 - std.exp(-safeVDrag * t);
-    center = d.vec2f(
-      origin.x + ((velocity.x * totalTime) / (safeHDrag + 1)) * hDecayFactor,
-      origin.y +
-        (u.gravity / safeVDrag) * t +
-        ((velocity.y - u.gravity / safeVDrag) / safeVDrag) * vExpDecay
+    const impactVelocity = std.max(
+      burstVerticalVelocityAtTime(
+        velocity.y,
+        u.gravity,
+        safeVDrag,
+        floorImpactTime
+      ),
+      0
     );
+    const bounceVelocity = impactVelocity * restitution;
+    const gravity = std.max(u.gravity, 0.001);
+    const bouncePeriod = std.max((2 * bounceVelocity) / gravity, 0.0001);
+    const springOmega = 3.14159265359 / bouncePeriod;
+    const bounceHeight =
+      ((2 * bounceVelocity * bounceVelocity) / (3.14159265359 * gravity)) *
+      std.abs(std.sin(springOmega * postImpactTime)) *
+      std.exp(-FLOOR_SPRING_DAMPING_PER_SECOND * postImpactTime);
+    center.y = floorY - bounceHeight;
+
+    let impactX = d.f32(origin.x);
+    if (mode < 0.5) {
+      impactX =
+        origin.x +
+        (velocity.x / safeHDrag) *
+          (1 - std.exp(-safeHDrag * floorImpactTime));
+    } else {
+      const impactNormalized = std.min(
+        floorImpactTime / std.max(trajectoryDuration, 0.0001),
+        1
+      );
+      const impactDecay =
+        1 - std.pow(1 - impactNormalized, safeHDrag + 1);
+      impactX =
+        origin.x +
+        ((velocity.x * trajectoryDuration) / (safeHDrag + 1)) * impactDecay;
+    }
+    const frictionRandom = std.fract(floorRandom * 17.17 + 0.37);
+    const frictionRetention =
+      std.clamp(u.floor.z + (frictionRandom * 2 - 1) * variation, 0, 1) *
+      FLOOR_TANGENTIAL_RETENTION;
+    const horizontalDamping = 1 + (1 - frictionRetention) * 6;
+    center.x =
+      impactX +
+      (center.x - impactX) *
+        std.exp(-horizontalDamping * postImpactTime);
+
+    const impactRotationProgress =
+      launchDelay +
+      (1 - launchDelay) *
+        (floorImpactTime / std.max(trajectoryDuration, 0.0001));
+    const rotationRate =
+      (1 - launchDelay) / std.max(trajectoryDuration, 0.0001);
+    rotationProgress =
+      impactRotationProgress +
+      (rotationRate *
+        (1 -
+          std.exp(
+            -FLOOR_ANGULAR_DAMPING_PER_SECOND * postImpactTime
+          ))) /
+        FLOOR_ANGULAR_DAMPING_PER_SECOND;
   }
 
   const rotationDir = particle.rotationAndMeta.z;

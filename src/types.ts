@@ -28,6 +28,15 @@ export type Range = {
 
 export type Drag = number | { horizontal: number; vertical: number };
 
+export type OpacityKeyframes = Readonly<Record<number, number>>;
+
+export type OpacityAnimation = {
+  /** @default true */
+  enabled?: boolean;
+  /** Normalized animation timestamps mapped to opacity values. */
+  keyframes?: OpacityKeyframes;
+};
+
 export type Rotation = {
   x?: Range;
   z?: Range;
@@ -98,9 +107,10 @@ type ConfettiBaseProps = {
    */
   infinite?: boolean;
   /**
-   * @description Should the confetti flakes fade out as they reach the end.
+   * @description Animates opacity over normalized animation progress.
+   * Uses the default fade when `keyframes` is omitted.
    */
-  fadeOutOnEnd?: boolean;
+  opacityAnimation?: OpacityAnimation;
   /**
    * @description The delay in milliseconds before the confetti animation starts
    * automatically after mounting (only applies when `autoplay` is true).
@@ -261,9 +271,10 @@ type BurstConfettiBaseProps = {
    */
   infinite?: boolean;
   /**
-   * @description Should the confetti flakes fade out as they reach the end.
+   * @description Animates opacity over normalized animation progress.
+   * Uses the default fade when `keyframes` is omitted.
    */
-  fadeOutOnEnd?: boolean;
+  opacityAnimation?: OpacityAnimation;
   /**
    * @description The delay in milliseconds before the confetti animation starts
    * automatically after mounting (only applies when `autoplay` is true).
@@ -345,7 +356,7 @@ export type PIConfettiProps = PIConfettiBaseProps & FlakeTexture;
 
 export type ContinuousConfettiProps = StrictOmit<
   ConfettiProps,
-  'infinite' | 'onAnimationEnd' | 'fadeOutOnEnd'
+  'infinite' | 'onAnimationEnd' | 'opacityAnimation'
 >;
 
 export type PIConfettiRestartOptions = {

@@ -12,6 +12,8 @@ export type {
   NamedPosition,
   FlakeStyle,
   Drag,
+  OpacityAnimation,
+  OpacityKeyframes,
   ReduceMotionConfig,
 } from './types';
 

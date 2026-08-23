@@ -31,6 +31,10 @@ import { estimatePIDuration, resolveNamedPosition } from '../utils';
 import { toPIBurstOrigins } from './burstResourcePacking';
 import { GPUBurstConfettiCanvas } from './GPUBurstConfettiCanvas';
 import type { GPUPIConfettiProps } from './types';
+import {
+  estimateFloorSettlingDuration,
+  resolveSettleOnFloor,
+} from './settleOnFloor';
 
 type RestartState = {
   seed: number;
@@ -53,7 +57,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
       drag: dragProp = DEFAULT_PI_CONFETTI_DRAG,
       autoplay = true,
       infinite = false,
-      fadeOutOnEnd = false,
+      opacityAnimation,
       autoStartDelay = 0,
       rotation: rootRotation,
       depth: rootDepth,
@@ -67,6 +71,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
       onAnimationEnd,
       onAnimationStart,
       containerStyle,
+      settleOnFloor,
       device,
       ...textureRootProps
     },
@@ -148,6 +153,16 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
       sprayDuration !== undefined
         ? Math.min(sprayDuration / totalDuration, 1)
         : DEFAULT_PI_CONFETTI_LAUNCH_DELAY_MAX;
+    const resolvedFloor = useMemo(
+      () => resolveSettleOnFloor(settleOnFloor),
+      [settleOnFloor]
+    );
+    const settlingDurationSeconds =
+      estimateFloorSettlingDuration(resolvedFloor);
+    const cycleDuration = totalDuration + settlingDurationSeconds * 1000;
+    const floorSearchDuration =
+      flightDuration / 1000 +
+      settlingDurationSeconds / Math.max(1 - launchDelayMax, 0.05);
 
     const prepareNextCycle = useCallback(() => {
       setRendererReady(false);
@@ -162,13 +177,12 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
 
     const { progress, running, opacity, pause, reset, resume, runAnimation } =
       useAnimationLifecycle({
-        duration: totalDuration,
+        duration: cycleDuration,
         infinite,
-        fadeOutOnEnd,
+        opacityAnimation,
         easing,
         onAnimationStart,
         onAnimationEnd,
-        fadeRange: [0.5, 0.9],
         onCycleEnd,
         deferInfiniteRestart: true,
         disabled: visibleCount === 0,
@@ -180,6 +194,12 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
         layoutCount: totalCount,
         containerHeight,
         launchDelayMax,
+        floorImpact: [
+          gravity * containerHeight,
+          verticalDrag,
+          floorSearchDuration,
+          resolvedFloor.enabled ? 1 : 0,
+        ] as const,
         origins:
           ready && totalCount > 0
             ? toPIBurstOrigins(
@@ -194,6 +214,10 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
         totalCount,
         containerHeight,
         launchDelayMax,
+        gravity,
+        verticalDrag,
+        floorSearchDuration,
+        resolvedFloor.enabled,
         ready,
         piConfigs,
         currentBlastPositions,
@@ -280,7 +304,9 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
         colorOverrides={colorOverrides}
         parentColorCount={parentColorCount}
         totalDuration={totalDuration}
+        cycleDuration={cycleDuration}
         flightDuration={flightDuration}
+        floor={resolvedFloor}
         progress={progress}
         running={running}
         opacity={opacity}

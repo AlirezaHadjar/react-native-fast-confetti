@@ -88,7 +88,8 @@ destroys it:
 The owner of an injected device is responsible for replacing it after device
 loss. Keep all work submitted to a shared device serialized on one runtime.
 
-Read the [WebGPU caveats](#webgpu-caveats)
+Read about [WebGPU specific features](#webgpu-features) and
+[WebGPU caveats](#webgpu-caveats).
 
 ## Components
 
@@ -327,7 +328,7 @@ The factor is clamped between `0` and `1`. A factor of `0` keeps full motion; a 
 | `gravity`          | 1.0              | Gravity strength.                          |
 | `colors`           | Built-in palette | Array of color strings.                    |
 | `flakeStyle`       | 'glossy'         | `'solid'` or `'glossy'`.                   |
-| `fadeOutOnEnd`     | false            | Fade pieces as they exit.                  |
+| `opacityAnimation` | N/A              | Default or custom opacity keyframes.       |
 | `image`            | N/A              | Default Skia image texture for all flakes. |
 | `svg`              | N/A              | Default Skia SVG texture for all flakes.   |
 | `reduceMotion`     | 'system'         | Reduce motion using the system setting.    |
@@ -351,12 +352,19 @@ The factor is clamped between `0` and `1`. A factor of `0` keeps full motion; a 
 
 </details>
 
+Keyframe timestamps and values use the `0`–`1` range. Timestamp `0` defaults to
+opacity `1`.
+
+```tsx
+<Confetti opacityAnimation={{ keyframes: { 0.5: 0.5, 0.7: 0 } }} />
+```
+
 ### `<ContinuousConfetti />` Props
 
 Same as `<Confetti />` except:
 
 - No `infinite` prop (always infinite)
-- No `onAnimationEnd` or `fadeOutOnEnd` props (animation never ends)
+- No `onAnimationEnd` or `opacityAnimation` props (animation never ends)
 - `verticalSpacing` defaults to `200`
 
 ### `<PIConfetti />` Props
@@ -369,7 +377,7 @@ Same as `<Confetti />` except:
 | `gravity`          | 3.0              | Gravity strength.                            |
 | `colors`           | Built-in palette | Default colors for all origins.              |
 | `flakeStyle`       | 'glossy'         | Default `'solid'` or `'glossy'` for origins. |
-| `fadeOutOnEnd`     | false            | Fade pieces as they exit.                    |
+| `opacityAnimation` | N/A              | Default or custom opacity keyframes.         |
 | `image`            | N/A              | Default Skia image texture for all flakes.   |
 | `svg`              | N/A              | Default Skia SVG texture for all flakes.     |
 | `reduceMotion`     | 'system'         | Reduce motion using the system setting.      |
@@ -426,7 +434,7 @@ Same as `<Confetti />` except:
 | `target`           | N/A              | Default aim point for all origins.           |
 | `colors`           | Built-in palette | Default colors for all origins.              |
 | `flakeStyle`       | 'glossy'         | Default `'solid'` or `'glossy'` for origins. |
-| `fadeOutOnEnd`     | false            | Fade pieces as they exit.                    |
+| `opacityAnimation` | N/A              | Default or custom opacity keyframes.         |
 | `image`            | N/A              | Default Skia image texture for all flakes.   |
 | `svg`              | N/A              | Default Skia SVG texture for all flakes.     |
 | `reduceMotion`     | 'system'         | Reduce motion using the system setting.      |
@@ -502,6 +510,20 @@ Define flake sizes as children of any confetti component (or origin).
 | `0.2.0` - `0.7.0` | `0.74.5`                 | `1.4.2`          | `3.15.5`               | Not required directly     | React Native `>=0.74`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.15.5`                    |
 
 For exact app support, check the compatibility pages for the installed versions of Reanimated and Worklets. For Skia, follow the official installation requirements: current Skia versions require React Native `>=0.79` and React `>=19`; React Native `<=0.78` / React `<=18` projects should use Skia `1.12.4` or below.
+
+## WebGPU features
+
+| Prop               | Components                                 | Default     | Description                                          |
+| ------------------ | ------------------------------------------ | ----------- | ---------------------------------------------------- |
+| `settleOnFloor`    | `Confetti`, `PIConfetti`, `CannonConfetti` | `undefined` | Configures floor collision, bounce, and settling.    |
+| `windStrength`     | `Confetti`, `ContinuousConfetti`           | `0`         | Adds procedural wind.                                |
+| `magnusStrength`   | `Confetti`, `ContinuousConfetti`           | `0`         | Adds spin-driven lateral movement.                   |
+| `motionBlurAmount` | `Confetti`, `ContinuousConfetti`           | `0`         | Stretches fast particles along their velocity.       |
+| `iridescence`      | `Confetti`, `ContinuousConfetti`           | `0`         | Adds shader-based rim iridescence.                   |
+| `textureMode`      | `Confetti`, `ContinuousConfetti`           | `0`         | Selects a procedural material for untextured flakes. |
+| `gravityDir`       | `Confetti`, `ContinuousConfetti`           | `[0, 1, 0]` | Accepts a shared value for dynamic gravity.          |
+| `autoRestart`      | `Confetti`, `ContinuousConfetti`           | `true`      | Controls automatic simulation restarts.              |
+| `device`           | All WebGPU components                      | `undefined` | Borrows an app-owned `GPUDevice`.                    |
 
 ## WebGPU caveats
 

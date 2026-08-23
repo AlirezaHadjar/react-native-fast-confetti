@@ -113,6 +113,7 @@ const createConfettiResourcesImpl = async ({
       uniforms: uniforms.buffer,
       spawns: spawnsBuffer.buffer,
       runtime: runtimeBuffer.buffer,
+      sizes: sizesBuffer.buffer,
     });
     const renderBindGroup = root.createBindGroup(renderLayout, {
       uniforms: uniforms.buffer,

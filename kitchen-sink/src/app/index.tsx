@@ -105,7 +105,7 @@ const createModes = (renderer: RendererType) => {
       render: () => (
         <CannonConfetti
           autoplay
-          fadeOutOnEnd
+          opacityAnimation={{ enabled: true }}
           infinite
           flakeStyle="glossy"
           gravity={4}

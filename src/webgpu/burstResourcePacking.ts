@@ -62,6 +62,7 @@ export type GPUBurstInitialization = {
   layoutCount: number;
   containerHeight: number;
   launchDelayMax: number;
+  floorImpact: ReadonlyFloat4;
   origins: GPUBurstOrigin[];
 };
 

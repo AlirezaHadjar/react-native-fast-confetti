@@ -20,7 +20,6 @@ import { Canvas, type CanvasRef } from 'react-native-webgpu';
 
 import type { ColorRange, SizeVariation } from '../hooks/useConfettiFlakes';
 import {
-  DEFAULT_FADE_START,
   DEFAULT_FOCAL_LENGTH_RATIO,
   DEFAULT_LIGHT_DIR,
 } from './constants';
@@ -68,6 +67,10 @@ import type {
   ReadonlyFixedLengthArray,
 } from '../typeHelpers';
 import { useLazyRef } from '../hooks/useLazyRef';
+import {
+  interpolateOpacity,
+  type ResolvedOpacityAnimation,
+} from '../fadeOut';
 
 export type GPUConfettiInitialization = {
   seed: number;
@@ -93,8 +96,10 @@ export type GPUConfettiCanvasParams = {
   windStrength: number;
   magnusStrength: number;
   flipIntensity: number;
-  bounceRestitution: number;
+  settleOnFloor: boolean;
+  floorRestitution: number;
   floorFriction: number;
+  floorVariation: number;
   motionBlurAmount: number;
   shadowOpacity: number;
   iridescence: number;
@@ -114,13 +119,14 @@ type Props = {
   parentColorCount: number;
   initialization: GPUConfettiInitialization;
   cycleDuration: number;
+  motionDuration: number;
   running: SharedValue<boolean>;
   opacity: SharedValue<number>;
   drift: number;
   initialScale: number;
   continuous: boolean;
   infinite: boolean;
-  fadeOutOnEnd: boolean;
+  opacityAnimation: ResolvedOpacityAnimation | null;
   gravityPxPerSec2: number;
   viewportWidth: number;
   viewportHeight: number;
@@ -270,13 +276,14 @@ const GPUConfettiRenderer = ({
   parentColorCount,
   initialization,
   cycleDuration,
+  motionDuration,
   running,
   opacity,
   drift,
   initialScale,
   continuous,
   infinite,
-  fadeOutOnEnd,
+  opacityAnimation,
   gravityPxPerSec2,
   viewportWidth,
   viewportHeight,
@@ -637,9 +644,12 @@ const GPUConfettiRenderer = ({
       }
 
       const nowSim =
-        continuous || infinite || cycleDuration <= 0
+        continuous || infinite || motionDuration <= 0
           ? rawElapsed
-          : easingFunction(clamp01(rawElapsed / cycleDuration)) * cycleDuration;
+          : rawElapsed < motionDuration
+            ? easingFunction(clamp01(rawElapsed / motionDuration)) *
+              motionDuration
+            : rawElapsed;
 
       const targetDelta = Math.max(nowSim - lastSimSeconds.get(), 0);
       lastSimSeconds.set(nowSim);
@@ -662,13 +672,15 @@ const GPUConfettiRenderer = ({
       const gDir = params.gravityDir.get();
       const cycleProgress =
         !continuous && cycleDuration > 0
-          ? clamp01(nowSim / cycleDuration)
+          ? clamp01(rawElapsed / cycleDuration)
           : 0;
-      const fadeProgress =
-        cycleProgress <= DEFAULT_FADE_START
-          ? 0
-          : (cycleProgress - DEFAULT_FADE_START) / (1 - DEFAULT_FADE_START);
-      const fadeOpacity = fadeOutOnEnd ? 1 - clamp01(fadeProgress) : 1;
+      const animatedOpacity = opacityAnimation
+        ? interpolateOpacity(
+            cycleProgress,
+            opacityAnimation.timestamps,
+            opacityAnimation.opacities
+          )
+        : 1;
       const minVisibleScale = Math.max(
         0,
         Math.min(1, 1 - params.flipIntensity)
@@ -678,7 +690,7 @@ const GPUConfettiRenderer = ({
       uniformData[0] = activeRawFrameState.viewportWidth;
       uniformData[1] = activeRawFrameState.viewportHeight;
       uniformData[2] = activeRawFrameState.focalLength;
-      uniformData[3] = opacity.get() * fadeOpacity;
+      uniformData[3] = opacity.get() * animatedOpacity;
       uniformData[4] = FIXED_SIMULATION_STEP_SECONDS;
       uniformData[5] = simulationTimeBeforeFrame;
       uniformData[6] = drift;
@@ -689,10 +701,10 @@ const GPUConfettiRenderer = ({
       uniformData[11] = infinite ? 1 : 0;
       uniformData[12] = interpolationAlpha;
       uniformData[13] = simulationSteps;
-      uniformData[14] = cycleDuration;
-      uniformData[15] = fadeOutOnEnd ? 1 : 0;
-      uniformData[16] = DEFAULT_FADE_START;
-      uniformData[17] = params.bounceRestitution;
+      uniformData[14] = motionDuration;
+      uniformData[15] = params.floorVariation;
+      uniformData[16] = 0;
+      uniformData[17] = params.floorRestitution;
       uniformData[18] = params.floorFriction;
       uniformData[19] = params.motionBlurAmount;
       uniformData[20] = params.shadowOpacity;
@@ -706,7 +718,7 @@ const GPUConfettiRenderer = ({
       uniformData[28] = gDir[0];
       uniformData[29] = gDir[1];
       uniformData[30] = gDir[2];
-      uniformData[31] = 0;
+      uniformData[31] = params.settleOnFloor && !continuous ? 1 : 0;
       activeRawFrameState.queue.writeBuffer(
         activeRawFrameState.uniformBuffer,
         0,
@@ -773,10 +785,11 @@ const GPUConfettiRenderer = ({
       drift,
       elapsed,
       easingFunction,
-      fadeOutOnEnd,
+      opacityAnimation,
       gravityPxPerSec2,
       infinite,
       initialScale,
+      motionDuration,
       lastFrameTimestampMs,
       lastSimSeconds,
       needsRender,

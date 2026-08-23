@@ -44,6 +44,10 @@ export type AssertGpuContinuousConfettiPropsMatchCore = AssertNever<
   IncompatibleKeys<CoreContinuousConfettiProps, ContinuousConfettiProps>
 >;
 
+export type AssertGpuContinuousConfettiOmitsFloor = AssertNever<
+  Extract<'settleOnFloor', AllKeys<ContinuousConfettiProps>>
+>;
+
 export type AssertGpuConfettiMethodsIncludeCore =
   AssertNever<MissingKeys<CoreConfettiMethods, ConfettiMethods>>;
 
@@ -53,11 +57,19 @@ export type AssertGpuPIConfettiPropsIncludeCore =
 export type AssertGpuPIConfettiPropsMatchCore =
   AssertNever<IncompatibleKeys<CorePIConfettiProps, PIConfettiProps>>;
 
+export type AssertGpuPIConfettiIncludesFloor = AssertNever<
+  Exclude<'settleOnFloor', AllKeys<PIConfettiProps>>
+>;
+
 export type AssertGpuCannonConfettiPropsIncludeCore =
   AssertNever<MissingKeys<CoreCannonConfettiProps, CannonConfettiProps>>;
 
 export type AssertGpuCannonConfettiPropsMatchCore =
   AssertNever<IncompatibleKeys<CoreCannonConfettiProps, CannonConfettiProps>>;
+
+export type AssertGpuCannonConfettiIncludesFloor = AssertNever<
+  Exclude<'settleOnFloor', AllKeys<CannonConfettiProps>>
+>;
 
 export type AssertGpuPIConfettiMethodsIncludeCore =
   AssertNever<MissingKeys<CorePIConfettiMethods, PIConfettiMethods>>;
@@ -87,7 +99,7 @@ export const implementedConfettiProps = {
   depth: true,
   drift: true,
   easing: true,
-  fadeOutOnEnd: true,
+  opacityAnimation: true,
   flakeStyle: true,
   flipIntensity: true,
   gravity: true,
@@ -142,7 +154,7 @@ export const implementedPIConfettiProps = {
   depth: true,
   drag: true,
   easing: true,
-  fadeOutOnEnd: true,
+  opacityAnimation: true,
   flakeStyle: true,
   flipIntensity: true,
   gravity: true,
@@ -167,7 +179,7 @@ export const implementedCannonConfettiProps = {
   depth: true,
   drag: true,
   easing: true,
-  fadeOutOnEnd: true,
+  opacityAnimation: true,
   flakeStyle: true,
   flipIntensity: true,
   gravity: true,

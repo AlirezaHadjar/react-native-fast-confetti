@@ -2,7 +2,6 @@ import { useCallback } from 'react';
 import { useSharedValue } from 'react-native-reanimated';
 
 type Params = {
-  fadeOutOnEnd?: boolean;
   enabled?: boolean;
 };
 

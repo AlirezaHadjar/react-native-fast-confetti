@@ -2,7 +2,14 @@ import type { FixedLengthArray } from '../typeHelpers';
 export const DEFAULT_WIND_STRENGTH = 0;
 export const DEFAULT_MAGNUS_STRENGTH = 0;
 export const DEFAULT_FOCAL_LENGTH_RATIO = 1.5;
+export const FLOOR_BOUNCE_DECAY = 0.4;
+export const FLOOR_TANGENTIAL_RETENTION = 0.6;
+export const FLOOR_DEPTH_DAMPING_PER_SECOND = 6;
+export const FLOOR_ANGULAR_DAMPING_PER_SECOND = 8;
+export const FLOOR_SLEEP_BOUNCE_SCALE = 0.03;
+export const FLOOR_SPRING_DAMPING_PER_SECOND = 1.2;
+export const FLOOR_MAX_NEAR_DEPTH_OFFSET = 0.25;
+export const FLOOR_MAX_FAR_DEPTH_OFFSET = 0.5;
 
 export const DEFAULT_Z_RANGE: FixedLengthArray<number, 2> = [0, 0];
 export const DEFAULT_LIGHT_DIR: FixedLengthArray<number, 3> = [0.35, -0.7, 0.6];
-export const DEFAULT_FADE_START = 0.8;

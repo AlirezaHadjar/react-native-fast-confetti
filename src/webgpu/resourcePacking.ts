@@ -70,7 +70,7 @@ export const toInitSizeInputs = (
   colorOverrides: (ColorRange | null)[],
   parentColorCount: number
 ) =>
-  sizes.map((_, index) => {
+  sizes.map((size, index) => {
     const range = colorOverrides[index];
     return {
       selection: [
@@ -79,6 +79,7 @@ export const toInitSizeInputs = (
         flags[index] ?? 0,
         0,
       ] as const,
+      dims: [size.width, size.height, size.radius, 0] as const,
     };
   });
 

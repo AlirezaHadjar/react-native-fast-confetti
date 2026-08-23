@@ -37,6 +37,7 @@ import {
   type GPUFrameRetirement,
 } from './resourceCleanup';
 import { useLazyRef } from '../hooks/useLazyRef';
+import type { ResolvedSettleOnFloor } from './settleOnFloor';
 
 type NumericValue = {
   get: () => number;
@@ -57,7 +58,9 @@ type Props = {
   colorOverrides: (ColorRange | null)[];
   parentColorCount: number;
   totalDuration: number;
+  cycleDuration: number;
   flightDuration: number;
+  floor: ResolvedSettleOnFloor;
   progress: NumericValue;
   running: BooleanValue;
   opacity: NumericValue;
@@ -117,6 +120,7 @@ const initializeParticles = (
       0,
       0,
     ],
+    floorImpact: initialization.floorImpact,
   });
 
   const encoder = state.device.createCommandEncoder();
@@ -137,7 +141,9 @@ const GPUBurstConfettiRenderer = ({
   colorOverrides,
   parentColorCount,
   totalDuration,
+  cycleDuration,
   flightDuration,
+  floor,
   progress,
   running,
   opacity,
@@ -407,7 +413,10 @@ const GPUBurstConfettiRenderer = ({
       uniformData[0] = activeRawFrameState.viewportWidth;
       uniformData[1] = activeRawFrameState.viewportHeight;
       uniformData[2] = opacity.get();
-      uniformData[3] = currentProgress;
+      uniformData[3] =
+        totalDuration > 0
+          ? (currentProgress * cycleDuration) / totalDuration
+          : currentProgress;
       uniformData[4] = totalDuration;
       uniformData[5] = flightDuration;
       uniformData[6] = gravityPxPerSec2;
@@ -418,6 +427,12 @@ const GPUBurstConfettiRenderer = ({
       uniformData[11] = verticalDrag;
       uniformData[12] = 0;
       uniformData[13] = 0;
+      uniformData[14] = 0;
+      uniformData[15] = 0;
+      uniformData[16] = floor.enabled ? 1 : 0;
+      uniformData[17] = floor.restitution;
+      uniformData[18] = floor.friction;
+      uniformData[19] = floor.variation;
       activeRawFrameState.queue.writeBuffer(
         activeRawFrameState.uniformBuffer,
         0,
@@ -439,6 +454,10 @@ const GPUBurstConfettiRenderer = ({
     [
       flightDuration,
       flipIntensity,
+      floor.enabled,
+      floor.friction,
+      floor.restitution,
+      floor.variation,
       gravityPxPerSec2,
       horizontalDrag,
       initialScale,
@@ -447,6 +466,7 @@ const GPUBurstConfettiRenderer = ({
       progress,
       activeRawFrameState,
       running,
+      cycleDuration,
       totalDuration,
       uniformDataRef,
       verticalDrag,

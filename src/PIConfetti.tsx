@@ -64,7 +64,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       drag: dragProp = DEFAULT_PI_CONFETTI_DRAG,
       autoplay = true,
       infinite = false,
-      fadeOutOnEnd = false,
+      opacityAnimation,
       autoStartDelay = 0,
       rotation: rootRotation,
       depth: rootDepth,
@@ -193,11 +193,10 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       useAnimationLifecycle({
         duration,
         infinite,
-        fadeOutOnEnd,
+        opacityAnimation,
         easing,
         onAnimationStart,
         onAnimationEnd,
-        fadeRange: [0.5, 0.9],
         onCycleEnd: refreshBoxes,
         disabled: visibleCount === 0,
       });

@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { CannonConfetti } from 'react-native-fast-confetti';
 import type { CannonConfettiMethods } from 'react-native-fast-confetti';
+import { CannonConfetti } from 'react-native-fast-confetti';
 import { Controls } from './Controls';
 
 export function CannonScreen() {
@@ -9,13 +9,7 @@ export function CannonScreen() {
 
   return (
     <View style={styles.container}>
-      <CannonConfetti
-        ref={ref}
-        autoplay
-        fadeOutOnEnd
-        infinite
-        initialScale={0.7}
-      >
+      <CannonConfetti ref={ref} autoplay infinite initialScale={0.7}>
         <CannonConfetti.Origin
           position="bottom-left"
           count={150}

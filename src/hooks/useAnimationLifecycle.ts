@@ -1,9 +1,7 @@
-import { useCallback, useLayoutEffect } from 'react';
+import { useCallback, useLayoutEffect, useMemo } from 'react';
 import {
   cancelAnimation,
   Easing,
-  Extrapolation,
-  interpolate,
   ReduceMotion,
   useDerivedValue,
   useSharedValue,
@@ -13,17 +11,19 @@ import {
   type EasingFunctionFactory,
 } from 'react-native-reanimated';
 import { useAnimationCallbacks } from './useAnimationCallbacks';
-import type { FixedLengthArray } from '../typeHelpers';
+import {
+  interpolateOpacity,
+  resolveOpacityAnimation,
+} from '../fadeOut';
+import type { OpacityAnimation } from '../types';
 
 type UseAnimationLifecycleParams = {
   duration: number;
   infinite: boolean;
-  fadeOutOnEnd: boolean;
+  opacityAnimation?: OpacityAnimation;
   easing?: EasingFunction | EasingFunctionFactory;
   onAnimationStart?: () => void;
   onAnimationEnd?: () => void;
-  /** Opacity fade interpolation input range. @default [0.8, 1] */
-  fadeRange?: FixedLengthArray<number, 2>;
   /** Worklet called at the end of each animation cycle (before looping). */
   onCycleEnd?: () => void;
   /** Wait for the caller to restart an infinite cycle after onCycleEnd. */
@@ -34,11 +34,10 @@ type UseAnimationLifecycleParams = {
 export const useAnimationLifecycle = ({
   duration,
   infinite,
-  fadeOutOnEnd,
+  opacityAnimation,
   easing: easingProp = Easing.linear,
   onAnimationStart,
   onAnimationEnd,
-  fadeRange = [0.8, 1],
   onCycleEnd,
   deferInfiniteRestart = false,
   disabled = false,
@@ -46,6 +45,10 @@ export const useAnimationLifecycle = ({
   const progress = useSharedValue(0);
   const running = useSharedValue(false);
   const visible = useSharedValue(false);
+  const resolvedOpacityAnimation = useMemo(
+    () => resolveOpacityAnimation(opacityAnimation),
+    [opacityAnimation]
+  );
 
   const { UIOnStart, UIOnEnd } = useAnimationCallbacks(
     onAnimationStart,
@@ -64,9 +67,13 @@ export const useAnimationLifecycle = ({
 
   const opacity = useDerivedValue(() => {
     if (!visible.get()) return 0;
-    if (!fadeOutOnEnd) return 1;
-    return interpolate(progress.get(), fadeRange, [1, 0], Extrapolation.CLAMP);
-  }, [fadeOutOnEnd, fadeRange, visible]);
+    if (!resolvedOpacityAnimation) return 1;
+    return interpolateOpacity(
+      progress.get(),
+      resolvedOpacityAnimation.timestamps,
+      resolvedOpacityAnimation.opacities
+    );
+  }, [resolvedOpacityAnimation, visible]);
 
   const pause = useCallback(() => {
     'worklet';

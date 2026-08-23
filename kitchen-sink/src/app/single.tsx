@@ -1,5 +1,5 @@
-import { useRef } from 'react';
 import { useIsFocused } from 'expo-router';
+import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { ConfettiMethods } from 'react-native-fast-confetti';
 import { Confetti as SkiaConfetti } from '../../../src';

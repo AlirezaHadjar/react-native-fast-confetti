@@ -60,7 +60,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       autoplay = true,
       infinite = false,
       continuous = false,
-      fadeOutOnEnd = false,
+      opacityAnimation,
       autoStartDelay = 0,
       onAnimationEnd,
       onAnimationStart,
@@ -139,7 +139,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       useAnimationLifecycle({
         duration,
         infinite,
-        fadeOutOnEnd,
+        opacityAnimation,
         easing: continuous ? Easing.linear : easing,
         onAnimationStart,
         onAnimationEnd,

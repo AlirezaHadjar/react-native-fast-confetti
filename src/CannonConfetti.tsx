@@ -73,7 +73,7 @@ const CannonConfettiInner = forwardRef<
       drag: dragProp = DEFAULT_CANNON_CONFETTI_DRAG,
       autoplay = true,
       infinite = false,
-      fadeOutOnEnd = false,
+      opacityAnimation,
       autoStartDelay = 0,
       onAnimationEnd,
       onAnimationStart,
@@ -208,7 +208,7 @@ const CannonConfettiInner = forwardRef<
       useAnimationLifecycle({
         duration,
         infinite,
-        fadeOutOnEnd,
+        opacityAnimation,
         easing,
         onAnimationStart,
         onAnimationEnd,
