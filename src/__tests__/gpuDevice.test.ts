@@ -1,6 +1,12 @@
 import { describe, expect, it, jest } from '@jest/globals';
+import {
+  createGPUDeviceStore,
+  requestDefaultGPUDevice,
+} from '../webgpu/hooks/useGPUDevice';
 
-import { createGPUDeviceStore } from '../webgpu/hooks/useGPUDevice';
+jest.mock('react-native-webgpu', () => ({
+  warnIfNotHardwareAccelerated: () => undefined,
+}));
 
 const createDevice = () => {
   let lose!: () => void;
@@ -19,6 +25,27 @@ const createDevice = () => {
 };
 
 describe('shared GPU device store', () => {
+  it('warns for fallback adapters before requesting a device', async () => {
+    const { device } = createDevice();
+    const adapter = {
+      requestDevice: jest.fn(async () => device),
+    } as unknown as GPUAdapter;
+    const gpu = {
+      requestAdapter: jest.fn(async () => adapter),
+    } as unknown as GPU;
+    const warnForFallback = jest.fn();
+
+    await expect(
+      requestDefaultGPUDevice(gpu, warnForFallback)
+    ).resolves.toBe(device);
+
+    expect(gpu.requestAdapter).toHaveBeenCalledWith({
+      powerPreference: 'high-performance',
+    });
+    expect(warnForFallback).toHaveBeenCalledWith(adapter);
+    expect(adapter.requestDevice).toHaveBeenCalledTimes(1);
+  });
+
   it('deduplicates concurrent device requests', async () => {
     const { device } = createDevice();
     const requestDevice = jest.fn(async () => device);

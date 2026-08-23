@@ -233,6 +233,8 @@ describe('GPU-native particle initialization', () => {
     expect(burstWGSL).toContain('@compute @workgroup_size(64)');
     expect(burstWGSL).toContain('fn burstConfettiInit');
     expect(fallingVertexWGSL).toContain('@vertex');
+    expect(fallingVertexWGSL).toContain('fn isParticleInFrontOfNearPlane');
+    expect(fallingVertexWGSL).toContain('fn getParticleNearPlaneDistance');
     expect(textureFragmentWGSL).toContain('textureSampleLevel');
     expect(textureFragmentWGSL).not.toContain('fbm');
     expect(burstTextureFragmentWGSL).toContain('textureSampleLevel');

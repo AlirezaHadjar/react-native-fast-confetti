@@ -17,6 +17,10 @@ import {
 } from '../constants';
 import { MAX_SIMULATION_STEPS_PER_FRAME } from '../fixedStepScheduler';
 import {
+  getParticleNearPlaneDistance,
+  isParticleInFrontOfNearPlane,
+} from '../perspective';
+import {
   SIZE_FLAG_GLOSSY,
   SIZE_FLAG_LAYER_MASK,
   SIZE_FLAG_MASK_LAYER_SHIFT,
@@ -759,8 +763,12 @@ export const confettiCompute = tgpu.computeFn({
         if (u.settleOnFloor > 0.5) {
           const sizeIndex = d.u32(spawn.info.x);
           const dimensions = computeLayout.$.sizes[sizeIndex]!.dims;
+          const floorPerspectiveDistance = std.max(
+            rt.pos.z + u.focalLength,
+            getParticleNearPlaneDistance(spawn.pos0.z + u.focalLength)
+          );
           const perspectiveScale =
-            u.focalLength / std.max(rt.pos.z + u.focalLength, 1);
+            u.focalLength / floorPerspectiveDistance;
           const floorInset = std.length(dimensions.xy) * 0.5 * perspectiveScale;
           const floorY = u.viewport.y - floorInset;
           if (rt.pos.y > floorY && rt.vel.y > 0) {
@@ -924,11 +932,13 @@ export const confettiVertex = tgpu.vertexFn({
   // functions and a normalization per vertex unless a 3D material requests
   // the procedural bend.
   let zBend = d.f32(0);
+  let bendAmplitude = d.f32(0);
   let nBody = d.vec3f(0, 0, 1);
   if (u.textureMode > 0.5) {
     const minSide = std.min(width, height);
     const phase = interpolatedLife * 4.5 + spawn.info.w * 6.28318;
     const bendAmp = minSide * (0.12 + 0.25 * std.clamp(speed / 600, 0, 1));
+    bendAmplitude = bendAmp;
     const sU = std.sin(u0 * 6.28318 + phase);
     const cU = std.cos(u0 * 6.28318 + phase);
     const sV = std.sin(v0 * 3.14159);
@@ -946,16 +956,6 @@ export const confettiVertex = tgpu.vertexFn({
   let centerWorld = d.vec3f(interpolatedPos);
   centerWorld.x = spawn.pos0.x + (centerWorld.x - spawn.pos0.x) * lateralDamp;
 
-  // Simulation positions are screen-space, matching the Skia renderer and the
-  // public `depth` contract (a perspective scale range). Project only the 3D
-  // geometry around the particle center. Projecting the center itself pulled
-  // above-screen reset positions toward the viewport center and made them
-  // visible, while also making recycle thresholds disagree with rendering.
-  const projectedCenter = project(centerWorld);
-  const centerScreen = d.vec2f(centerWorld.x, centerWorld.y);
-  const perspectiveScale =
-    u.focalLength / std.max(centerWorld.z + u.focalLength, 1);
-
   const axisXWorld = rotateByQuaternion(
     interpolatedQuat,
     d.vec3f(width * 0.5 * appearScale, 0, 0)
@@ -968,6 +968,54 @@ export const confettiVertex = tgpu.vertexFn({
     interpolatedQuat,
     d.vec3f(0, 0, zBend * appearScale)
   );
+  let motionBlurStretch = d.f32(0);
+  let motionBlurDepthExtent = d.f32(0);
+  if (u.motionBlurAmount > 0.001 && speed > 1) {
+    const velDir = rt.vel / speed;
+    motionBlurStretch =
+      ((u.motionBlurAmount * std.min(speed, 1200)) / 1200) * 0.6;
+    motionBlurDepthExtent =
+      std.abs(velDir.z) * height * motionBlurStretch * 0.5;
+  }
+
+  // Manual screen-space projection does not get WebGPU's homogeneous near
+  // clipping. Cull the complete particle before any perspective division if
+  // its rotated, bent, or motion-blurred geometry can reach the camera plane.
+  // This decision is independent of vertexIndex, so both triangles disappear
+  // together instead of one stretching across the viewport.
+  const initialCameraDistance = spawn.pos0.z + u.focalLength;
+  const nearPlaneDistance = getParticleNearPlaneDistance(
+    initialCameraDistance
+  );
+  const isInFrontOfNearPlane = isParticleInFrontOfNearPlane(
+    centerWorld.z + u.focalLength,
+    nearPlaneDistance,
+    std.abs(axisXWorld.z),
+    std.abs(axisYWorld.z),
+    bendAmplitude * appearScale,
+    motionBlurDepthExtent
+  );
+
+  if (!isInFrontOfNearPlane) {
+    return {
+      position: d.vec4f(2, 2, 0, 1),
+      uv: d.vec2f(u0, 1 - v0),
+      color: d.vec4f(0),
+      normal: d.vec3f(0, 0, 1),
+      flagsAndLayers: d.vec3f(flags, textureLayer, maskLayer),
+      seedAndRim: d.vec2f(0),
+    };
+  }
+
+  // Simulation positions are screen-space, matching the Skia renderer and the
+  // public `depth` contract (a perspective scale range). Project only the 3D
+  // geometry around the particle center. Projecting the center itself pulled
+  // above-screen reset positions toward the viewport center and made them
+  // visible, while also making recycle thresholds disagree with rendering.
+  const projectedCenter = project(centerWorld);
+  const centerScreen = d.vec2f(centerWorld.x, centerWorld.y);
+  const perspectiveScale =
+    u.focalLength / (centerWorld.z + u.focalLength);
 
   let axisXScreen = project(centerWorld + axisXWorld) - projectedCenter;
   let axisYScreen = project(centerWorld + axisYWorld) - projectedCenter;
@@ -996,8 +1044,9 @@ export const confettiVertex = tgpu.vertexFn({
 
   if (u.motionBlurAmount > 0.001 && speed > 1) {
     const velDir = rt.vel / speed;
-    const stretch = ((u.motionBlurAmount * std.min(speed, 1200)) / 1200) * 0.6;
-    const blurWorld = centerWorld + velDir * ((v0 - 0.5) * height * stretch);
+    const blurWorld =
+      centerWorld +
+      velDir * ((v0 - 0.5) * height * motionBlurStretch);
     screen = screen + (project(blurWorld) - projectedCenter);
   }
 

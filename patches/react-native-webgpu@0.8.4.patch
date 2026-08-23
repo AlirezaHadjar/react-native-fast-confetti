@@ -612,3 +612,61 @@ index 37a30a2fa43e4abe517ae68796c2d85f5ce7ae8e..45f8d9ca1719454aec8d6d96e80469bc
  };
  
  } // namespace rnwgpu
+diff --git a/android/src/main/java/com/webgpu/WebGPUSurfaceView.java b/android/src/main/java/com/webgpu/WebGPUSurfaceView.java
+index 7e706a1..b012e33 100644
+--- a/android/src/main/java/com/webgpu/WebGPUSurfaceView.java
++++ b/android/src/main/java/com/webgpu/WebGPUSurfaceView.java
+@@ -2,6 +2,7 @@ package com.webgpu;
+ 
+ import android.annotation.SuppressLint;
+ import android.content.Context;
++import android.graphics.PixelFormat;
+ import android.view.SurfaceHolder;
+ import android.view.SurfaceView;
+ 
+@@ -13,8 +14,20 @@ public class WebGPUSurfaceView extends SurfaceView implements SurfaceHolder.Call
+   WebGPUAPI mApi;
+ 
+   public WebGPUSurfaceView(Context context, WebGPUAPI api) {
++    this(context, api, false);
++  }
++
++  public WebGPUSurfaceView(Context context, WebGPUAPI api, boolean transparent) {
+     super(context);
+     mApi = api;
++    if (transparent) {
++      // Keep transparent WebGPU content in its own SurfaceFlinger layer.
++      // TextureView routes every frame through the app's HWUI renderer first,
++      // causing a second full-screen GPU composition and invalidating the
++      // React Native window on every present.
++      setZOrderOnTop(true);
++      getHolder().setFormat(PixelFormat.TRANSLUCENT);
++    }
+     getHolder().addCallback(this);
+   }
+ 
+diff --git a/android/src/main/java/com/webgpu/WebGPUView.java b/android/src/main/java/com/webgpu/WebGPUView.java
+index 80944f9..8780176 100644
+--- a/android/src/main/java/com/webgpu/WebGPUView.java
++++ b/android/src/main/java/com/webgpu/WebGPUView.java
+@@ -1,7 +1,6 @@
+ package com.webgpu;
+ 
+ import android.content.Context;
+-import android.os.Build;
+ import android.view.Surface;
+ import android.view.View;
+ 
+@@ -39,11 +38,7 @@ public class WebGPUView extends ReactViewGroup implements WebGPUAPI {
+       }
+       mTransparent = value;
+       if (mTransparent) {
+-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+-//          mView = new WebGPUAHBView(ctx, this);
+-//        } else {
+-          mView = new WebGPUTextureView(ctx, this);
+-//        }
++        mView = new WebGPUSurfaceView(ctx, this, true);
+       } else {
+         mView = new WebGPUSurfaceView(ctx, this);
+       }

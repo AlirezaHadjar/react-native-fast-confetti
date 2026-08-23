@@ -1,4 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
+import { warnIfNotHardwareAccelerated } from 'react-native-webgpu';
 import { useLatestCallback } from '../../hooks/useLatestCallback';
 
 type Listener = () => void;
@@ -72,15 +73,25 @@ export const createGPUDeviceStore = (
   };
 };
 
-const sharedGPUDeviceStore = createGPUDeviceStore(async () => {
-  const adapter = await navigator.gpu.requestAdapter({
+type AdapterWarning = (adapter: GPUAdapter) => void;
+
+export const requestDefaultGPUDevice = async (
+  gpu: GPU,
+  warnForFallback: AdapterWarning = warnIfNotHardwareAccelerated
+) => {
+  const adapter = await gpu.requestAdapter({
     powerPreference: 'high-performance',
   });
   if (!adapter) {
     throw new Error('[react-native-fast-confetti] WebGPU adapter unavailable');
   }
+  warnForFallback(adapter);
   return adapter.requestDevice();
-});
+};
+
+const sharedGPUDeviceStore = createGPUDeviceStore(() =>
+  requestDefaultGPUDevice(navigator.gpu)
+);
 
 const subscribeToNothing = () => () => {};
 const getNullSnapshot = () => null;
