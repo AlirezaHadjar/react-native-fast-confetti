@@ -17,7 +17,9 @@ import {
 } from '../webgpu/burstResourcePacking';
 import {
   BURST_PARTICLE_BYTES,
+  BURST_RUNTIME_BYTES,
   BURST_SIZE_META_BYTES,
+  BURST_TRANSFORM_BYTES,
   BURST_UNIFORMS_BYTES,
   BurstParticleSchema,
   BurstSizeSchema,
@@ -293,10 +295,14 @@ describe('burst GPU confetti parity framework', () => {
     expect(BURST_SIZE_META_BYTES).toBe(d.sizeOf(BurstSizeSchema));
     expect(BURST_UNIFORMS_BYTES).toBe(d.sizeOf(BurstUniformsSchema));
     expect(BURST_PARTICLE_BYTES).toBe(64);
+    expect(BURST_RUNTIME_BYTES).toBe(96);
+    expect(BURST_TRANSFORM_BYTES).toBe(32);
+    expect(
+      BURST_PARTICLE_BYTES + BURST_RUNTIME_BYTES + BURST_TRANSFORM_BYTES
+    ).toBe(192);
     expect(BURST_SIZE_META_BYTES).toBe(16);
     expect(sizeInputs[0]!.dims[0]).toBe(sizeVariations[0]!.width);
     expect(sizeInputs[0]!.dims[1]).toBe(sizeVariations[0]!.height);
     expect(sizeInputs[0]!.dims[3]).toBe(1);
   });
 });
-

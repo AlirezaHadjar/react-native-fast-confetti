@@ -8,10 +8,24 @@ import {
 } from 'typegpu';
 import {
   FLOOR_ANGULAR_DAMPING_PER_SECOND,
-  FLOOR_SPRING_DAMPING_PER_SECOND,
+  FLOOR_BOUNCE_DECAY,
+  FLOOR_DEPTH_DAMPING_PER_SECOND,
+  FLOOR_MAX_FAR_DEPTH_OFFSET,
+  FLOOR_MAX_NEAR_DEPTH_OFFSET,
+  FLOOR_SLEEP_BOUNCE_SCALE,
   FLOOR_TANGENTIAL_RETENTION,
 } from '../constants';
-import { random01, randomRange } from './gpuMath';
+import { MAX_SIMULATION_STEPS_PER_FRAME } from '../fixedStepScheduler';
+import {
+  getParticleNearPlaneDistance,
+  isParticleInFrontOfNearPlane,
+} from '../perspective';
+import {
+  integrateQuaternion,
+  random01,
+  randomRange,
+  rotateByQuaternion,
+} from './gpuMath';
 import { InitSizeSchema } from './sharedSchemas';
 import {
   SIZE_FLAG_GLOSSY,
@@ -22,22 +36,45 @@ import {
   SIZE_FLAG_TEXTURE_LAYER_SHIFT,
 } from '../resourcePacking';
 import { createAlphaBlendTarget } from './blendTarget';
+import {
+  computeAirborneAcceleration,
+  integrateAngularVelocity,
+} from './physics/aerodynamics';
+import {
+  PARTICLE_RUNTIME_BYTES,
+  ParticleRuntimeArraySchema,
+  ParticleRuntimeSchema,
+} from './physics/state';
+import {
+  sampleCenteredUnit,
+  sampleSoftConeDirection,
+} from './physics/launch';
+import {
+  clampProjectedAxis,
+  normalizeOrFallback2,
+  projectParticlePoint,
+} from './physics/projection';
 
-export const BURST_VERTS_PER_FLAKE = 6;
+// One instanced triangle strip per flake. This avoids repeating two vertices
+// (and all analytic trajectory math attached to them) for every particle.
+export const BURST_VERTS_PER_FLAKE = 4;
 
 export const BurstUniformsSchema = d.struct({
   viewport: d.vec2f,
   opacity: d.f32,
-  progress: d.f32,
+  focalLength: d.f32,
 
-  totalDuration: d.f32,
-  flightDuration: d.f32,
+  dt: d.f32,
+  time: d.f32,
+  stepsThisFrame: d.f32,
+  interpolationAlpha: d.f32,
+
+  motionDuration: d.f32,
   gravity: d.f32,
   initialScale: d.f32,
-
   flipIntensity: d.f32,
-  drag: d.vec2f,
-  _pad0: d.f32,
+
+  aerodynamics: d.vec4f,
 
   floor: d.vec4f,
 });
@@ -49,10 +86,20 @@ export const BurstParticleSchema = d.struct({
   indices: d.vec4f,
 });
 
+/**
+ * Per-particle screen transform generated once per frame by compute.
+ * The compute stage projects a full quaternion-oriented flake once per particle
+ * and stores two screen-space basis axes. Four lightweight vertex invocations
+ * then expand the quad without rereading the 3D runtime record.
+ */
+export const BurstTransformSchema = d.struct({
+  centerAndAxisX: d.vec4f,
+  axisYAndAppearance: d.vec4f,
+});
+
 export const BurstInitUniformsSchema = d.struct({
   counts: d.vec4u,
   globals: d.vec4f,
-  floorImpact: d.vec4f,
 });
 
 export const BurstOriginSchema = d.struct({
@@ -71,6 +118,8 @@ export const BurstSizeSchema = d.struct({
 export const BurstPaletteColorSchema = d.vec4f;
 
 export const BURST_PARTICLE_BYTES = d.sizeOf(BurstParticleSchema);
+export const BURST_RUNTIME_BYTES = PARTICLE_RUNTIME_BYTES;
+export const BURST_TRANSFORM_BYTES = d.sizeOf(BurstTransformSchema);
 export const BURST_SIZE_META_BYTES = d.sizeOf(BurstSizeSchema);
 export const BURST_UNIFORMS_BYTES = d.sizeOf(BurstUniformsSchema);
 
@@ -90,16 +139,28 @@ export const BURST_UNIFORM_FLOAT_OFFSETS = {
   opacity: toFloatOffset(
     d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.opacity).offset
   ),
-  progress: toFloatOffset(
-    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.progress)
+  focalLength: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.focalLength)
       .offset
   ),
-  totalDuration: toFloatOffset(
-    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.totalDuration)
+  dt: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.dt).offset
+  ),
+  time: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.time).offset
+  ),
+  stepsThisFrame: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.stepsThisFrame)
       .offset
   ),
-  flightDuration: toFloatOffset(
-    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.flightDuration)
+  interpolationAlpha: toFloatOffset(
+    d.memoryLayoutOf(
+      BurstUniformsSchema,
+      (uniforms) => uniforms.interpolationAlpha
+    ).offset
+  ),
+  motionDuration: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.motionDuration)
       .offset
   ),
   gravity: toFloatOffset(
@@ -113,14 +174,21 @@ export const BURST_UNIFORM_FLOAT_OFFSETS = {
     d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.flipIntensity)
       .offset
   ),
-  dragX: toFloatOffset(
-    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.drag.x).offset
+  normalDrag: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.aerodynamics.x)
+      .offset
   ),
-  dragY: toFloatOffset(
-    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.drag.y).offset
+  tangentialDrag: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.aerodynamics.y)
+      .offset
   ),
-  padding: toFloatOffset(
-    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms._pad0).offset
+  rotationalDrag: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.aerodynamics.z)
+      .offset
+  ),
+  windStrength: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.aerodynamics.w)
+      .offset
   ),
   floorEnabled: toFloatOffset(
     d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.floor.x).offset
@@ -138,6 +206,10 @@ export const BURST_UNIFORM_FLOAT_OFFSETS = {
 
 export const BurstParticleArraySchema = (count: number) =>
   d.arrayOf(BurstParticleSchema, count);
+export const BurstRuntimeArraySchema = (count: number) =>
+  ParticleRuntimeArraySchema(count);
+export const BurstTransformArraySchema = (count: number) =>
+  d.arrayOf(BurstTransformSchema, count);
 export const BurstSizeArraySchema = (count: number) =>
   d.arrayOf(BurstSizeSchema, count);
 export const BurstPaletteArraySchema = (count: number) =>
@@ -155,6 +227,11 @@ export const burstInitLayout = tgpu
     },
     particles: {
       storage: d.arrayOf(BurstParticleSchema),
+      access: 'mutable',
+      visibility: ['compute'],
+    },
+    runtime: {
+      storage: ParticleRuntimeArraySchema,
       access: 'mutable',
       visibility: ['compute'],
     },
@@ -177,13 +254,8 @@ export const burstRenderLayout = tgpu
       uniform: BurstUniformsSchema,
       visibility: ['vertex', 'fragment'],
     },
-    particles: {
-      storage: d.arrayOf(BurstParticleSchema),
-      access: 'readonly',
-      visibility: ['vertex'],
-    },
-    sizes: {
-      storage: d.arrayOf(BurstSizeSchema),
+    transforms: {
+      storage: d.arrayOf(BurstTransformSchema),
       access: 'readonly',
       visibility: ['vertex'],
     },
@@ -209,33 +281,34 @@ export const burstRenderLayout = tgpu
   })
   .$idx(0);
 
-const burstYAtTime = tgpu.fn(
-  [d.f32, d.f32, d.f32, d.f32, d.f32],
-  d.f32
-)((originY, initialVelocity, gravity, verticalDrag, time) => {
-  'use gpu';
-
-  const safeDrag = std.max(verticalDrag, 0.001);
-  const expDecay = 1 - std.exp(-safeDrag * time);
-  return (
-    originY +
-    (gravity / safeDrag) * time +
-    ((initialVelocity - gravity / safeDrag) / safeDrag) * expDecay
-  );
-});
-
-const burstVerticalVelocityAtTime = tgpu.fn(
-  [d.f32, d.f32, d.f32, d.f32],
-  d.f32
-)((initialVelocity, gravity, verticalDrag, time) => {
-  'use gpu';
-
-  const safeDrag = std.max(verticalDrag, 0.001);
-  return (
-    gravity / safeDrag +
-    (initialVelocity - gravity / safeDrag) * std.exp(-safeDrag * time)
-  );
-});
+export const burstTransformLayout = tgpu
+  .bindGroupLayout({
+    uniforms: {
+      uniform: BurstUniformsSchema,
+      visibility: ['compute'],
+    },
+    particles: {
+      storage: d.arrayOf(BurstParticleSchema),
+      access: 'readonly',
+      visibility: ['compute'],
+    },
+    runtime: {
+      storage: ParticleRuntimeArraySchema,
+      access: 'mutable',
+      visibility: ['compute'],
+    },
+    transforms: {
+      storage: d.arrayOf(BurstTransformSchema),
+      access: 'mutable',
+      visibility: ['compute'],
+    },
+    sizes: {
+      storage: d.arrayOf(BurstSizeSchema),
+      access: 'readonly',
+      visibility: ['compute'],
+    },
+  })
+  .$idx(0);
 
 export const burstConfettiInit = tgpu.computeFn({
   in: {
@@ -285,46 +358,60 @@ export const burstConfettiInit = tgpu.computeFn({
   const mode = origin.targetStartAndMode.w;
   const halfSpread = origin.motion.x * 0.5;
 
-  let angle = d.f32(0);
+  let launchDirection = d.vec3f(0, -1, 0);
+  let speedUnit = d.f32(0);
   if (mode < 0.5) {
-    const turns = d.f32(localIndex) * (137.5 / 360);
+    const phase = random01(originIndex, d.u32(0), seed);
+    const turns = d.f32(localIndex) * (137.5 / 360) + phase;
     const centeredDegrees = std.fract(turns) * 360 - 180;
-    angle = -1.57079632679 + centeredDegrees * (halfSpread / 180);
+    const angle = -1.57079632679 + centeredDegrees * (halfSpread / 180);
+    const depthSlope = randomRange(
+      layoutIndex,
+      d.u32(1),
+      seed,
+      -0.12,
+      0.12
+    );
+    launchDirection = std.normalize(
+      d.vec3f(std.cos(angle), std.sin(angle), depthSlope)
+    );
+    speedUnit = random01(layoutIndex, d.u32(2), seed);
   } else {
     const targetDelta = origin.targetStartAndMode.xy - origin.originAndCount.xy;
-    const baseAngle = std.atan2(targetDelta.y, targetDelta.x);
-    angle =
-      baseAngle +
-      randomRange(layoutIndex, d.u32(0), seed, -halfSpread, halfSpread);
+    launchDirection = sampleSoftConeDirection(
+      targetDelta,
+      halfSpread,
+      random01(layoutIndex, d.u32(1), seed),
+      random01(layoutIndex, d.u32(2), seed)
+    );
+    speedUnit = sampleCenteredUnit(
+      random01(layoutIndex, d.u32(3), seed),
+      random01(layoutIndex, d.u32(4), seed)
+    );
   }
 
-  const speedMultiplier = randomRange(
-    layoutIndex,
-    d.u32(1),
-    seed,
-    origin.motion.z,
-    origin.motion.w
-  );
+  const speedMultiplier =
+    origin.motion.z + speedUnit * (origin.motion.w - origin.motion.z);
   const depthScale = randomRange(
     layoutIndex,
-    d.u32(2),
+    d.u32(5),
     seed,
     origin.depth.x,
     origin.depth.y
   );
   const speed = origin.motion.y * u.globals.x * speedMultiplier * depthScale;
-  const velocity = d.vec2f(speed * std.cos(angle), speed * std.sin(angle));
-  const launchDelay = randomRange(layoutIndex, d.u32(3), seed, 0, u.globals.y);
+  const velocity = launchDirection * speed;
+  const launchDelay = randomRange(layoutIndex, d.u32(6), seed, 0, u.globals.y);
   const maxRotationX = randomRange(
     layoutIndex,
-    d.u32(4),
+    d.u32(7),
     seed,
     origin.rotation.x,
     origin.rotation.y
   );
   const maxRotationZ = randomRange(
     layoutIndex,
-    d.u32(5),
+    d.u32(8),
     seed,
     origin.rotation.z,
     origin.rotation.w
@@ -332,11 +419,11 @@ export const burstConfettiInit = tgpu.computeFn({
   const rotationDirection = std.select(
     d.f32(-1),
     d.f32(1),
-    random01(layoutIndex, d.u32(6), seed) >= 0.5
+    random01(layoutIndex, d.u32(9), seed) >= 0.5
   );
   const initialRotation = randomRange(
     layoutIndex,
-    d.u32(7),
+    d.u32(10),
     seed,
     0.31415926535,
     3.14159265359
@@ -349,7 +436,7 @@ export const burstConfettiInit = tgpu.computeFn({
     std.min(
       d.u32(
         std.round(
-          random01(layoutIndex, d.u32(8), seed) * d.f32(sizeCount - d.u32(1))
+          random01(layoutIndex, d.u32(11), seed) * d.f32(sizeCount - d.u32(1))
         )
       ),
       sizeCount - d.u32(1)
@@ -362,7 +449,7 @@ export const burstConfettiInit = tgpu.computeFn({
     std.min(
       d.u32(
         std.round(
-          random01(layoutIndex, d.u32(9), seed) * d.f32(colorCount - d.u32(1))
+          random01(layoutIndex, d.u32(12), seed) * d.f32(colorCount - d.u32(1))
         )
       ),
       colorCount - d.u32(1)
@@ -374,49 +461,58 @@ export const burstConfettiInit = tgpu.computeFn({
     (sizeFlags & d.u32(SIZE_FLAG_TEXTURED)) !== d.u32(0)
   );
 
-  const trajectoryDuration = u.floorImpact.z;
-  let floorImpactTime = trajectoryDuration + 1;
-  if (u.floorImpact.w > 0.5) {
-    const dimensions = burstInitLayout.$.sizes[sizeIndex]!.dims;
-    const floorY = u.globals.x - std.length(dimensions.xy) * 0.5 * depthScale;
-    const endY = burstYAtTime(
-      origin.originAndCount.y,
-      velocity.y,
-      u.floorImpact.x,
-      u.floorImpact.y,
-      trajectoryDuration
-    );
-    if (endY >= floorY) {
-      let lowTime = d.f32(0);
-      let highTime = trajectoryDuration;
-      for (const step of std.range(12)) {
-        if (step < 12) {
-          const middleTime = (lowTime + highTime) * 0.5;
-          const middleY = burstYAtTime(
-            origin.originAndCount.y,
-            velocity.y,
-            u.floorImpact.x,
-            u.floorImpact.y,
-            middleTime
-          );
-          if (middleY >= floorY) {
-            highTime = middleTime;
-          } else {
-            lowTime = middleTime;
-          }
-        }
-      }
-      floorImpactTime = highTime;
-    }
-  }
+  const safeFlightDuration = std.max(u.globals.w, 0.0001);
+  const timeScale = 1 / std.max(1 - launchDelay, 0.05);
+  const originDelaySeconds = std.select(
+    d.f32(0),
+    origin.originAndCount.z / 1000,
+    mode < 0.5
+  );
+  const activationSeconds =
+    originDelaySeconds + launchDelay * safeFlightDuration;
+  const initialLife = -activationSeconds * timeScale;
+  const focalLength = std.max(u.globals.z, 1);
+  const initialZ = focalLength / std.max(depthScale, 0.0001) - focalLength;
+
+  const selectedDimensions = burstInitLayout.$.sizes[sizeIndex]!.dims.xy;
+  const emitterRadius = std.clamp(
+    std.max(selectedDimensions.x, selectedDimensions.y) * 0.25,
+    0.5,
+    3
+  );
+  const emitterDistance =
+    std.sqrt(random01(layoutIndex, d.u32(13), seed)) * emitterRadius;
+  const emitterAngle = random01(layoutIndex, d.u32(14), seed) * 6.28318530718;
+  const emitterDepth =
+    (random01(layoutIndex, d.u32(15), seed) * 2 - 1) * emitterRadius;
+  const initialPosition = d.vec3f(
+    origin.originAndCount.x + std.cos(emitterAngle) * emitterDistance,
+    origin.originAndCount.y + std.sin(emitterAngle) * emitterDistance,
+    initialZ + emitterDepth
+  );
+
+  const quaternionU1 = random01(layoutIndex, d.u32(16), seed);
+  const quaternionU2 = random01(layoutIndex, d.u32(17), seed);
+  const quaternionU3 = random01(layoutIndex, d.u32(18), seed);
+  const quaternionS1 = std.sqrt(std.max(1 - quaternionU1, 0));
+  const quaternionS2 = std.sqrt(std.max(quaternionU1, 0));
+  const quaternion = d.vec4f(
+    quaternionS1 * std.sin(6.28318530718 * quaternionU2),
+    quaternionS1 * std.cos(6.28318530718 * quaternionU2),
+    quaternionS2 * std.sin(6.28318530718 * quaternionU3),
+    quaternionS2 * std.cos(6.28318530718 * quaternionU3)
+  );
+  const omega =
+    d.vec3f(maxRotationX, maxRotationX * 0.125, maxRotationZ) *
+    ((rotationDirection * timeScale) / safeFlightDuration);
 
   burstInitLayout.$.particles[idx] = BurstParticleSchema({
     originAndTiming: d.vec4f(
-      origin.originAndCount.xy,
+      initialPosition.xy,
       std.select(d.f32(0), origin.originAndCount.z, mode < 0.5),
       launchDelay
     ),
-    velocityAndDepth: d.vec4f(velocity, depthScale, initialRotation),
+    velocityAndDepth: d.vec4f(velocity.xy, depthScale, initialRotation),
     rotationAndMeta: d.vec4f(
       maxRotationX,
       maxRotationZ,
@@ -427,8 +523,252 @@ export const burstConfettiInit = tgpu.computeFn({
       d.f32(sizeIndex),
       d.f32(colorIndex),
       isTextured,
-      floorImpactTime
+      timeScale
     ),
+  });
+  burstInitLayout.$.runtime[idx] = ParticleRuntimeSchema({
+    pos: d.vec3f(initialPosition),
+    life: initialLife,
+    prevPos: d.vec3f(initialPosition),
+    prevLife: initialLife,
+    vel: d.vec3f(velocity),
+    floorBounceScale: d.f32(1),
+    quat: d.vec4f(quaternion),
+    prevQuat: d.vec4f(quaternion),
+    omega: d.vec3f(omega),
+  });
+});
+
+/**
+ * Resolves trajectory, floor response, rotation, and flip scale once per
+ * particle. Keeping this instance-level work out of the vertex shader avoids
+ * repeating the same transcendental math for every corner of the quad.
+ */
+export const burstConfettiTransform = tgpu.computeFn({
+  in: {
+    gid: d.builtin.globalInvocationId,
+  },
+  workgroupSize: [64],
+})(({ gid }) => {
+  'use gpu';
+
+  const idx = gid.x;
+  const count = std.arrayLength(burstTransformLayout.$.transforms);
+  if (idx >= count) {
+    return;
+  }
+
+  const u = burstTransformLayout.$.uniforms;
+  const particle = burstTransformLayout.$.particles[idx]!;
+  const sizeIdx = d.u32(particle.indices.x);
+  const size = burstTransformLayout.$.sizes[sizeIdx]!;
+  const colorIdx = particle.indices.y;
+  let runtime = ParticleRuntimeSchema(burstTransformLayout.$.runtime[idx]!);
+  const localDt = u.dt * particle.indices.w;
+  const initialOmega =
+    d.vec3f(
+      particle.rotationAndMeta.x,
+      particle.rotationAndMeta.x * 0.125,
+      particle.rotationAndMeta.y
+    ) *
+    ((particle.rotationAndMeta.z * particle.indices.w) /
+      std.max(u.motionDuration, 0.0001));
+
+  for (const step of std.range(MAX_SIMULATION_STEPS_PER_FRAME)) {
+    if (d.f32(step) < u.stepsThisFrame) {
+      runtime.prevPos = d.vec3f(runtime.pos);
+      runtime.prevLife = runtime.life;
+      runtime.prevQuat = d.vec4f(runtime.quat);
+      runtime.life += localDt;
+
+      if (runtime.life >= 0) {
+        const drag = d.vec4f(
+          u.aerodynamics.x,
+          u.aerodynamics.y,
+          u.aerodynamics.z,
+          0
+        );
+        const acceleration = computeAirborneAcceleration(
+          runtime.pos,
+          runtime.quat,
+          runtime.vel,
+          runtime.omega,
+          drag,
+          d.vec3f(0, u.gravity, 0),
+          u.aerodynamics.w,
+          0,
+          u.time + d.f32(step) * u.dt
+        );
+        let nextVelocity = runtime.vel + acceleration * localDt;
+        const maximumVelocity = std.max(u.gravity * 1.5, 1);
+        const velocityMagnitudeSquared = std.dot(nextVelocity, nextVelocity);
+        if (velocityMagnitudeSquared > maximumVelocity * maximumVelocity) {
+          nextVelocity =
+            nextVelocity *
+            (maximumVelocity * std.inverseSqrt(velocityMagnitudeSquared));
+        }
+        runtime.vel = d.vec3f(nextVelocity);
+        runtime.pos = d.vec3f(runtime.pos + runtime.vel * localDt);
+
+        if (u.floor.x > 0.5) {
+          const floorPerspectiveDistance = std.max(
+            runtime.pos.z + u.focalLength,
+            getParticleNearPlaneDistance(
+              u.focalLength / std.max(particle.velocityAndDepth.z, 0.0001)
+            )
+          );
+          const perspectiveScale = u.focalLength / floorPerspectiveDistance;
+          const floorInset = std.length(size.dims.xy) * 0.5 * perspectiveScale;
+          const floorY = u.viewport.y - floorInset;
+          if (runtime.pos.y > floorY && runtime.vel.y > 0) {
+            const floorRandom = std.fract(
+              particle.velocityAndDepth.w * 17.17 + d.f32(sizeIdx) * 0.37
+            );
+            const variation = std.clamp(u.floor.w, 0, 1);
+            const restitution =
+              std.clamp(u.floor.y + (floorRandom * 2 - 1) * variation, 0, 1) *
+              runtime.floorBounceScale;
+            runtime.pos.y = floorY;
+            runtime.vel.y = -runtime.vel.y * restitution;
+            if (
+              std.abs(runtime.vel.y) <=
+              u.gravity * localDt * (1 + restitution)
+            ) {
+              runtime.vel.y = 0;
+            }
+            const frictionRandom = std.fract(floorRandom * 17.17 + 0.37);
+            const floorFriction =
+              std.clamp(
+                u.floor.z + (frictionRandom * 2 - 1) * variation,
+                0,
+                1
+              ) *
+              FLOOR_TANGENTIAL_RETENTION *
+              std.sqrt(runtime.floorBounceScale);
+            runtime.vel.x *= floorFriction;
+            runtime.vel.z *= floorFriction;
+            runtime.omega *= floorFriction;
+            runtime.floorBounceScale *= FLOOR_BOUNCE_DECAY;
+          }
+
+          if (runtime.floorBounceScale < 1) {
+            runtime.vel.z *= std.max(
+              0,
+              1 - FLOOR_DEPTH_DAMPING_PER_SECOND * localDt
+            );
+            const initialZ =
+              u.focalLength / std.max(particle.velocityAndDepth.z, 0.0001) -
+              u.focalLength;
+            runtime.pos.z = std.clamp(
+              runtime.pos.z,
+              initialZ - u.focalLength * FLOOR_MAX_NEAR_DEPTH_OFFSET,
+              initialZ + u.focalLength * FLOOR_MAX_FAR_DEPTH_OFFSET
+            );
+          }
+        }
+
+        let tumbleDrive = d.f32(1);
+        if (u.floor.x > 0.5 && runtime.floorBounceScale < 1) {
+          tumbleDrive = runtime.floorBounceScale;
+        }
+        let nextOmega = integrateAngularVelocity(
+          initialOmega,
+          runtime.omega,
+          u.aerodynamics.z,
+          tumbleDrive,
+          localDt
+        );
+        if (u.floor.x > 0.5 && runtime.floorBounceScale < 1) {
+          nextOmega *= std.max(
+            0,
+            1 - FLOOR_ANGULAR_DAMPING_PER_SECOND * localDt
+          );
+          if (runtime.floorBounceScale <= FLOOR_SLEEP_BOUNCE_SCALE) {
+            nextOmega = d.vec3f(0);
+          }
+        }
+        runtime.omega = d.vec3f(nextOmega);
+        runtime.quat = d.vec4f(
+          integrateQuaternion(runtime.quat, runtime.omega, localDt)
+        );
+      }
+    }
+  }
+
+  burstTransformLayout.$.runtime[idx] = ParticleRuntimeSchema(runtime);
+
+  const interpolationAlpha = std.clamp(u.interpolationAlpha, 0, 1);
+  const centerWorld = std.mix(runtime.prevPos, runtime.pos, interpolationAlpha);
+  const interpolatedLife = std.mix(
+    runtime.prevLife,
+    runtime.life,
+    interpolationAlpha
+  );
+  const quaternionSign = std.select(
+    d.f32(-1),
+    d.f32(1),
+    std.dot(runtime.prevQuat, runtime.quat) >= 0
+  );
+  const orientation = std.normalize(
+    std.mix(runtime.prevQuat, runtime.quat * quaternionSign, interpolationAlpha)
+  );
+  const appearWindow = std.max(u.motionDuration * 0.05, 0.0001);
+  const appearScale =
+    u.initialScale +
+    (1 - u.initialScale) * std.clamp(interpolatedLife / appearWindow, 0, 1);
+  const axisXWorld = rotateByQuaternion(
+    orientation,
+    d.vec3f(size.dims.x * 0.5 * appearScale, 0, 0)
+  );
+  const axisYWorld = rotateByQuaternion(
+    orientation,
+    d.vec3f(0, size.dims.y * 0.5 * appearScale, 0)
+  );
+  const initialCameraDistance =
+    u.focalLength / std.max(particle.velocityAndDepth.z, 0.0001);
+  const visible =
+    interpolatedLife >= 0 &&
+    isParticleInFrontOfNearPlane(
+      centerWorld.z + u.focalLength,
+      getParticleNearPlaneDistance(initialCameraDistance),
+      std.abs(axisXWorld.z),
+      std.abs(axisYWorld.z),
+      d.f32(0),
+      d.f32(0)
+    );
+  const projectedCenter = projectParticlePoint(
+    centerWorld,
+    u.viewport,
+    u.focalLength
+  );
+  let axisXScreen =
+    projectParticlePoint(centerWorld + axisXWorld, u.viewport, u.focalLength) -
+    projectedCenter;
+  let axisYScreen =
+    projectParticlePoint(centerWorld + axisYWorld, u.viewport, u.focalLength) -
+    projectedCenter;
+  const perspectiveScale =
+    u.focalLength / std.max(centerWorld.z + u.focalLength, 1);
+  const minimumScale = std.clamp(1 - u.flipIntensity, 0, 1);
+  const yDirection = normalizeOrFallback2(axisYScreen, d.vec2f(0, 1));
+  axisXScreen = clampProjectedAxis(
+    axisXScreen,
+    d.vec2f(-yDirection.y, yDirection.x),
+    size.dims.x * 0.5 * appearScale * perspectiveScale * minimumScale
+  );
+  const xDirection = normalizeOrFallback2(axisXScreen, d.vec2f(1, 0));
+  axisYScreen = clampProjectedAxis(
+    axisYScreen,
+    d.vec2f(-xDirection.y, xDirection.x),
+    size.dims.y * 0.5 * appearScale * perspectiveScale * minimumScale
+  );
+
+  burstTransformLayout.$.transforms[idx] = BurstTransformSchema({
+    centerAndAxisX: d.vec4f(
+      std.select(d.vec2f(-10000), centerWorld.xy, visible),
+      axisXScreen
+    ),
+    axisYAndAppearance: d.vec4f(axisYScreen, colorIdx, size.dims.w),
   });
 });
 
@@ -461,30 +801,19 @@ export const burstConfettiVertex = tgpu.vertexFn({
 })(({ vertexIndex, instanceIndex }) => {
   'use gpu';
 
-  const vertInQuad = vertexIndex % 6;
   let uv = d.vec2f(0);
-  if (vertInQuad === 0) {
-    uv = d.vec2f(0, 0);
-  } else if (vertInQuad === 1) {
+  if (vertexIndex === 1) {
     uv = d.vec2f(1, 0);
-  } else if (vertInQuad === 2) {
-    uv = d.vec2f(1, 1);
-  } else if (vertInQuad === 3) {
-    uv = d.vec2f(0, 0);
-  } else if (vertInQuad === 4) {
-    uv = d.vec2f(1, 1);
-  } else {
+  } else if (vertexIndex === 2) {
     uv = d.vec2f(0, 1);
+  } else if (vertexIndex === 3) {
+    uv = d.vec2f(1, 1);
   }
 
   const u = burstRenderLayout.$.uniforms;
-  const particle = burstRenderLayout.$.particles[instanceIndex]!;
-  const sizeIdx = d.u32(particle.indices.x);
-  const colorIdx = d.u32(particle.indices.y);
-  const size = burstRenderLayout.$.sizes[sizeIdx]!;
-  const width = size.dims.x;
-  const height = size.dims.y;
-  const flags = size.dims.w;
+  const transform = burstRenderLayout.$.transforms[instanceIndex]!;
+  const colorIdx = d.u32(transform.axisYAndAppearance.z);
+  const flags = transform.axisYAndAppearance.w;
   const flagsU = d.u32(flags);
   const textureLayer = d.f32(
     std.bitShiftRight(flagsU, d.u32(SIZE_FLAG_TEXTURE_LAYER_SHIFT)) &
@@ -494,174 +823,17 @@ export const burstConfettiVertex = tgpu.vertexFn({
     std.bitShiftRight(flagsU, d.u32(SIZE_FLAG_MASK_LAYER_SHIFT)) &
       d.u32(SIZE_FLAG_LAYER_MASK)
   );
-
-  const mode = particle.rotationAndMeta.w;
-  const launchDelay = particle.originAndTiming.w;
-  const origin = particle.originAndTiming.xy;
-  const velocity = particle.velocityAndDepth.xy;
-  const safeHDrag = std.max(u.drag.x, 0.001);
-  const safeVDrag = std.max(u.drag.y, 0.001);
-
-  let center = d.vec2f(origin);
-  let effectiveProgress = d.f32(0);
-  let rotationProgress = d.f32(0);
-  let visibility = d.f32(1);
-  let trajectoryTime = d.f32(0);
-  let trajectoryDuration = d.f32(0);
-
-  if (mode < 0.5) {
-    const elapsedMs = u.progress * u.totalDuration;
-    const localMs = elapsedMs - particle.originAndTiming.z;
-    const localProgress = std.max(localMs / std.max(u.flightDuration, 1), 0);
-    rotationProgress = std.min(localProgress, 1);
-    const rawEffectiveProgress = std.max(
-      (localProgress - launchDelay) / std.max(1 - launchDelay, 0.0001),
-      0
-    );
-    effectiveProgress = std.min(rawEffectiveProgress, 1);
-    visibility = std.select(d.f32(0), d.f32(1), localMs > 0);
-
-    trajectoryDuration = u.flightDuration / 1000;
-    const trajectoryProgress = std.select(
-      effectiveProgress,
-      rawEffectiveProgress,
-      u.floor.x > 0.5
-    );
-    trajectoryTime = trajectoryProgress * trajectoryDuration;
-    const hExpDecay = 1 - std.exp(-safeHDrag * trajectoryTime);
-    center = d.vec2f(
-      origin.x + (velocity.x / safeHDrag) * hExpDecay,
-      burstYAtTime(origin.y, velocity.y, u.gravity, safeVDrag, trajectoryTime)
-    );
-  } else {
-    const rawEffectiveProgress = std.max(
-      (u.progress - launchDelay) / std.max(1 - launchDelay, 0.0001),
-      0
-    );
-    effectiveProgress = std.min(rawEffectiveProgress, 1);
-    rotationProgress = std.min(u.progress, 1);
-
-    trajectoryDuration = u.totalDuration / 1000;
-    const trajectoryProgress = std.select(
-      effectiveProgress,
-      rawEffectiveProgress,
-      u.floor.x > 0.5
-    );
-    trajectoryTime = trajectoryProgress * trajectoryDuration;
-    const normalizedT = std.min(
-      trajectoryTime / std.max(trajectoryDuration, 0.0001),
-      1
-    );
-    const hDecayFactor = 1 - std.pow(1 - normalizedT, safeHDrag + 1);
-    center = d.vec2f(
-      origin.x +
-        ((velocity.x * trajectoryDuration) / (safeHDrag + 1)) * hDecayFactor,
-      burstYAtTime(origin.y, velocity.y, u.gravity, safeVDrag, trajectoryTime)
-    );
-  }
-
-  const floorImpactTime = particle.indices.w;
-  if (u.floor.x > 0.5 && trajectoryTime >= floorImpactTime) {
-    const depthScale = particle.velocityAndDepth.z;
-    const floorY = u.viewport.y - std.length(size.dims.xy) * 0.5 * depthScale;
-    const postImpactTime = trajectoryTime - floorImpactTime;
-    const floorRandom = std.fract(
-      particle.velocityAndDepth.w * 17.17 + d.f32(sizeIdx) * 0.37
-    );
-    const variation = std.clamp(u.floor.w, 0, 1);
-    const restitution = std.clamp(
-      u.floor.y + (floorRandom * 2 - 1) * variation,
-      0,
-      1
-    );
-    const impactVelocity = std.max(
-      burstVerticalVelocityAtTime(
-        velocity.y,
-        u.gravity,
-        safeVDrag,
-        floorImpactTime
-      ),
-      0
-    );
-    const bounceVelocity = impactVelocity * restitution;
-    const gravity = std.max(u.gravity, 0.001);
-    const bouncePeriod = std.max((2 * bounceVelocity) / gravity, 0.0001);
-    const springOmega = 3.14159265359 / bouncePeriod;
-    const bounceHeight =
-      ((2 * bounceVelocity * bounceVelocity) / (3.14159265359 * gravity)) *
-      std.abs(std.sin(springOmega * postImpactTime)) *
-      std.exp(-FLOOR_SPRING_DAMPING_PER_SECOND * postImpactTime);
-    center.y = floorY - bounceHeight;
-
-    let impactX = d.f32(origin.x);
-    if (mode < 0.5) {
-      impactX =
-        origin.x +
-        (velocity.x / safeHDrag) * (1 - std.exp(-safeHDrag * floorImpactTime));
-    } else {
-      const impactNormalized = std.min(
-        floorImpactTime / std.max(trajectoryDuration, 0.0001),
-        1
-      );
-      const impactDecay = 1 - std.pow(1 - impactNormalized, safeHDrag + 1);
-      impactX =
-        origin.x +
-        ((velocity.x * trajectoryDuration) / (safeHDrag + 1)) * impactDecay;
-    }
-    const frictionRandom = std.fract(floorRandom * 17.17 + 0.37);
-    const frictionRetention =
-      std.clamp(u.floor.z + (frictionRandom * 2 - 1) * variation, 0, 1) *
-      FLOOR_TANGENTIAL_RETENTION;
-    const horizontalDamping = 1 + (1 - frictionRetention) * 6;
-    center.x =
-      impactX +
-      (center.x - impactX) * std.exp(-horizontalDamping * postImpactTime);
-
-    const impactRotationProgress =
-      launchDelay +
-      (1 - launchDelay) *
-        (floorImpactTime / std.max(trajectoryDuration, 0.0001));
-    const rotationRate =
-      (1 - launchDelay) / std.max(trajectoryDuration, 0.0001);
-    rotationProgress =
-      impactRotationProgress +
-      (rotationRate *
-        (1 - std.exp(-FLOOR_ANGULAR_DAMPING_PER_SECOND * postImpactTime))) /
-        FLOOR_ANGULAR_DAMPING_PER_SECOND;
-  }
-
-  const rotationDir = particle.rotationAndMeta.z;
-  const rz =
-    particle.velocityAndDepth.w +
-    rotationProgress * rotationDir * particle.rotationAndMeta.y;
-  const rx =
-    particle.velocityAndDepth.w +
-    rotationProgress * rotationDir * particle.rotationAndMeta.x;
-
-  const minFlipScale = std.clamp(1 - u.flipIntensity, 0, 1);
-  const rawCos = std.cos(rx);
-  const absClamped = std.max(std.abs(rawCos), minFlipScale);
-  const signedScale = std.select(-absClamped, absClamped, rawCos >= 0);
-  const isTextured = particle.indices.z > 0.5;
-  const oscillatingScale = std.select(signedScale, absClamped, isTextured);
-  const appearT = std.clamp(effectiveProgress / 0.05, 0, 1);
-  const appearScale = u.initialScale + (1 - u.initialScale) * appearT;
-  const scale = appearScale * oscillatingScale * particle.velocityAndDepth.z;
-
-  const local = (uv - d.vec2f(0.5)) * d.vec2f(width, height);
-  const s = std.sin(rz) * scale;
-  const c = std.cos(rz) * scale;
+  const center = transform.centerAndAxisX.xy;
+  const axisX = transform.centerAndAxisX.zw;
+  const axisY = transform.axisYAndAppearance.xy;
   const screen =
-    center + d.vec2f(c * local.x - s * local.y, s * local.x + c * local.y);
+    center + axisX * ((uv.x - 0.5) * 2) + axisY * ((uv.y - 0.5) * 2);
   const clip = toClip(screen);
 
   return {
     position: d.vec4f(clip, 0, 1),
     uv: d.vec2f(uv.x, 1 - uv.y),
-    color: d.vec4f(
-      burstRenderLayout.$.palette[colorIdx]!.rgb,
-      u.opacity * visibility
-    ),
+    color: d.vec4f(burstRenderLayout.$.palette[colorIdx]!.rgb, u.opacity),
     flagsAndLayers: d.vec3f(flags, textureLayer, maskLayer),
   };
 });
@@ -733,23 +905,48 @@ export const burstTextureFragment = tgpu.fragmentFn({
 
 export type BurstConfettiPipelines = {
   initPipeline: TgpuComputePipeline;
+  transformPipeline: TgpuComputePipeline;
   renderPipeline: TgpuRenderPipeline;
 };
+
+const burstPipelineCache = new WeakMap<
+  TgpuRoot,
+  Map<string, BurstConfettiPipelines>
+>();
 
 export const createBurstConfettiPipelines = (
   root: TgpuRoot,
   presentationFormat: GPUTextureFormat,
   useTexturePipeline: boolean
-): BurstConfettiPipelines => ({
-  initPipeline: root.createComputePipeline({
-    compute: burstConfettiInit,
-  }),
-  renderPipeline: root.createRenderPipeline({
-    vertex: burstConfettiVertex,
-    fragment: useTexturePipeline ? burstTextureFragment : burstConfettiFragment,
-    targets: createAlphaBlendTarget(presentationFormat),
-    primitive: {
-      topology: 'triangle-list',
-    },
-  }),
-});
+): BurstConfettiPipelines => {
+  let pipelinesByVariant = burstPipelineCache.get(root);
+  if (!pipelinesByVariant) {
+    pipelinesByVariant = new Map();
+    burstPipelineCache.set(root, pipelinesByVariant);
+  }
+
+  const key = `${presentationFormat}:${useTexturePipeline ? 'texture' : 'mixed'}`;
+  const cached = pipelinesByVariant.get(key);
+  if (cached) return cached;
+
+  const pipelines = {
+    initPipeline: root.createComputePipeline({
+      compute: burstConfettiInit,
+    }),
+    transformPipeline: root.createComputePipeline({
+      compute: burstConfettiTransform,
+    }),
+    renderPipeline: root.createRenderPipeline({
+      vertex: burstConfettiVertex,
+      fragment: useTexturePipeline
+        ? burstTextureFragment
+        : burstConfettiFragment,
+      targets: createAlphaBlendTarget(presentationFormat),
+      primitive: {
+        topology: 'triangle-strip' as const,
+      },
+    }),
+  };
+  pipelinesByVariant.set(key, pipelines);
+  return pipelines;
+};

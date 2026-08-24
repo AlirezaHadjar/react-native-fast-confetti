@@ -5,7 +5,7 @@ type Destroyable = {
 type GPUResourceSet = {
   buffers: readonly Destroyable[];
   textures: readonly Destroyable[];
-  root: Destroyable;
+  root?: Destroyable;
 };
 
 export type GPUFrameRetirement = {
@@ -30,6 +30,7 @@ export const destroyGPUResourceSet = ({
 }: GPUResourceSet) => {
   destroyAll(buffers);
   destroyAll(textures);
+  if (!root) return;
   try {
     root.destroy();
   } catch {

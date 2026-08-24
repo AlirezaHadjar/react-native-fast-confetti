@@ -1,5 +1,3 @@
-import { tgpu } from 'typegpu';
-
 import type { ColorRange, SizeVariation } from '../../hooks/useConfettiFlakes';
 import {
   canUseTextureOnlyPipeline,
@@ -8,17 +6,19 @@ import {
   toSizeInputs,
 } from '../resourcePacking';
 import {
-  ComputeSpawnsSchema,
   InitSizeArraySchema,
   InitUniformsSchema,
   PaletteArraySchema,
-  RuntimeArraySchema,
   SizeArraySchema,
   UniformsSchema,
   computeLayout,
   initLayout,
   renderLayout,
 } from '../shaders/confetti';
+import {
+  ParticleRuntimeArraySchema,
+  ParticleSpawnArraySchema,
+} from '../shaders/physics/state';
 import { destroyGPUResourceSet } from '../resourceCleanup';
 import {
   createFlakeTexturesArray,
@@ -28,6 +28,7 @@ import {
   prepareShapeMasksArray,
 } from '../textureResources';
 import { toPaletteInputs } from './palette';
+import { getSharedTypeGPURoot } from '../sharedTypeGPURoot';
 
 export type ConfettiResourceConfig = {
   device: GPUDevice;
@@ -60,14 +61,16 @@ export const createConfettiResources = async (
   // Complete all fallible CPU rasterization before allocating GPU resources.
   // The transaction below owns every allocation until the complete resource
   // set is returned, so a failed upload cannot leak a partial atlas.
-  const root = tgpu.initFromDevice({ device, unstable_names: 'strict' });
+  const root = getSharedTypeGPURoot(device);
   const queue = device.queue;
   const rawTextures: GPUTexture[] = [];
   try {
     const uniforms = root.createUniform(UniformsSchema);
     const initUniforms = root.createUniform(InitUniformsSchema);
-    const spawnsBuffer = root.createMutable(ComputeSpawnsSchema(count));
-    const runtimeBuffer = root.createMutable(RuntimeArraySchema(count));
+    const spawnsBuffer = root.createMutable(ParticleSpawnArraySchema(count));
+    const runtimeBuffer = root.createMutable(
+      ParticleRuntimeArraySchema(count)
+    );
     const sizesBuffer = root.createReadonly(
       SizeArraySchema(sizeVariations.length),
       toSizeInputs(sizeVariations, sizeFlags)
@@ -142,7 +145,7 @@ export const createConfettiResources = async (
       canUseTextureOnlyPipeline: canUseTextureOnlyPipeline(sizeVariations),
     };
   } catch (error) {
-    destroyGPUResourceSet({ buffers: [], textures: rawTextures, root });
+    destroyGPUResourceSet({ buffers: [], textures: rawTextures });
     throw error;
   }
 };
@@ -163,6 +166,5 @@ export const destroyConfettiResources = (resources: ConfettiResources) => {
       resources.paletteBuffer.buffer,
     ],
     textures: [resources.texturesArray, resources.shapeMasksArray],
-    root: resources.root,
   });
 };

@@ -31,15 +31,29 @@ import {
 import { createAlphaBlendTarget } from './blendTarget';
 import {
   integrateQuaternion,
-  quaternionConjugate,
   random01,
   randomRange,
   rotateByQuaternion,
 } from './gpuMath';
 import { InitSizeSchema } from './sharedSchemas';
+import {
+  computeAirborneAcceleration,
+  integrateAngularVelocity,
+} from './physics/aerodynamics';
+import {
+  ParticleRuntimeSchema,
+  ParticleSpawnSchema,
+} from './physics/state';
+import {
+  clampProjectedAxis,
+  normalizeOrFallback2,
+  projectParticlePoint,
+} from './physics/projection';
 
-export const TESS = 1;
-export const VERTS_PER_FLAKE = TESS * TESS * 6;
+// A flake is a single instanced quad. A triangle strip covers it with four
+// vertex invocations; the previous triangle-list path repeated two corners and
+// paid for six executions of the relatively expensive vertex shader.
+export const VERTS_PER_FLAKE = 4;
 
 export const UniformsSchema = d.struct({
   viewport: d.vec2f,
@@ -78,27 +92,6 @@ export const UniformsSchema = d.struct({
   settleOnFloor: d.f32,
 });
 
-export const SpawnSchema = d.struct({
-  pos0: d.vec3f,
-  vel0: d.vec3f,
-  quat0: d.vec4f,
-  omega0: d.vec3f,
-  drag: d.vec4f,
-  info: d.vec4f,
-});
-
-export const RuntimeSchema = d.struct({
-  pos: d.vec3f,
-  life: d.f32,
-  prevPos: d.vec3f,
-  prevLife: d.f32,
-  vel: d.vec3f,
-  floorBounceScale: d.f32,
-  quat: d.vec4f,
-  prevQuat: d.vec4f,
-  omega: d.vec3f,
-});
-
 export const InitUniformsSchema = d.struct({
   viewportAndLayout: d.vec4f,
   grid: d.vec4f,
@@ -118,8 +111,6 @@ export const SizeSchema = d.struct({
 
 export const PaletteColorSchema = d.vec4f;
 
-export const SPAWN_BYTES = d.sizeOf(SpawnSchema);
-export const RUNTIME_BYTES = d.sizeOf(RuntimeSchema);
 export const SIZE_META_BYTES = d.sizeOf(SizeSchema);
 export const UNIFORMS_BYTES = d.sizeOf(UniformsSchema);
 export const INIT_UNIFORMS_BYTES = d.sizeOf(InitUniformsSchema);
@@ -238,10 +229,6 @@ export const UNIFORM_FLOAT_OFFSETS = {
   ),
 } as const;
 
-export const ComputeSpawnsSchema = (count: number) =>
-  d.arrayOf(SpawnSchema, count);
-export const RuntimeArraySchema = (count: number) =>
-  d.arrayOf(RuntimeSchema, count);
 export const SizeArraySchema = (count: number) => d.arrayOf(SizeSchema, count);
 export const PaletteArraySchema = (count: number) =>
   d.arrayOf(PaletteColorSchema, count);
@@ -255,12 +242,12 @@ export const initLayout = tgpu
       visibility: ['compute'],
     },
     spawns: {
-      storage: d.arrayOf(SpawnSchema),
+      storage: d.arrayOf(ParticleSpawnSchema),
       access: 'mutable',
       visibility: ['compute'],
     },
     runtime: {
-      storage: d.arrayOf(RuntimeSchema),
+      storage: d.arrayOf(ParticleRuntimeSchema),
       access: 'mutable',
       visibility: ['compute'],
     },
@@ -279,12 +266,12 @@ export const computeLayout = tgpu
       visibility: ['compute'],
     },
     spawns: {
-      storage: d.arrayOf(SpawnSchema),
+      storage: d.arrayOf(ParticleSpawnSchema),
       access: 'readonly',
       visibility: ['compute'],
     },
     runtime: {
-      storage: d.arrayOf(RuntimeSchema),
+      storage: d.arrayOf(ParticleRuntimeSchema),
       access: 'mutable',
       visibility: ['compute'],
     },
@@ -303,12 +290,12 @@ export const renderLayout = tgpu
       visibility: ['vertex', 'fragment'],
     },
     spawns: {
-      storage: d.arrayOf(SpawnSchema),
+      storage: d.arrayOf(ParticleSpawnSchema),
       access: 'readonly',
       visibility: ['vertex'],
     },
     runtime: {
-      storage: d.arrayOf(RuntimeSchema),
+      storage: d.arrayOf(ParticleRuntimeSchema),
       access: 'readonly',
       visibility: ['vertex'],
     },
@@ -338,17 +325,6 @@ export const renderLayout = tgpu
     },
   })
   .$idx(0);
-
-const hash13 = tgpu.fn(
-  [d.vec3f],
-  d.f32
-)((p) => {
-  'use gpu';
-
-  let q = std.fract(p * 0.1031);
-  q = q + std.dot(q, q.zyx + 31.32);
-  return std.fract((q.x + q.y) * q.z);
-});
 
 export const confettiInit = tgpu.computeFn({
   in: {
@@ -489,7 +465,7 @@ export const confettiInit = tgpu.computeFn({
     continuous
   );
 
-  const spawn = SpawnSchema({
+  const spawn = ParticleSpawnSchema({
     pos0: d.vec3f(x, y, z),
     vel0: d.vec3f(initialVx, initialVy, initialVz),
     quat0: quat,
@@ -498,8 +474,8 @@ export const confettiInit = tgpu.computeFn({
     info: d.vec4f(d.f32(sizeIndex), d.f32(colorIndex), u1, phaseOffset),
   });
   const initialLife = -phaseOffset * u.physics.x;
-  initLayout.$.spawns[idx] = SpawnSchema(spawn);
-  initLayout.$.runtime[idx] = RuntimeSchema({
+  initLayout.$.spawns[idx] = ParticleSpawnSchema(spawn);
+  initLayout.$.runtime[idx] = ParticleRuntimeSchema({
     pos: d.vec3f(spawn.pos0),
     life: initialLife,
     prevPos: d.vec3f(spawn.pos0),
@@ -510,70 +486,6 @@ export const confettiInit = tgpu.computeFn({
     prevQuat: d.vec4f(spawn.quat0),
     omega: d.vec3f(spawn.omega0),
   });
-});
-
-const vnoise3 = tgpu.fn(
-  [d.vec3f],
-  d.f32
-)((x) => {
-  'use gpu';
-
-  const i = std.floor(x);
-  const f = std.fract(x);
-  const w = f * f * (3 - 2 * f);
-  const a = std.mix(
-    hash13(i + d.vec3f(0, 0, 0)),
-    hash13(i + d.vec3f(1, 0, 0)),
-    w.x
-  );
-  const b = std.mix(
-    hash13(i + d.vec3f(0, 1, 0)),
-    hash13(i + d.vec3f(1, 1, 0)),
-    w.x
-  );
-  const c = std.mix(
-    hash13(i + d.vec3f(0, 0, 1)),
-    hash13(i + d.vec3f(1, 0, 1)),
-    w.x
-  );
-  const d0 = std.mix(
-    hash13(i + d.vec3f(0, 1, 1)),
-    hash13(i + d.vec3f(1, 1, 1)),
-    w.x
-  );
-  return std.mix(std.mix(a, b, w.y), std.mix(c, d0, w.y), w.z);
-});
-
-const windField = tgpu.fn(
-  [d.vec3f, d.f32],
-  d.vec3f
-)((p, t) => {
-  'use gpu';
-
-  const scale = d.vec3f(0.006, 0.006, 0.01);
-  const tv = d.vec3f(t * 0.25);
-  const eps = 1;
-  const q = p * scale + tv;
-  const dY = vnoise3(q + d.vec3f(0, eps, 0)) - vnoise3(q - d.vec3f(0, eps, 0));
-  const dX = vnoise3(q + d.vec3f(eps, 0, 0)) - vnoise3(q - d.vec3f(eps, 0, 0));
-  const dZ = vnoise3(q + d.vec3f(0, 0, eps)) - vnoise3(q - d.vec3f(0, 0, eps));
-  return d.vec3f(dY, -dX * 0.5, dZ) * 180;
-});
-
-const project = tgpu.fn(
-  [d.vec3f],
-  d.vec2f
-)((p) => {
-  'use gpu';
-
-  const u = renderLayout.$.uniforms;
-  const cx = u.viewport.x * 0.5;
-  const cy = u.viewport.y * 0.5;
-  const zRel = std.max(p.z + u.focalLength, 1);
-  return d.vec2f(
-    cx + (p.x - cx) * (u.focalLength / zRel),
-    cy + (p.y - cy) * (u.focalLength / zRel)
-  );
 });
 
 const toClip = tgpu.fn(
@@ -587,26 +499,6 @@ const toClip = tgpu.fn(
     (screen.x / u.viewport.x) * 2 - 1,
     1 - (screen.y / u.viewport.y) * 2
   );
-});
-
-const normalizeOr2 = tgpu.fn(
-  [d.vec2f, d.vec2f],
-  d.vec2f
-)((v, fallback) => {
-  'use gpu';
-
-  const len = std.length(v);
-  return d.vec2f(std.select(fallback, v / std.max(len, 0.0001), len > 0.0001));
-});
-
-const clampAxis = tgpu.fn(
-  [d.vec2f, d.vec2f, d.f32],
-  d.vec2f
-)((axis, fallback, minLen) => {
-  'use gpu';
-
-  const dir = normalizeOr2(axis, fallback);
-  return dir * std.max(std.length(axis), minLen);
 });
 
 const hash12 = tgpu.fn(
@@ -701,7 +593,7 @@ export const confettiCompute = tgpu.computeFn({
 
   const u = computeLayout.$.uniforms;
   const spawn = computeLayout.$.spawns[idx]!;
-  let rt = RuntimeSchema(computeLayout.$.runtime[idx]!);
+  let rt = ParticleRuntimeSchema(computeLayout.$.runtime[idx]!);
 
   for (const step of std.range(MAX_SIMULATION_STEPS_PER_FRAME)) {
     if (d.f32(step) < u.stepsThisFrame) {
@@ -712,7 +604,7 @@ export const confettiCompute = tgpu.computeFn({
 
       if (rt.life >= 0) {
         if (u.continuous > 0.5 && rt.pos.y > u.viewport.y + 128) {
-          rt = RuntimeSchema({
+          rt = ParticleRuntimeSchema({
             pos: d.vec3f(spawn.pos0),
             life: d.f32(0),
             prevPos: d.vec3f(spawn.pos0),
@@ -725,31 +617,20 @@ export const confettiCompute = tgpu.computeFn({
           });
         }
 
-        const Cn = spawn.drag.x;
-        const Ct = spawn.drag.y;
         const Crot = spawn.drag.z;
-        const magnusK = spawn.drag.w;
-
-        const qConjOrient = quaternionConjugate(rt.quat);
-        const vBody = rotateByQuaternion(qConjOrient, rt.vel);
-        const fBody = d.vec3f(
-          -Cn * vBody.x * std.abs(vBody.x),
-          -Cn * vBody.y * std.abs(vBody.y),
-          -Ct * vBody.z * std.abs(vBody.z)
-        );
-        const fDrag = rotateByQuaternion(rt.quat, fBody);
-
-        let fMagnus = d.vec3f(0);
-        if (u.magnusStrength > 0.001) {
-          fMagnus = magnusK * u.magnusStrength * std.cross(rt.omega, rt.vel);
-        }
-        let fWind = d.vec3f(0);
-        if (u.windStrength > 0.001) {
-          const stepTime = u.time + d.f32(step) * u.dt;
-          fWind = windField(rt.pos, stepTime) * u.windStrength;
-        }
         const fGravity = u.gravityDir * u.gravityMag;
-        const accel = fGravity + fDrag + fMagnus + fWind;
+        const stepTime = u.time + d.f32(step) * u.dt;
+        const accel = computeAirborneAcceleration(
+          rt.pos,
+          rt.quat,
+          rt.vel,
+          rt.omega,
+          spawn.drag,
+          fGravity,
+          u.windStrength,
+          u.magnusStrength,
+          stepTime
+        );
 
         let newVel = rt.vel + accel * u.dt;
         const vMax = u.gravityMag * 1.5;
@@ -767,8 +648,7 @@ export const confettiCompute = tgpu.computeFn({
             rt.pos.z + u.focalLength,
             getParticleNearPlaneDistance(spawn.pos0.z + u.focalLength)
           );
-          const perspectiveScale =
-            u.focalLength / floorPerspectiveDistance;
+          const perspectiveScale = u.focalLength / floorPerspectiveDistance;
           const floorInset = std.length(dimensions.xy) * 0.5 * perspectiveScale;
           const floorY = u.viewport.y - floorInset;
           if (rt.pos.y > floorY && rt.vel.y > 0) {
@@ -809,25 +689,17 @@ export const confettiCompute = tgpu.computeFn({
           }
         }
 
-        const omega0Len = std.length(spawn.omega0);
-        const tumbleAxis = std.select(
-          d.vec3f(1, 0, 0),
-          spawn.omega0 / std.max(omega0Len, 0.0001),
-          omega0Len > 0.0001
-        );
         let tumbleDrive = d.f32(1);
         if (u.settleOnFloor > 0.5 && rt.floorBounceScale < 1) {
           tumbleDrive = rt.floorBounceScale;
         }
-        const tumbleBias =
-          tumbleAxis * omega0Len * omega0Len * Crot * tumbleDrive;
-        const damping = -Crot * rt.omega * std.length(rt.omega);
-        let newOmega = rt.omega + (tumbleBias + damping) * u.dt;
-        const wMax = std.max(omega0Len * 1.5, 25);
-        const wMagSq = std.dot(newOmega, newOmega);
-        if (wMagSq > wMax * wMax) {
-          newOmega = newOmega * (wMax * std.inverseSqrt(wMagSq));
-        }
+        let newOmega = integrateAngularVelocity(
+          spawn.omega0,
+          rt.omega,
+          Crot,
+          tumbleDrive,
+          u.dt
+        );
         if (u.settleOnFloor > 0.5 && rt.floorBounceScale < 1) {
           newOmega *= std.max(0, 1 - FLOOR_ANGULAR_DAMPING_PER_SECOND * u.dt);
           if (rt.floorBounceScale <= FLOOR_SLEEP_BOUNCE_SCALE) {
@@ -840,7 +712,7 @@ export const confettiCompute = tgpu.computeFn({
     }
   }
 
-  computeLayout.$.runtime[idx] = RuntimeSchema(rt);
+  computeLayout.$.runtime[idx] = ParticleRuntimeSchema(rt);
 });
 
 const VertexOut = {
@@ -862,29 +734,17 @@ export const confettiVertex = tgpu.vertexFn({
   'use gpu';
 
   const u = renderLayout.$.uniforms;
-  const tess = d.u32(TESS);
-  const cellIdx = d.u32(vertexIndex / 6);
-  const vertInCell = vertexIndex % 6;
-  const cellX = cellIdx % tess;
-  const cellY = d.u32(cellIdx / tess);
-
-  let off = d.vec2f(0);
-  if (vertInCell === 0) {
-    off = d.vec2f(0, 0);
-  } else if (vertInCell === 1) {
-    off = d.vec2f(1, 0);
-  } else if (vertInCell === 2) {
-    off = d.vec2f(1, 1);
-  } else if (vertInCell === 3) {
-    off = d.vec2f(0, 0);
-  } else if (vertInCell === 4) {
-    off = d.vec2f(1, 1);
-  } else {
-    off = d.vec2f(0, 1);
+  let uv = d.vec2f(0);
+  if (vertexIndex === 1) {
+    uv = d.vec2f(1, 0);
+  } else if (vertexIndex === 2) {
+    uv = d.vec2f(0, 1);
+  } else if (vertexIndex === 3) {
+    uv = d.vec2f(1, 1);
   }
 
-  const u0 = (d.f32(cellX) + off.x) / TESS;
-  const v0 = (d.f32(cellY) + off.y) / TESS;
+  const u0 = uv.x;
+  const v0 = uv.y;
 
   const spawn = renderLayout.$.spawns[instanceIndex]!;
   const rt = renderLayout.$.runtime[instanceIndex]!;
@@ -984,9 +844,7 @@ export const confettiVertex = tgpu.vertexFn({
   // This decision is independent of vertexIndex, so both triangles disappear
   // together instead of one stretching across the viewport.
   const initialCameraDistance = spawn.pos0.z + u.focalLength;
-  const nearPlaneDistance = getParticleNearPlaneDistance(
-    initialCameraDistance
-  );
+  const nearPlaneDistance = getParticleNearPlaneDistance(initialCameraDistance);
   const isInFrontOfNearPlane = isParticleInFrontOfNearPlane(
     centerWorld.z + u.focalLength,
     nearPlaneDistance,
@@ -1012,25 +870,34 @@ export const confettiVertex = tgpu.vertexFn({
   // geometry around the particle center. Projecting the center itself pulled
   // above-screen reset positions toward the viewport center and made them
   // visible, while also making recycle thresholds disagree with rendering.
-  const projectedCenter = project(centerWorld);
+  const projectedCenter = projectParticlePoint(
+    centerWorld,
+    u.viewport,
+    u.focalLength
+  );
   const centerScreen = d.vec2f(centerWorld.x, centerWorld.y);
-  const perspectiveScale =
-    u.focalLength / (centerWorld.z + u.focalLength);
+  const perspectiveScale = u.focalLength / (centerWorld.z + u.focalLength);
 
-  let axisXScreen = project(centerWorld + axisXWorld) - projectedCenter;
-  let axisYScreen = project(centerWorld + axisYWorld) - projectedCenter;
-  const bendScreen = project(centerWorld + axisZWorld) - projectedCenter;
+  let axisXScreen =
+    projectParticlePoint(centerWorld + axisXWorld, u.viewport, u.focalLength) -
+    projectedCenter;
+  let axisYScreen =
+    projectParticlePoint(centerWorld + axisYWorld, u.viewport, u.focalLength) -
+    projectedCenter;
+  const bendScreen =
+    projectParticlePoint(centerWorld + axisZWorld, u.viewport, u.focalLength) -
+    projectedCenter;
 
-  const yDir0 = normalizeOr2(axisYScreen, d.vec2f(0, 1));
+  const yDir0 = normalizeOrFallback2(axisYScreen, d.vec2f(0, 1));
   const xFallback = d.vec2f(-yDir0.y, yDir0.x);
   const minVisibleScale = std.clamp(u.minVisibleScale, 0, 1);
-  axisXScreen = clampAxis(
+  axisXScreen = clampProjectedAxis(
     axisXScreen,
     xFallback,
     width * 0.5 * appearScale * perspectiveScale * minVisibleScale
   );
-  const xDir = normalizeOr2(axisXScreen, d.vec2f(1, 0));
-  axisYScreen = clampAxis(
+  const xDir = normalizeOrFallback2(axisXScreen, d.vec2f(1, 0));
+  axisYScreen = clampProjectedAxis(
     axisYScreen,
     d.vec2f(-xDir.y, xDir.x),
     height * 0.5 * appearScale * perspectiveScale * minVisibleScale
@@ -1045,9 +912,11 @@ export const confettiVertex = tgpu.vertexFn({
   if (u.motionBlurAmount > 0.001 && speed > 1) {
     const velDir = rt.vel / speed;
     const blurWorld =
-      centerWorld +
-      velDir * ((v0 - 0.5) * height * motionBlurStretch);
-    screen = screen + (project(blurWorld) - projectedCenter);
+      centerWorld + velDir * ((v0 - 0.5) * height * motionBlurStretch);
+    screen =
+      screen +
+      (projectParticlePoint(blurWorld, u.viewport, u.focalLength) -
+        projectedCenter);
   }
 
   // Continuous particles carry a negative lifetime until their phase begins.
@@ -1320,33 +1189,52 @@ export type ConfettiPipelines = {
   textureRenderPipeline: TgpuRenderPipeline | null;
 };
 
+const confettiPipelineCache = new WeakMap<
+  TgpuRoot,
+  Map<string, ConfettiPipelines>
+>();
+
 export const createConfettiPipelines = (
   root: TgpuRoot,
   presentationFormat: GPUTextureFormat,
   includeTexturePipeline: boolean
-): ConfettiPipelines => ({
-  initPipeline: root.createComputePipeline({
-    compute: confettiInit,
-  }),
-  computePipeline: root.createComputePipeline({
-    compute: confettiCompute,
-  }),
-  renderPipeline: root.createRenderPipeline({
-    vertex: confettiVertex,
-    fragment: confettiFragment,
-    targets: createAlphaBlendTarget(presentationFormat),
-    primitive: {
-      topology: 'triangle-list',
-    },
-  }),
-  textureRenderPipeline: includeTexturePipeline
-    ? root.createRenderPipeline({
-        vertex: confettiVertex,
-        fragment: confettiTextureFragment,
-        targets: createAlphaBlendTarget(presentationFormat),
-        primitive: {
-          topology: 'triangle-list',
-        },
-      })
-    : null,
-});
+): ConfettiPipelines => {
+  let pipelinesByVariant = confettiPipelineCache.get(root);
+  if (!pipelinesByVariant) {
+    pipelinesByVariant = new Map();
+    confettiPipelineCache.set(root, pipelinesByVariant);
+  }
+
+  const key = `${presentationFormat}:${includeTexturePipeline ? 'texture' : 'flat'}`;
+  const cached = pipelinesByVariant.get(key);
+  if (cached) return cached;
+
+  const pipelines = {
+    initPipeline: root.createComputePipeline({
+      compute: confettiInit,
+    }),
+    computePipeline: root.createComputePipeline({
+      compute: confettiCompute,
+    }),
+    renderPipeline: root.createRenderPipeline({
+      vertex: confettiVertex,
+      fragment: confettiFragment,
+      targets: createAlphaBlendTarget(presentationFormat),
+      primitive: {
+        topology: 'triangle-strip' as const,
+      },
+    }),
+    textureRenderPipeline: includeTexturePipeline
+      ? root.createRenderPipeline({
+          vertex: confettiVertex,
+          fragment: confettiTextureFragment,
+          targets: createAlphaBlendTarget(presentationFormat),
+          primitive: {
+            topology: 'triangle-strip' as const,
+          },
+        })
+      : null,
+  };
+  pipelinesByVariant.set(key, pipelines);
+  return pipelines;
+};

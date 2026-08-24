@@ -5,7 +5,7 @@ export type RendererType = 'webgpu' | 'skia';
 
 // Flip this single flag to run every kitchen-sink example at 20,000 particles
 // per component/origin. Keep it disabled for the normal demo configuration.
-export const PARTICLE_PRESSURE_MODE = true;
+export const PARTICLE_PRESSURE_MODE = false;
 
 const PRESSURE_PARTICLE_COUNT = Platform.select({
   android: 5_000,

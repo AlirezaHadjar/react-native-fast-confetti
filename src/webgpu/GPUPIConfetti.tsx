@@ -142,10 +142,6 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
     const settlingDurationSeconds =
       estimateFloorSettlingDuration(resolvedFloor);
     const cycleDuration = totalDuration + settlingDurationSeconds * 1000;
-    const floorSearchDuration =
-      flightDuration / 1000 +
-      settlingDurationSeconds / Math.max(1 - launchDelayMax, 0.05);
-
     const advanceCycle = useCallback(() => {
       setRestartState((state) => ({ ...state, seed: state.seed + 1 }));
     }, []);
@@ -179,12 +175,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
         layoutCount: totalCount,
         containerHeight,
         launchDelayMax,
-        floorImpact: [
-          gravity * containerHeight,
-          verticalDrag,
-          floorSearchDuration,
-          resolvedFloor.enabled ? 1 : 0,
-        ] as const,
+        flightDurationSeconds: flightDuration / 1000,
         origins:
           ready && totalCount > 0
             ? toPIBurstOrigins(
@@ -199,10 +190,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
         totalCount,
         containerHeight,
         launchDelayMax,
-        gravity,
-        verticalDrag,
-        floorSearchDuration,
-        resolvedFloor.enabled,
+        flightDuration,
         ready,
         piConfigs,
         currentBlastPositions,
@@ -254,7 +242,6 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
         allColors={allColors}
         colorOverrides={colorOverrides}
         parentColorCount={parentColorCount}
-        totalDuration={totalDuration}
         cycleDuration={cycleDuration}
         flightDuration={flightDuration}
         floor={resolvedFloor}

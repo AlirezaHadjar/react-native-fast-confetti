@@ -36,6 +36,19 @@ import { useGPUResourceRetirement } from './hooks/useGPUResourceRetirement';
 import { GPUCanvasHost, gpuCanvasStyles } from './GPUCanvasHost';
 import type { ReadableValue } from './controlValues';
 import { useGPUCanvasSurfaceCleanup } from './hooks/useGPUCanvasSurfaceCleanup';
+import { DEFAULT_FOCAL_LENGTH_RATIO } from './constants';
+import {
+  BURST_SCHEDULE_ACCUMULATOR,
+  BURST_SCHEDULE_ALPHA,
+  BURST_SCHEDULE_REINITIALIZE,
+  BURST_SCHEDULE_STEPS,
+  BURST_SCHEDULE_VALUE_COUNT,
+  writeBurstFixedStepSchedule,
+} from './burstFixedStepScheduler';
+import {
+  FIXED_SIMULATION_STEP_SECONDS,
+  SCHEDULE_VALUE_COUNT,
+} from './fixedStepScheduler';
 
 type Props = {
   device?: GPUDevice;
@@ -47,7 +60,6 @@ type Props = {
   allColors: string[];
   colorOverrides: (ColorRange | null)[];
   parentColorCount: number;
-  totalDuration: number;
   cycleDuration: number;
   flightDuration: number;
   floor: ResolvedSettleOnFloor;
@@ -75,13 +87,16 @@ type RendererProps = Omit<
 type RawFrameState = DedicatedGPUFrameState & {
   uniformBuffer: GPUBuffer;
   initPipeline: GPUComputePipeline;
+  transformPipeline: GPUComputePipeline;
   renderPipeline: GPURenderPipeline;
   initBindGroup: GPUBindGroup;
+  transformBindGroup: GPUBindGroup;
   renderBindGroup: GPUBindGroup;
   workgroupCount: number;
   count: number;
   viewportWidth: number;
   viewportHeight: number;
+  focalLength: number;
 };
 
 type FrameConfig = {
@@ -112,10 +127,9 @@ const initializeParticles = (
     globals: [
       initialization.containerHeight,
       initialization.launchDelayMax,
-      0,
-      0,
+      state.focalLength,
+      initialization.flightDurationSeconds,
     ],
-    floorImpact: initialization.floorImpact,
   });
 
   const encoder = state.device.createCommandEncoder();
@@ -135,7 +149,6 @@ const GPUBurstConfettiRenderer = ({
   allColors,
   colorOverrides,
   parentColorCount,
-  totalDuration,
   cycleDuration,
   flightDuration,
   floor,
@@ -167,6 +180,15 @@ const GPUBurstConfettiRenderer = ({
     new WeakMap<BurstConfettiResources, GPUFrameRetirement>()
   );
   const lastRenderedProgress = useSharedValue(Number.NaN);
+  const lastTargetSimulationSeconds = useSharedValue(0);
+  const simulationAccumulator = useSharedValue(0);
+  const simulatedSeconds = useSharedValue(0);
+  const fixedStepScratchRef = useLazyRef(
+    () => new Float64Array(SCHEDULE_VALUE_COUNT)
+  );
+  const burstScheduleRef = useLazyRef(
+    () => new Float64Array(BURST_SCHEDULE_VALUE_COUNT)
+  );
   const surfaceReady = useSharedValue(false);
 
   const reportReady = useCallback(() => onReadyChange(true), [onReadyChange]);
@@ -230,11 +252,12 @@ const GPUBurstConfettiRenderer = ({
     const dpr = PixelRatio.get();
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
 
-    const { initPipeline, renderPipeline } = createBurstConfettiPipelines(
-      resources.root,
-      presentationFormat,
-      resources.canUseTextureOnlyPipeline
-    );
+    const { initPipeline, transformPipeline, renderPipeline } =
+      createBurstConfettiPipelines(
+        resources.root,
+        presentationFormat,
+        resources.canUseTextureOnlyPipeline
+      );
 
     const nextRawFrameState: RawFrameState = {
       device,
@@ -242,13 +265,19 @@ const GPUBurstConfettiRenderer = ({
       context,
       uniformBuffer: resources.uniforms.buffer.buffer,
       initPipeline: resources.root.unwrap(initPipeline),
+      transformPipeline: resources.root.unwrap(transformPipeline),
       renderPipeline: resources.root.unwrap(renderPipeline),
       initBindGroup: resources.root.unwrap(resources.initBindGroup),
+      transformBindGroup: resources.root.unwrap(resources.transformBindGroup),
       renderBindGroup: resources.root.unwrap(resources.renderBindGroup),
       workgroupCount: Math.ceil(count / 64),
       count,
       viewportWidth,
       viewportHeight,
+      focalLength: Math.max(
+        100,
+        viewportHeight * DEFAULT_FOCAL_LENGTH_RATIO
+      ),
     };
     const retirement = createGPUFrameRetirement();
     frameRetirementsRef.current.set(resources, retirement);
@@ -272,6 +301,9 @@ const GPUBurstConfettiRenderer = ({
       reportReady
     );
     lastRenderedProgress.set(Number.NaN);
+    lastTargetSimulationSeconds.set(0);
+    simulationAccumulator.set(0);
+    simulatedSeconds.set(0);
   }, [
     device,
     resources,
@@ -281,6 +313,9 @@ const GPUBurstConfettiRenderer = ({
     viewportWidth,
     viewportHeight,
     lastRenderedProgress,
+    lastTargetSimulationSeconds,
+    simulationAccumulator,
+    simulatedSeconds,
     surfaceReady,
     reportReady,
     initialization.origins.length,
@@ -317,12 +352,18 @@ const GPUBurstConfettiRenderer = ({
       initialization,
     };
     lastRenderedProgress.set(Number.NaN);
+    lastTargetSimulationSeconds.set(0);
+    simulationAccumulator.set(0);
+    simulatedSeconds.set(0);
     onReadyChange(true);
   }, [
     activeRawFrameState,
     resources,
     initialization,
     lastRenderedProgress,
+    lastTargetSimulationSeconds,
+    simulationAccumulator,
+    simulatedSeconds,
     onReadyChange,
   ]);
 
@@ -332,9 +373,16 @@ const GPUBurstConfettiRenderer = ({
     return (
       surfaceReady.get() &&
       (currentProgress !== lastRenderedProgress.get() ||
-        (running.get() && currentProgress < 1))
+        (running.get() && currentProgress < 1) ||
+        simulationAccumulator.get() >= FIXED_SIMULATION_STEP_SECONDS)
     );
-  }, [lastRenderedProgress, progress, running, surfaceReady]);
+  }, [
+    lastRenderedProgress,
+    progress,
+    running,
+    simulationAccumulator,
+    surfaceReady,
+  ]);
 
   const activeFrameRetirement =
     activeRawFrameState === frameRegistration?.rawFrameState
@@ -358,10 +406,51 @@ const GPUBurstConfettiRenderer = ({
       'worklet';
 
       const currentProgress = progress.get();
-      if (!running.get() && currentProgress === lastRenderedProgress.get()) {
+      if (
+        !running.get() &&
+        currentProgress === lastRenderedProgress.get() &&
+        simulationAccumulator.get() < FIXED_SIMULATION_STEP_SECONDS
+      ) {
         return null;
       }
       lastRenderedProgress.set(currentProgress);
+
+      const targetSimulationSeconds =
+        (currentProgress * cycleDuration) / 1000;
+      const fixedStepScratch = fixedStepScratchRef.current;
+      const burstSchedule = burstScheduleRef.current;
+      writeBurstFixedStepSchedule(
+        lastTargetSimulationSeconds.get(),
+        targetSimulationSeconds,
+        simulationAccumulator.get(),
+        fixedStepScratch,
+        burstSchedule
+      );
+      const shouldReinitialize =
+        burstSchedule[BURST_SCHEDULE_REINITIALIZE]! > 0.5;
+      const simulationSteps = burstSchedule[BURST_SCHEDULE_STEPS]!;
+      const interpolationAlpha = burstSchedule[BURST_SCHEDULE_ALPHA]!;
+      simulationAccumulator.set(
+        burstSchedule[BURST_SCHEDULE_ACCUMULATOR]!
+      );
+      lastTargetSimulationSeconds.set(targetSimulationSeconds);
+      if (shouldReinitialize) {
+        simulatedSeconds.set(0);
+      }
+      const simulationTimeBeforeFrame = simulatedSeconds.get();
+      if (simulationSteps > 0) {
+        simulatedSeconds.set(
+          simulationTimeBeforeFrame +
+            simulationSteps * FIXED_SIMULATION_STEP_SECONDS
+        );
+      }
+
+      const safeGravity = Math.max(gravityPxPerSec2, 0.001);
+      const dragScale = Math.max(
+        (horizontalDrag + verticalDrag) / 6,
+        0.05
+      );
+      const normalDrag = (4 / safeGravity) * dragScale;
 
       const uniformData = uniformDataRef.current;
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.viewportX] =
@@ -369,18 +458,25 @@ const GPUBurstConfettiRenderer = ({
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.viewportY] =
         state.viewportHeight;
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.opacity] = opacity.get();
-      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.progress] =
-        totalDuration > 0
-          ? (currentProgress * cycleDuration) / totalDuration
-          : currentProgress;
-      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.totalDuration] = totalDuration;
-      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.flightDuration] = flightDuration;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.focalLength] = state.focalLength;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.dt] =
+        FIXED_SIMULATION_STEP_SECONDS;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.time] =
+        simulationTimeBeforeFrame;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.stepsThisFrame] =
+        simulationSteps;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.interpolationAlpha] =
+        interpolationAlpha;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.motionDuration] =
+        flightDuration / 1000;
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.gravity] = gravityPxPerSec2;
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.initialScale] = initialScale;
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.flipIntensity] = flipIntensity;
-      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.dragX] = horizontalDrag;
-      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.dragY] = verticalDrag;
-      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.padding] = 0;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.normalDrag] = normalDrag;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.tangentialDrag] =
+        normalDrag * 0.25;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.rotationalDrag] = 2;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.windStrength] = 0;
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.floorEnabled] = floor.enabled
         ? 1
         : 0;
@@ -391,6 +487,19 @@ const GPUBurstConfettiRenderer = ({
       state.queue.writeBuffer(state.uniformBuffer, 0, uniformData);
 
       const encoder = state.device.createCommandEncoder();
+      if (shouldReinitialize) {
+        const initPass = encoder.beginComputePass();
+        initPass.setPipeline(state.initPipeline);
+        initPass.setBindGroup(0, state.initBindGroup);
+        initPass.dispatchWorkgroups(state.workgroupCount);
+        initPass.end();
+      }
+      const transformPass = encoder.beginComputePass();
+      transformPass.setPipeline(state.transformPipeline);
+      transformPass.setBindGroup(0, state.transformBindGroup);
+      transformPass.dispatchWorkgroups(state.workgroupCount);
+      transformPass.end();
+
       target.colorAttachment.view = state.context
         .getCurrentTexture()
         .createView();
@@ -404,6 +513,7 @@ const GPUBurstConfettiRenderer = ({
     },
     [
       flightDuration,
+      fixedStepScratchRef,
       flipIntensity,
       floor.enabled,
       floor.friction,
@@ -412,12 +522,15 @@ const GPUBurstConfettiRenderer = ({
       gravityPxPerSec2,
       horizontalDrag,
       initialScale,
+      lastTargetSimulationSeconds,
       lastRenderedProgress,
       opacity,
       progress,
       running,
+      burstScheduleRef,
       cycleDuration,
-      totalDuration,
+      simulatedSeconds,
+      simulationAccumulator,
       uniformDataRef,
       verticalDrag,
     ]

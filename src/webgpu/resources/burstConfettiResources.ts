@@ -1,5 +1,3 @@
-import { tgpu } from 'typegpu';
-
 import type { ColorRange, SizeVariation } from '../../hooks/useConfettiFlakes';
 import { toPaletteInputs } from './palette';
 import { toBurstSizeInputs } from '../burstResourcePacking';
@@ -14,10 +12,13 @@ import {
   BurstOriginArraySchema,
   BurstPaletteArraySchema,
   BurstParticleArraySchema,
+  BurstRuntimeArraySchema,
   BurstSizeArraySchema,
+  BurstTransformArraySchema,
   BurstUniformsSchema,
   burstInitLayout,
   burstRenderLayout,
+  burstTransformLayout,
 } from '../shaders/burstConfetti';
 import { destroyGPUResourceSet } from '../resourceCleanup';
 import {
@@ -27,6 +28,7 @@ import {
   prepareFlakeTexturesArray,
   prepareShapeMasksArray,
 } from '../textureResources';
+import { getSharedTypeGPURoot } from '../sharedTypeGPURoot';
 
 export type BurstConfettiResourceConfig = {
   device: GPUDevice;
@@ -58,13 +60,17 @@ export const createBurstConfettiResources = async (
   const preparedMasks = prepareShapeMasksArray(sizeVariations, sizeFlags);
   if (isCancelled?.()) throw new Error('GPU resource creation cancelled');
 
-  const root = tgpu.initFromDevice({ device, unstable_names: 'strict' });
+  const root = getSharedTypeGPURoot(device);
   const queue = device.queue;
   const rawTextures: GPUTexture[] = [];
   try {
     const uniforms = root.createUniform(BurstUniformsSchema);
     const initUniforms = root.createUniform(BurstInitUniformsSchema);
     const particlesBuffer = root.createMutable(BurstParticleArraySchema(count));
+    const runtimeBuffer = root.createMutable(BurstRuntimeArraySchema(count));
+    const transformsBuffer = root.createMutable(
+      BurstTransformArraySchema(count)
+    );
     const originsBuffer = root.createReadonly(
       BurstOriginArraySchema(originCount)
     );
@@ -98,18 +104,25 @@ export const createBurstConfettiResources = async (
     const initBindGroup = root.createBindGroup(burstInitLayout, {
       uniforms: initUniforms.buffer,
       particles: particlesBuffer.buffer,
+      runtime: runtimeBuffer.buffer,
       origins: originsBuffer.buffer,
       sizes: initSizesBuffer.buffer,
     });
 
     const renderBindGroup = root.createBindGroup(burstRenderLayout, {
       uniforms: uniforms.buffer,
-      particles: particlesBuffer.buffer,
-      sizes: sizesBuffer.buffer,
+      transforms: transformsBuffer.buffer,
       palette: paletteBuffer.buffer,
       sampler,
       textures: texturesArray.createView({ dimension: '2d-array' }),
       shapeMasks: shapeMasksArray.createView({ dimension: '2d-array' }),
+    });
+    const transformBindGroup = root.createBindGroup(burstTransformLayout, {
+      uniforms: uniforms.buffer,
+      particles: particlesBuffer.buffer,
+      runtime: runtimeBuffer.buffer,
+      transforms: transformsBuffer.buffer,
+      sizes: sizesBuffer.buffer,
     });
 
     return {
@@ -120,11 +133,14 @@ export const createBurstConfettiResources = async (
       uniforms,
       initUniforms,
       particlesBuffer,
+      runtimeBuffer,
+      transformsBuffer,
       originsBuffer,
       initSizesBuffer,
       sizesBuffer,
       paletteBuffer,
       initBindGroup,
+      transformBindGroup,
       renderBindGroup,
       texturesArray,
       shapeMasksArray,
@@ -134,7 +150,7 @@ export const createBurstConfettiResources = async (
       canUseTextureOnlyPipeline: canUseTextureOnlyPipeline(sizeVariations),
     };
   } catch (error) {
-    destroyGPUResourceSet({ buffers: [], textures: rawTextures, root });
+    destroyGPUResourceSet({ buffers: [], textures: rawTextures });
     throw error;
   }
 };
@@ -151,12 +167,13 @@ export const destroyBurstConfettiResources = (
       resources.uniforms.buffer,
       resources.initUniforms.buffer,
       resources.particlesBuffer.buffer,
+      resources.runtimeBuffer.buffer,
+      resources.transformsBuffer.buffer,
       resources.originsBuffer.buffer,
       resources.initSizesBuffer.buffer,
       resources.sizesBuffer.buffer,
       resources.paletteBuffer.buffer,
     ],
     textures: [resources.texturesArray, resources.shapeMasksArray],
-    root: resources.root,
   });
 };

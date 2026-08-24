@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 import type { SkImage } from '@shopify/react-native-skia';
-import { tgpu } from 'typegpu';
+import { d, tgpu } from 'typegpu';
 
 import type { SizeVariation } from '../hooks/useConfettiFlakes';
 import type { CannonConfig, PIConfig } from '../utils';
@@ -18,13 +18,32 @@ import {
 } from '../webgpu/resourcePacking';
 import {
   burstConfettiInit,
+  burstConfettiTransform,
   burstTextureFragment,
+  createBurstConfettiPipelines,
 } from '../webgpu/shaders/burstConfetti';
 import {
+  createConfettiPipelines,
   confettiInit,
   confettiTextureFragment,
   confettiVertex,
 } from '../webgpu/shaders/confetti';
+import {
+  computeAirborneAcceleration,
+  integrateAngularVelocity,
+} from '../webgpu/shaders/physics/aerodynamics';
+import {
+  sampleCenteredUnit,
+  sampleCenterWeightedRadius,
+} from '../webgpu/shaders/physics/launch';
+import {
+  PARTICLE_RUNTIME_BYTES,
+  PARTICLE_SPAWN_BYTES,
+  ParticleRuntimeSchema,
+  ParticleSpawnSchema,
+} from '../webgpu/shaders/physics/state';
+import { computeWindField } from '../webgpu/shaders/physics/turbulence';
+import { getSharedTypeGPURoot } from '../webgpu/sharedTypeGPURoot';
 
 const sizes: SizeVariation[] = [
   {
@@ -42,6 +61,31 @@ const sizes: SizeVariation[] = [
 ];
 
 describe('GPU-native particle initialization', () => {
+  it('reuses TypeGPU roots and pipeline variants per device', () => {
+    const firstDevice = {} as GPUDevice;
+    const secondDevice = {} as GPUDevice;
+    const firstRoot = getSharedTypeGPURoot(firstDevice);
+
+    expect(getSharedTypeGPURoot(firstDevice)).toBe(firstRoot);
+    expect(getSharedTypeGPURoot(secondDevice)).not.toBe(firstRoot);
+    expect(createBurstConfettiPipelines(firstRoot, 'bgra8unorm', false)).toBe(
+      createBurstConfettiPipelines(firstRoot, 'bgra8unorm', false)
+    );
+    expect(createConfettiPipelines(firstRoot, 'bgra8unorm', false)).toBe(
+      createConfettiPipelines(firstRoot, 'bgra8unorm', false)
+    );
+    expect(
+      createBurstConfettiPipelines(firstRoot, 'bgra8unorm', true)
+    ).not.toBe(createBurstConfettiPipelines(firstRoot, 'bgra8unorm', false));
+  });
+
+  it('keeps the shared state layout explicit and inside the profiled budget', () => {
+    expect(PARTICLE_SPAWN_BYTES).toBe(96);
+    expect(PARTICLE_RUNTIME_BYTES).toBe(96);
+    expect(PARTICLE_SPAWN_BYTES).toBe(d.sizeOf(ParticleSpawnSchema));
+    expect(PARTICLE_RUNTIME_BYTES).toBe(d.sizeOf(ParticleRuntimeSchema));
+  });
+
   it('keeps continuous phases exactly stratified without a JS particle array', () => {
     const count = 20_000;
     const { stride, offset } = createPhasePermutation(count, 37);
@@ -52,6 +96,16 @@ describe('GPU-native particle initialization', () => {
     }
 
     expect(bins.size).toBe(count);
+  });
+
+  it('uses bounded center-weighted Cannon launch distributions', () => {
+    expect(sampleCenterWeightedRadius(0)).toBe(0);
+    expect(sampleCenterWeightedRadius(0.5)).toBe(0.25);
+    expect(sampleCenterWeightedRadius(1)).toBe(1);
+
+    expect(sampleCenteredUnit(0, 0)).toBe(0);
+    expect(sampleCenteredUnit(0, 1)).toBe(0.5);
+    expect(sampleCenteredUnit(1, 1)).toBe(1);
   });
 
   it('packs only size-level selection metadata for GPU initialization', () => {
@@ -223,20 +277,35 @@ describe('GPU-native particle initialization', () => {
   it('resolves both initialization kernels to WGSL', () => {
     const fallingWGSL = tgpu.resolve([confettiInit]);
     const burstWGSL = tgpu.resolve([burstConfettiInit]);
+    const burstTransformWGSL = tgpu.resolve([burstConfettiTransform]);
     const fallingVertexWGSL = tgpu.resolve([confettiVertex]);
     const textureFragmentWGSL = tgpu.resolve([confettiTextureFragment]);
     const burstTextureFragmentWGSL = tgpu.resolve([burstTextureFragment]);
+    const sharedPhysicsWGSL = tgpu.resolve([
+      computeAirborneAcceleration,
+      integrateAngularVelocity,
+      computeWindField,
+    ]);
 
     expect(fallingWGSL).toContain('@compute @workgroup_size(64)');
     expect(fallingWGSL).toContain('fn confettiInit');
     expect(fallingWGSL).toContain('let phaseBin');
     expect(burstWGSL).toContain('@compute @workgroup_size(64)');
     expect(burstWGSL).toContain('fn burstConfettiInit');
+    expect(burstWGSL).toContain('fn sampleSoftConeDirection');
+    expect(burstWGSL).toContain('fn sampleCenterWeightedRadius');
+    expect(burstWGSL).toContain('fn sampleCenteredUnit');
+    expect(burstTransformWGSL).toContain('fn burstConfettiTransform');
+    expect(burstTransformWGSL).toContain('fn computeAirborneAcceleration');
+    expect(burstTransformWGSL).toContain('fn integrateQuaternion');
     expect(fallingVertexWGSL).toContain('@vertex');
     expect(fallingVertexWGSL).toContain('fn isParticleInFrontOfNearPlane');
     expect(fallingVertexWGSL).toContain('fn getParticleNearPlaneDistance');
     expect(textureFragmentWGSL).toContain('textureSampleLevel');
     expect(textureFragmentWGSL).not.toContain('fbm');
     expect(burstTextureFragmentWGSL).toContain('textureSampleLevel');
+    expect(sharedPhysicsWGSL).toContain('fn computeAirborneAcceleration');
+    expect(sharedPhysicsWGSL).toContain('fn integrateAngularVelocity');
+    expect(sharedPhysicsWGSL).toContain('fn computeWindField');
   });
 });

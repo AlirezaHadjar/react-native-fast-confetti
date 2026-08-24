@@ -18,15 +18,17 @@ import {
 } from '../utils';
 import { computeSizeFlags, toSizeInputs } from '../webgpu/resourcePacking';
 import {
-  RUNTIME_BYTES,
   SIZE_META_BYTES,
-  SPAWN_BYTES,
-  RuntimeSchema,
   SizeSchema,
-  SpawnSchema,
   UNIFORMS_BYTES,
   UniformsSchema,
 } from '../webgpu/shaders/confetti';
+import {
+  PARTICLE_RUNTIME_BYTES,
+  PARTICLE_SPAWN_BYTES,
+  ParticleRuntimeSchema,
+  ParticleSpawnSchema,
+} from '../webgpu/shaders/physics/state';
 import {
   computeSpawnGrid as computeGpuSpawnGrid,
   estimateFallingDuration as estimateGpuFallingDuration,
@@ -332,12 +334,12 @@ describe('single confetti engine parity framework', () => {
       scenario.cycleDurationSeconds
     );
 
-    expect(SPAWN_BYTES).toBe(d.sizeOf(SpawnSchema));
-    expect(RUNTIME_BYTES).toBe(d.sizeOf(RuntimeSchema));
+    expect(PARTICLE_SPAWN_BYTES).toBe(d.sizeOf(ParticleSpawnSchema));
+    expect(PARTICLE_RUNTIME_BYTES).toBe(d.sizeOf(ParticleRuntimeSchema));
     expect(SIZE_META_BYTES).toBe(d.sizeOf(SizeSchema));
     expect(UNIFORMS_BYTES).toBe(d.sizeOf(UniformsSchema));
-    expect(SPAWN_BYTES).toBe(96);
-    expect(RUNTIME_BYTES).toBe(96);
+    expect(PARTICLE_SPAWN_BYTES).toBe(96);
+    expect(PARTICLE_RUNTIME_BYTES).toBe(96);
     expect(SIZE_META_BYTES).toBe(16);
     expect(UNIFORMS_BYTES).toBe(128);
 

@@ -156,10 +156,6 @@ const CannonConfettiInner = forwardRef<
     const settlingDurationSeconds =
       estimateFloorSettlingDuration(resolvedFloor);
     const cycleDuration = duration + settlingDurationSeconds * 1000;
-    const floorSearchDuration =
-      duration / 1000 +
-      settlingDurationSeconds / Math.max(1 - launchDelayMax, 0.05);
-
     const advanceCycle = useCallback(() => {
       setRestartState((state) => ({ ...state, seed: state.seed + 1 }));
     }, []);
@@ -193,12 +189,7 @@ const CannonConfettiInner = forwardRef<
         layoutCount: totalCount,
         containerHeight,
         launchDelayMax,
-        floorImpact: [
-          gravity * containerHeight,
-          verticalDrag,
-          floorSearchDuration,
-          resolvedFloor.enabled ? 1 : 0,
-        ] as const,
+        flightDurationSeconds: duration / 1000,
         origins:
           ready && totalCount > 0
             ? toCannonBurstOrigins(
@@ -212,10 +203,7 @@ const CannonConfettiInner = forwardRef<
         totalCount,
         containerHeight,
         launchDelayMax,
-        gravity,
-        verticalDrag,
-        floorSearchDuration,
-        resolvedFloor.enabled,
+        duration,
         ready,
         currentCannonConfigs,
         currentCannonsPositions,
@@ -313,7 +301,6 @@ const CannonConfettiInner = forwardRef<
         allColors={allColors}
         colorOverrides={colorOverrides}
         parentColorCount={parentColorCount}
-        totalDuration={duration}
         cycleDuration={cycleDuration}
         flightDuration={duration}
         floor={resolvedFloor}
