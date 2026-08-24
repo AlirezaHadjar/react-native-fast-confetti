@@ -3,6 +3,8 @@
 - Status: Accepted, with physical-device GPU validation pending
 - Date: 2026-08-24
 
+Burst clock and opacity ownership are refined by ADR 0003.
+
 ## Context
 
 PI and Cannon previously evaluated an analytic 2D trajectory independently of
@@ -77,7 +79,7 @@ All measurements below are from an arm64 Release build on an iPhone 17 Pro
 Simulator running iOS 26.5. Simulator data validates CPU architecture and
 resource behavior; it is not GPU-time evidence.
 
-- Full repository checks: 15 test suites, 82 tests, TypeScript, ESLint, and
+- Full repository checks: 15 test suites, 84 tests, TypeScript, ESLint, and
   whitespace validation pass.
 - Actual TypeGPU resolution tests compile initialization, stateful transform,
   render, and shared physics functions to WGSL.

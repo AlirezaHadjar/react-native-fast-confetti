@@ -61,7 +61,7 @@ export const BURST_VERTS_PER_FLAKE = 4;
 
 export const BurstUniformsSchema = d.struct({
   viewport: d.vec2f,
-  opacity: d.f32,
+  visibility: d.f32,
   focalLength: d.f32,
 
   dt: d.f32,
@@ -77,6 +77,7 @@ export const BurstUniformsSchema = d.struct({
   aerodynamics: d.vec4f,
 
   floor: d.vec4f,
+  opacityCurve: d.vec4f,
 });
 
 export const BurstParticleSchema = d.struct({
@@ -94,7 +95,9 @@ export const BurstParticleSchema = d.struct({
  */
 export const BurstTransformSchema = d.struct({
   centerAndAxisX: d.vec4f,
-  axisYAndAppearance: d.vec4f,
+  axisY: d.vec2f,
+  colorAndOpacity: d.u32,
+  flags: d.u32,
 });
 
 export const BurstInitUniformsSchema = d.struct({
@@ -116,6 +119,7 @@ export const BurstSizeSchema = d.struct({
 });
 
 export const BurstPaletteColorSchema = d.vec4f;
+export const BurstOpacityKeyframeSchema = d.vec2f;
 
 export const BURST_PARTICLE_BYTES = d.sizeOf(BurstParticleSchema);
 export const BURST_RUNTIME_BYTES = PARTICLE_RUNTIME_BYTES;
@@ -136,8 +140,9 @@ export const BURST_UNIFORM_FLOAT_OFFSETS = {
     d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.viewport.y)
       .offset
   ),
-  opacity: toFloatOffset(
-    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.opacity).offset
+  visibility: toFloatOffset(
+    d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.visibility)
+      .offset
   ),
   focalLength: toFloatOffset(
     d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.focalLength)
@@ -202,7 +207,24 @@ export const BURST_UNIFORM_FLOAT_OFFSETS = {
   floorVariation: toFloatOffset(
     d.memoryLayoutOf(BurstUniformsSchema, (uniforms) => uniforms.floor.w).offset
   ),
+  opacityKeyframeCount: toFloatOffset(
+    d.memoryLayoutOf(
+      BurstUniformsSchema,
+      (uniforms) => uniforms.opacityCurve.x
+    ).offset
+  ),
+  opacityDuration: toFloatOffset(
+    d.memoryLayoutOf(
+      BurstUniformsSchema,
+      (uniforms) => uniforms.opacityCurve.y
+    ).offset
+  ),
 } as const;
+
+export const BURST_INIT_GENERATION_BYTE_OFFSET = d.memoryLayoutOf(
+  BurstInitUniformsSchema,
+  (uniforms) => uniforms.counts.w
+).offset;
 
 export const BurstParticleArraySchema = (count: number) =>
   d.arrayOf(BurstParticleSchema, count);
@@ -216,6 +238,8 @@ export const BurstPaletteArraySchema = (count: number) =>
   d.arrayOf(BurstPaletteColorSchema, count);
 export const BurstOriginArraySchema = (count: number) =>
   d.arrayOf(BurstOriginSchema, count);
+export const BurstOpacityKeyframeArraySchema = (count: number) =>
+  d.arrayOf(BurstOpacityKeyframeSchema, count);
 export const BurstInitSizeArraySchema = (count: number) =>
   d.arrayOf(InitSizeSchema, count);
 
@@ -307,6 +331,11 @@ export const burstTransformLayout = tgpu
       access: 'readonly',
       visibility: ['compute'],
     },
+    opacityKeyframes: {
+      storage: d.arrayOf(BurstOpacityKeyframeSchema),
+      access: 'readonly',
+      visibility: ['compute'],
+    },
   })
   .$idx(0);
 
@@ -325,7 +354,7 @@ export const burstConfettiInit = tgpu.computeFn({
   }
 
   const u = burstInitLayout.$.uniforms;
-  const seed = u.counts.x;
+  const seed = u.counts.x + u.counts.w;
   const layoutCount = std.max(u.counts.y, d.u32(1));
   const originCount = std.max(u.counts.z, d.u32(1));
   const layoutIndex = d.u32(
@@ -704,6 +733,52 @@ export const burstConfettiTransform = tgpu.computeFn({
     runtime.life,
     interpolationAlpha
   );
+  const opacityKeyframeCount = d.u32(std.max(u.opacityCurve.x, 0));
+  let particleOpacity = d.f32(1);
+  if (opacityKeyframeCount > d.u32(0) && interpolatedLife >= 0) {
+    const activationSeconds =
+      particle.originAndTiming.z / 1000 +
+      particle.originAndTiming.w * u.motionDuration;
+    const localElapsed = interpolatedLife / std.max(particle.indices.w, 1);
+    const localDuration = std.max(
+      u.opacityCurve.y - activationSeconds,
+      0.0001
+    );
+    const localProgress = std.clamp(
+      localElapsed / localDuration,
+      0,
+      1
+    );
+    const lastKeyframeIndex = opacityKeyframeCount - d.u32(1);
+    const firstKeyframe = burstTransformLayout.$.opacityKeyframes[0]!;
+    const lastKeyframe =
+      burstTransformLayout.$.opacityKeyframes[lastKeyframeIndex]!;
+
+    if (localProgress <= firstKeyframe.x) {
+      particleOpacity = firstKeyframe.y;
+    } else if (localProgress >= lastKeyframe.x) {
+      particleOpacity = lastKeyframe.y;
+    } else {
+      let low = d.u32(0);
+      let high = lastKeyframeIndex;
+      while (high - low > d.u32(1)) {
+        const middle = std.div(low + high, d.u32(2));
+        const middleKeyframe =
+          burstTransformLayout.$.opacityKeyframes[middle]!;
+        if (localProgress < middleKeyframe.x) {
+          high = middle;
+        } else {
+          low = middle;
+        }
+      }
+
+      const start = burstTransformLayout.$.opacityKeyframes[low]!;
+      const end = burstTransformLayout.$.opacityKeyframes[high]!;
+      const segmentProgress =
+        (localProgress - start.x) / std.max(end.x - start.x, 0.0001);
+      particleOpacity = std.mix(start.y, end.y, segmentProgress);
+    }
+  }
   const quaternionSign = std.select(
     d.f32(-1),
     d.f32(1),
@@ -763,12 +838,20 @@ export const burstConfettiTransform = tgpu.computeFn({
     size.dims.y * 0.5 * appearScale * perspectiveScale * minimumScale
   );
 
+  const opacityByte = d.u32(
+    std.round(std.clamp(particleOpacity, 0, 1) * 255)
+  );
+  const packedColorAndOpacity =
+    (opacityByte << d.u32(24)) |
+    (d.u32(colorIdx) & d.u32(0x00ffffff));
   burstTransformLayout.$.transforms[idx] = BurstTransformSchema({
     centerAndAxisX: d.vec4f(
       std.select(d.vec2f(-10000), centerWorld.xy, visible),
       axisXScreen
     ),
-    axisYAndAppearance: d.vec4f(axisYScreen, colorIdx, size.dims.w),
+    axisY: d.vec2f(axisYScreen),
+    colorAndOpacity: packedColorAndOpacity,
+    flags: d.u32(size.dims.w),
   });
 });
 
@@ -812,9 +895,11 @@ export const burstConfettiVertex = tgpu.vertexFn({
 
   const u = burstRenderLayout.$.uniforms;
   const transform = burstRenderLayout.$.transforms[instanceIndex]!;
-  const colorIdx = d.u32(transform.axisYAndAppearance.z);
-  const flags = transform.axisYAndAppearance.w;
-  const flagsU = d.u32(flags);
+  const colorIdx = transform.colorAndOpacity & d.u32(0x00ffffff);
+  const particleOpacity =
+    d.f32(transform.colorAndOpacity >> d.u32(24)) * (1 / 255);
+  const flagsU = transform.flags;
+  const flags = d.f32(flagsU);
   const textureLayer = d.f32(
     std.bitShiftRight(flagsU, d.u32(SIZE_FLAG_TEXTURE_LAYER_SHIFT)) &
       d.u32(SIZE_FLAG_LAYER_MASK)
@@ -825,7 +910,7 @@ export const burstConfettiVertex = tgpu.vertexFn({
   );
   const center = transform.centerAndAxisX.xy;
   const axisX = transform.centerAndAxisX.zw;
-  const axisY = transform.axisYAndAppearance.xy;
+  const axisY = transform.axisY;
   const screen =
     center + axisX * ((uv.x - 0.5) * 2) + axisY * ((uv.y - 0.5) * 2);
   const clip = toClip(screen);
@@ -833,7 +918,10 @@ export const burstConfettiVertex = tgpu.vertexFn({
   return {
     position: d.vec4f(clip, 0, 1),
     uv: d.vec2f(uv.x, 1 - uv.y),
-    color: d.vec4f(burstRenderLayout.$.palette[colorIdx]!.rgb, u.opacity),
+    color: d.vec4f(
+      burstRenderLayout.$.palette[colorIdx]!.rgb,
+      u.visibility * particleOpacity
+    ),
     flagsAndLayers: d.vec3f(flags, textureLayer, maskLayer),
   };
 });

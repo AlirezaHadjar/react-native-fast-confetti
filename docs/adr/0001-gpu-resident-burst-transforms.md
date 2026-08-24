@@ -22,19 +22,18 @@ frame, then render from that GPU-resident result.
 
 The compute pass writes one compact 32-byte record per particle containing:
 
-- screen-space center;
-- scaled sine/cosine rotation basis;
-- flake dimensions;
-- palette index and shape flags.
+- screen-space center and two projected basis axes;
+- packed palette index and opacity;
+- shape and texture flags.
 
 The vertex stage reads only this record and expands four corners. All confetti
 quads use four-vertex triangle strips instead of six-vertex triangle lists. The
 burst compute and render passes are encoded into the same command buffer and use
 one queue submission, so the decision adds no JavaScript/native round trip.
 
-The analytic physics model and public behavior remain unchanged. Reanimated may
-still provide lifecycle and scalar timing signals; it does not calculate or
-transfer per-particle transforms.
+Reanimated shared values provide lifecycle control signals only. The dedicated
+WebGPU frame callback owns burst timing, and no JavaScript or worklet calculates
+or transfers per-particle transforms.
 
 ## Consequences
 

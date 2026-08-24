@@ -17,6 +17,7 @@ import {
   toInitSizeInputs,
 } from '../webgpu/resourcePacking';
 import {
+  BURST_INIT_GENERATION_BYTE_OFFSET,
   burstConfettiInit,
   burstConfettiTransform,
   burstTextureFragment,
@@ -298,6 +299,9 @@ describe('GPU-native particle initialization', () => {
     expect(burstTransformWGSL).toContain('fn burstConfettiTransform');
     expect(burstTransformWGSL).toContain('fn computeAirborneAcceleration');
     expect(burstTransformWGSL).toContain('fn integrateQuaternion');
+    expect(burstTransformWGSL).toContain('opacityKeyframes');
+    expect(burstTransformWGSL).toContain('colorAndOpacity');
+    expect(BURST_INIT_GENERATION_BYTE_OFFSET).toBe(12);
     expect(fallingVertexWGSL).toContain('@vertex');
     expect(fallingVertexWGSL).toContain('fn isParticleInFrontOfNearPlane');
     expect(fallingVertexWGSL).toContain('fn getParticleNearPlaneDistance');

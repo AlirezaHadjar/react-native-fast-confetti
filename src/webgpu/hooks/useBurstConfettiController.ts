@@ -1,112 +1,81 @@
 import { useCallback, useEffect, useState } from 'react';
-import type {
-  EasingFunction,
-  EasingFunctionFactory,
-} from 'react-native-reanimated';
-import { scheduleOnRN, scheduleOnUI } from 'react-native-worklets';
+import { scheduleOnUI } from 'react-native-worklets';
 
-import { useAnimationLifecycle } from '../../hooks/useAnimationLifecycle';
-import type { OpacityAnimation } from '../../types';
+import { useLatestCallback } from '../../hooks/useLatestCallback';
+import { useRendererAutoplay } from './useRendererAutoplay';
+import { useBurstSimulationLifecycle } from './useBurstSimulationLifecycle';
 
 type StartRequest = {
   nonce: number;
-  delay: number;
   notifyStart: boolean;
 };
 
 type Params = {
-  duration: number;
-  infinite: boolean;
-  opacityAnimation?: OpacityAnimation;
-  easing?: EasingFunction | EasingFunctionFactory;
   onAnimationStart?: () => void;
   onAnimationEnd?: () => void;
-  advanceCycle: () => void;
-  visibleCount: number;
   renderCount: number;
   autoplay: boolean;
   autoStartDelay: number;
 };
 
+/**
+ * Event-only controller for burst renderers. Animation time belongs to the
+ * dedicated GPU frame callback; this hook owns only imperative controls,
+ * autoplay, readiness, and public callbacks.
+ */
 export const useBurstConfettiController = ({
-  duration,
-  infinite,
-  opacityAnimation,
-  easing,
   onAnimationStart,
   onAnimationEnd,
-  advanceCycle,
-  visibleCount,
   renderCount,
   autoplay,
   autoStartDelay,
 }: Params) => {
   const [startRequest, setStartRequest] = useState<StartRequest>({
     nonce: 0,
-    delay: 0,
     notifyStart: true,
   });
   const [rendererReady, setRendererReady] = useState(false);
+  const notifyAnimationStart = useLatestCallback(onAnimationStart);
+  const notifyAnimationEnd = useLatestCallback(onAnimationEnd);
+  const lifecycle = useBurstSimulationLifecycle();
 
-  const requestStart = useCallback((delay = 0, notifyStart = true) => {
-    setStartRequest((request) => ({
-      nonce: request.nonce + 1,
-      delay,
-      notifyStart,
-    }));
-  }, []);
-
-  const prepareNextCycle = useCallback(() => {
-    setRendererReady(false);
-    advanceCycle();
-    requestStart(0, false);
-  }, [advanceCycle, requestStart]);
-
-  const onCycleEnd = useCallback(() => {
-    'worklet';
-    scheduleOnRN(prepareNextCycle);
-  }, [prepareNextCycle]);
-
-  const lifecycle = useAnimationLifecycle({
-    duration,
-    infinite,
-    opacityAnimation,
-    easing,
-    onAnimationStart,
-    onAnimationEnd,
-    onCycleEnd,
-    deferInfiniteRestart: true,
-    disabled: visibleCount === 0,
+  const suppressPendingAutoplay = useRendererAutoplay({
+    enabled: rendererReady && renderCount > 0,
+    autoplay,
+    autoStartDelay,
+    running: lifecycle.running,
+    beginCycle: lifecycle.beginCycle,
+    onAnimationStart: notifyAnimationStart,
   });
 
-  useEffect(() => {
-    if (!rendererReady || renderCount === 0) return;
-    if (!autoplay || startRequest.nonce !== 0 || lifecycle.running.get())
-      return;
-    scheduleOnUI(lifecycle.runAnimation, autoStartDelay);
-  }, [
-    rendererReady,
-    renderCount,
-    autoplay,
-    startRequest.nonce,
-    lifecycle.running,
-    lifecycle.runAnimation,
-    autoStartDelay,
-  ]);
+  const requestStart = useCallback(
+    (notifyStart = true) => {
+      suppressPendingAutoplay();
+      setStartRequest((request) => ({
+        nonce: request.nonce + 1,
+        notifyStart,
+      }));
+    },
+    [suppressPendingAutoplay]
+  );
 
   useEffect(() => {
-    if (startRequest.nonce === 0) return;
-    if (!rendererReady || renderCount === 0) return;
-    scheduleOnUI(
-      lifecycle.runAnimation,
-      startRequest.delay,
-      startRequest.notifyStart
-    );
-  }, [startRequest, rendererReady, renderCount, lifecycle.runAnimation]);
+    if (startRequest.nonce === 0 || !rendererReady || renderCount === 0) return;
+    scheduleOnUI(lifecycle.beginCycle);
+    if (startRequest.notifyStart) notifyAnimationStart();
+  }, [
+    startRequest,
+    rendererReady,
+    renderCount,
+    lifecycle.beginCycle,
+    notifyAnimationStart,
+  ]);
 
   return {
     ...lifecycle,
     requestStart,
     setRendererReady,
+    suppressPendingAutoplay,
+    notifyAnimationEnd,
   };
 };

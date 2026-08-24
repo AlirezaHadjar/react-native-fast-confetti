@@ -151,7 +151,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
     );
     const cycleDuration =
       motionDuration + estimateFloorSettlingDuration(resolvedFloor);
-    const { running, opacity, pause, resume, reset, beginCycle } =
+    const { running, pause, resume, reset, beginCycle } =
       useSimulationLifecycle();
 
     const [seed, setSeed] = useState(0);
@@ -379,7 +379,6 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
         cycleDuration={autoRestart ? cycleDuration : 0}
         motionDuration={motionDuration}
         running={running}
-        opacity={opacity}
         onCycleEnd={handleCycleEnd}
         drift={effectiveDrift}
         initialScale={initialScale}

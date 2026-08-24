@@ -26,6 +26,7 @@ import { useContainerDimensions } from '../hooks/useContainerDimensions';
 import { useTextureProps } from '../hooks/useTextureProps';
 import { useReduceMotionFactor } from '../hooks/useReduceMotionFactor';
 import { scaleValueForMotion } from '../reduceMotion';
+import { resolveOpacityAnimation } from '../fadeOut';
 import type {
   CannonConfettiMethods,
   CannonConfettiRestartOptions,
@@ -156,28 +157,26 @@ const CannonConfettiInner = forwardRef<
     const settlingDurationSeconds =
       estimateFloorSettlingDuration(resolvedFloor);
     const cycleDuration = duration + settlingDurationSeconds * 1000;
-    const advanceCycle = useCallback(() => {
-      setRestartState((state) => ({ ...state, seed: state.seed + 1 }));
-    }, []);
+    const resolvedOpacityAnimation = useMemo(
+      () => resolveOpacityAnimation(opacityAnimation),
+      [opacityAnimation]
+    );
     const renderCount = ready && reduceMotionReady ? visibleCount : 0;
     const {
-      progress,
       running,
-      opacity,
+      visibility,
+      resetVersion,
       pause,
       reset,
       resume,
+      completeCycle,
       requestStart,
       setRendererReady,
+      suppressPendingAutoplay,
+      notifyAnimationEnd,
     } = useBurstConfettiController({
-      duration: cycleDuration,
-      infinite,
-      opacityAnimation,
-      easing,
       onAnimationStart,
       onAnimationEnd,
-      advanceCycle,
-      visibleCount,
       renderCount,
       autoplay,
       autoStartDelay,
@@ -283,9 +282,18 @@ const CannonConfettiInner = forwardRef<
     );
 
     useImperativeHandle(ref, () => ({
-      pause: () => scheduleOnUI(pause),
-      reset: () => scheduleOnUI(reset),
-      resume: () => scheduleOnUI(resume),
+      pause: () => {
+        suppressPendingAutoplay();
+        scheduleOnUI(pause);
+      },
+      reset: () => {
+        suppressPendingAutoplay();
+        scheduleOnUI(reset);
+      },
+      resume: () => {
+        suppressPendingAutoplay();
+        scheduleOnUI(resume);
+      },
       restart: jsRestart,
     }));
 
@@ -303,10 +311,15 @@ const CannonConfettiInner = forwardRef<
         parentColorCount={parentColorCount}
         cycleDuration={cycleDuration}
         flightDuration={duration}
+        infinite={infinite}
+        easing={easing}
+        opacityAnimation={resolvedOpacityAnimation}
         floor={resolvedFloor}
-        progress={progress}
         running={running}
-        opacity={opacity}
+        visibility={visibility}
+        resetVersion={resetVersion}
+        completeCycle={completeCycle}
+        onCycleEnd={notifyAnimationEnd}
         gravityPxPerSec2={gravity * containerHeight}
         horizontalDrag={horizontalDrag}
         verticalDrag={verticalDrag}

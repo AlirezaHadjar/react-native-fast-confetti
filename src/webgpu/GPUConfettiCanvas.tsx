@@ -115,7 +115,6 @@ type Props = {
   cycleDuration: number;
   motionDuration: number;
   running: ReadableValue<boolean>;
-  opacity: ReadableValue<number>;
   drift: number;
   initialScale: number;
   continuous: boolean;
@@ -277,7 +276,6 @@ const GPUConfettiRenderer = ({
   cycleDuration,
   motionDuration,
   running,
-  opacity,
   drift,
   initialScale,
   continuous,
@@ -637,8 +635,7 @@ const GPUConfettiRenderer = ({
         state.viewportHeight;
       uniformData[UNIFORM_FLOAT_OFFSETS.focalLength] =
         state.focalLength;
-      uniformData[UNIFORM_FLOAT_OFFSETS.opacity] =
-        opacity.get() * animatedOpacity;
+      uniformData[UNIFORM_FLOAT_OFFSETS.opacity] = animatedOpacity;
       uniformData[UNIFORM_FLOAT_OFFSETS.dt] = FIXED_SIMULATION_STEP_SECONDS;
       uniformData[UNIFORM_FLOAT_OFFSETS.time] = simulationTimeBeforeFrame;
       uniformData[UNIFORM_FLOAT_OFFSETS.drift] = drift;
@@ -737,7 +734,6 @@ const GPUConfettiRenderer = ({
       lastFrameTimestampMs,
       lastSimSeconds,
       needsRender,
-      opacity,
       params,
       running,
       resetClock,

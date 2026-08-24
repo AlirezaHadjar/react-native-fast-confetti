@@ -1,4 +1,5 @@
 import type { ColorRange, SizeVariation } from '../../hooks/useConfettiFlakes';
+import type { ResolvedOpacityAnimation } from '../../fadeOut';
 import { toPaletteInputs } from './palette';
 import { toBurstSizeInputs } from '../burstResourcePacking';
 import {
@@ -10,6 +11,7 @@ import {
   BurstInitSizeArraySchema,
   BurstInitUniformsSchema,
   BurstOriginArraySchema,
+  BurstOpacityKeyframeArraySchema,
   BurstPaletteArraySchema,
   BurstParticleArraySchema,
   BurstRuntimeArraySchema,
@@ -38,6 +40,7 @@ export type BurstConfettiResourceConfig = {
   allColors: string[];
   colorOverrides: (ColorRange | null)[];
   parentColorCount: number;
+  opacityAnimation: ResolvedOpacityAnimation | null;
 };
 
 export const createBurstConfettiResources = async (
@@ -52,6 +55,7 @@ export const createBurstConfettiResources = async (
     allColors,
     colorOverrides,
     parentColorCount,
+    opacityAnimation,
   } = config;
   const maxFlakeWidth = Math.max(...sizeVariations.map((s) => s.width));
   const maxFlakeHeight = Math.max(...sizeVariations.map((s) => s.height));
@@ -91,6 +95,16 @@ export const createBurstConfettiResources = async (
       BurstPaletteArraySchema(Math.max(1, allColors.length)),
       toPaletteInputs(allColors)
     );
+    const opacityKeyframes = opacityAnimation
+      ? opacityAnimation.timestamps.map(
+          (timestamp, index) =>
+            [timestamp, opacityAnimation.opacities[index]!] as const
+        )
+      : ([[0, 1]] as const);
+    const opacityKeyframesBuffer = root.createReadonly(
+      BurstOpacityKeyframeArraySchema(opacityKeyframes.length),
+      opacityKeyframes
+    );
     const shapeMasksArray = createShapeMasksArray(device, queue, preparedMasks);
     rawTextures.push(shapeMasksArray);
     const texturesArray = createFlakeTexturesArray(
@@ -123,6 +137,7 @@ export const createBurstConfettiResources = async (
       runtime: runtimeBuffer.buffer,
       transforms: transformsBuffer.buffer,
       sizes: sizesBuffer.buffer,
+      opacityKeyframes: opacityKeyframesBuffer.buffer,
     });
 
     return {
@@ -139,6 +154,7 @@ export const createBurstConfettiResources = async (
       initSizesBuffer,
       sizesBuffer,
       paletteBuffer,
+      opacityKeyframesBuffer,
       initBindGroup,
       transformBindGroup,
       renderBindGroup,
@@ -173,6 +189,7 @@ export const destroyBurstConfettiResources = (
       resources.initSizesBuffer.buffer,
       resources.sizesBuffer.buffer,
       resources.paletteBuffer.buffer,
+      resources.opacityKeyframesBuffer.buffer,
     ],
     textures: [resources.texturesArray, resources.shapeMasksArray],
   });

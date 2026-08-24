@@ -523,6 +523,7 @@ For exact app support, check the compatibility pages for the installed versions 
 | `textureMode`      | `Confetti`, `ContinuousConfetti`           | `0`             | Selects a procedural material for untextured flakes.    |
 | `gravityDir`       | `Confetti`, `ContinuousConfetti`           | `[0, 1, 0]`     | Accepts a shared value for dynamic gravity.             |
 | `autoRestart`      | `Confetti`, `ContinuousConfetti`           | `true`          | Controls automatic simulation restarts.                 |
+| `opacityAnimation` | `PIConfetti`, `CannonConfetti`             | `undefined`     | Evaluates opacity per flake from its launch time.       |
 | `device`           | All WebGPU components                      | `undefined`     | Borrows an app-owned `GPUDevice`.                       |
 | `onError`          | All WebGPU components                      | `console.error` | Reports device acquisition and renderer setup failures. |
 

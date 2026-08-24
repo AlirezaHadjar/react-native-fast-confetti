@@ -107,8 +107,9 @@ is not allowed to silently redefine them.
 - Pausing freezes simulation time exactly; resuming does not integrate the
   wall-clock pause as a giant step.
 - Reduced motion retains an evenly distributed subset of the original layout.
-- `opacityAnimation` remains a single scalar GPU uniform and is not expanded to
-  particle state.
+- WebGPU `opacityAnimation` is evaluated from each particle's launch-relative
+  lifetime. Keyframes remain one shared GPU buffer; no per-frame particle data
+  is uploaded and no opacity field is added to persistent particle state.
 
 ### PI
 

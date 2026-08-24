@@ -7,7 +7,6 @@ import { useSharedValue } from 'react-native-reanimated';
  */
 export const useSimulationLifecycle = () => {
   const running = useSharedValue(false);
-  const opacity = useSharedValue(1);
 
   const pause = useCallback(() => {
     'worklet';
@@ -22,18 +21,15 @@ export const useSimulationLifecycle = () => {
   const reset = useCallback(() => {
     'worklet';
     running.set(false);
-    opacity.set(1);
-  }, [running, opacity]);
+  }, [running]);
 
   const beginCycle = useCallback(() => {
     'worklet';
     running.set(true);
-    opacity.set(1);
-  }, [running, opacity]);
+  }, [running]);
 
   return {
     running,
-    opacity,
     pause,
     resume,
     reset,
