@@ -20,7 +20,9 @@ export default function ContinuousScreen() {
   const isFocused = useIsFocused();
   const confettiRef = useRef<ConfettiMethods>(null);
   const { config, updateConfig } = useScreenConfig('continuous');
-  const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets();
+  const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets(
+    config.textureType
+  );
 
   if (isLoading) return null;
 

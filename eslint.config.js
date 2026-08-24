@@ -2,7 +2,15 @@ const { defineConfig, globalIgnores } = require('eslint/config');
 const expoConfig = require('eslint-config-expo/flat');
 
 module.exports = defineConfig([
-  [globalIgnores(['lib/*', 'dist/*', 'kitchen-sink/ios/*', 'kitchen-sink/android/*'])],
+  [
+    globalIgnores([
+      '.context/**',
+      'lib/*',
+      'dist/*',
+      'kitchen-sink/ios/*',
+      'kitchen-sink/android/*',
+    ]),
+  ],
   expoConfig,
   {
     plugins: {

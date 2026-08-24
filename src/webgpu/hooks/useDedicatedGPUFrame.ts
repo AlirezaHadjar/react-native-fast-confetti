@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import {
   useFrameCallback,
@@ -6,7 +6,7 @@ import {
   type FrameInfo,
 } from 'react-native-reanimated';
 import { installWebGPU } from 'react-native-webgpu';
-import { scheduleOnRN, scheduleOnUI } from 'react-native-worklets';
+import { runOnUISync } from 'react-native-worklets';
 
 export type DedicatedGPUFrameTarget = {
   descriptor: GPURenderPassDescriptor;
@@ -15,18 +15,24 @@ export type DedicatedGPUFrameTarget = {
 
 type PresentableCanvasContext = GPUCanvasContext & { present?: () => void };
 
-type DedicatedGPUFrameCallback = (
+export type DedicatedGPUFrameState = {
+  device: GPUDevice;
+  queue: GPUQueue;
+  context: PresentableCanvasContext;
+};
+
+type DedicatedGPUFrameCallback<State extends DedicatedGPUFrameState> = (
   timestamp: number,
   timeSinceFirstFrame: number,
-  target: DedicatedGPUFrameTarget
+  target: DedicatedGPUFrameTarget,
+  state: State
 ) => GPUCommandBuffer | null | undefined;
 type ShouldScheduleGPUFrame = () => boolean;
 
 type UIFrameEntry = {
-  callback: DedicatedGPUFrameCallback;
+  callback: DedicatedGPUFrameCallback<DedicatedGPUFrameState>;
   shouldSchedule: ShouldScheduleGPUFrame;
-  queue: GPUQueue;
-  context: PresentableCanvasContext;
+  state: DedicatedGPUFrameState;
   commandBuffers: GPUCommandBuffer[];
   target: DedicatedGPUFrameTarget;
 };
@@ -87,22 +93,21 @@ declare global {
   var __fastConfettiUIWebGPUInstalled: boolean | undefined;
 }
 
-const registerGPUFrameOnUI = (
+const registerGPUFrameOnUI = <State extends DedicatedGPUFrameState>(
   key: string,
-  callback: DedicatedGPUFrameCallback,
+  callback: DedicatedGPUFrameCallback<State>,
   shouldSchedule: ShouldScheduleGPUFrame,
-  queue: GPUQueue,
-  context: PresentableCanvasContext
+  state: State
 ) => {
   'worklet';
   const registry =
     globalThis.__fastConfettiUIFrameRegistryV5 ??
     (globalThis.__fastConfettiUIFrameRegistryV5 = new Map());
   registry.set(key, {
-    callback,
+    callback:
+      callback as unknown as DedicatedGPUFrameCallback<DedicatedGPUFrameState>,
     shouldSchedule,
-    queue,
-    context,
+    state,
     // Allocate the submit sequence once in its owning runtime. Only the
     // unavoidable native GPUCommandBuffer wrapper changes each frame.
     commandBuffers: [],
@@ -110,16 +115,17 @@ const registerGPUFrameOnUI = (
   });
 };
 
-const retireGPUFrameOnUI = (key: string, onRetired?: () => void) => {
+const retireGPUFrameOnUI = (key: string) => {
   'worklet';
   const registry = globalThis.__fastConfettiUIFrameRegistryV5;
   const entry = registry?.get(key);
   if (entry) {
     entry.commandBuffers.length = 0;
     entry.target.colorAttachment.view = undefined as unknown as GPUTextureView;
+    registry?.delete(key);
+    return;
   }
   registry?.delete(key);
-  if (onRetired) scheduleOnRN(onRetired);
 };
 
 const commitGPUFrameSubmission = (
@@ -146,12 +152,13 @@ const dispatchGPUFrame = (entry: UIFrameEntry, frameInfo: FrameInfo) => {
     const commandBuffer = entry.callback(
       frameInfo.timestamp,
       frameInfo.timeSinceFirstFrame,
-      entry.target
+      entry.target,
+      entry.state
     );
     if (commandBuffer) {
       commitGPUFrameSubmission(
-        entry.queue,
-        entry.context,
+        entry.state.queue,
+        entry.state.context,
         commandBuffer,
         entry.commandBuffers
       );
@@ -166,10 +173,9 @@ const dispatchGPUFrame = (entry: UIFrameEntry, frameInfo: FrameInfo) => {
  * is absent from the frame path, while swapchain access remains on iOS's main
  * thread as required by CAMetalLayer. Physics itself stays in GPU compute.
  */
-export const useDedicatedGPUFrame = (
-  callback: DedicatedGPUFrameCallback,
-  device: GPUDevice | null,
-  context: PresentableCanvasContext | null,
+export const useDedicatedGPUFrame = <State extends DedicatedGPUFrameState>(
+  callback: DedicatedGPUFrameCallback<State>,
+  state: State | null,
   enabled = true,
   shouldSchedule?: ShouldScheduleGPUFrame,
   onRetired?: () => void
@@ -178,7 +184,6 @@ export const useDedicatedGPUFrame = (
   const [webFrameTarget] = useState(createReusableFrameTarget);
   const generationRef = useRef(0);
   const webCommandBuffersRef = useRef<GPUCommandBuffer[]>([]);
-  const queue = useMemo(() => device?.queue ?? null, [device]);
 
   const canSchedule = useCallback(() => {
     'worklet';
@@ -207,17 +212,18 @@ export const useDedicatedGPUFrame = (
   const scheduleWebFrame = useCallback(
     (frameInfo: FrameInfo) => {
       'worklet';
-      if (!enabled || !queue || !context || !canSchedule()) return;
+      if (!enabled || !state || !canSchedule()) return;
       try {
         const commandBuffer = callback(
           frameInfo.timestamp,
           frameInfo.timeSinceFirstFrame,
-          webFrameTarget
+          webFrameTarget,
+          state
         );
         if (commandBuffer) {
           commitGPUFrameSubmission(
-            queue,
-            context,
+            state.queue,
+            state.context,
             commandBuffer,
             webCommandBuffersRef.current
           );
@@ -227,7 +233,7 @@ export const useDedicatedGPUFrame = (
           undefined as unknown as GPUTextureView;
       }
     },
-    [callback, canSchedule, context, enabled, queue, webFrameTarget]
+    [callback, canSchedule, enabled, state, webFrameTarget]
   );
 
   // The native clock callback captures no canvas, resource, or user worklet.
@@ -238,7 +244,7 @@ export const useDedicatedGPUFrame = (
   );
 
   useLayoutEffect(() => {
-    if (!enabled || !device || !queue || !context) {
+    if (!enabled || !state) {
       frameCallback.setActive(false);
       return;
     }
@@ -253,28 +259,32 @@ export const useDedicatedGPUFrame = (
 
     generationRef.current += 1;
     const key = `${surfaceId}:${generationRef.current}`;
-    scheduleOnUI(
+    // Registration and retirement must share one synchronous ordering domain.
+    // An async registration can otherwise land after its cleanup and leave a
+    // zombie entry holding every transferred GPU object indefinitely.
+    runOnUISync(
       registerGPUFrameOnUI,
       key,
       callback,
       canSchedule,
-      queue,
-      context
+      state
     );
     registerNativeClock(surfaceId, frameCallback);
 
     return () => {
       unregisterNativeClock(surfaceId);
-      scheduleOnUI(retireGPUFrameOnUI, key, onRetired);
+      try {
+        runOnUISync(retireGPUFrameOnUI, key);
+      } finally {
+        onRetired?.();
+      }
     };
   }, [
     callback,
     canSchedule,
-    context,
-    device,
     enabled,
     frameCallback,
-    queue,
+    state,
     surfaceId,
     onRetired,
   ]);

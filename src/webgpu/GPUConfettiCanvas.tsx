@@ -40,6 +40,7 @@ import {
 } from './fixedStepScheduler';
 import {
   useDedicatedGPUFrame,
+  type DedicatedGPUFrameState,
   type DedicatedGPUFrameTarget,
 } from './hooks/useDedicatedGPUFrame';
 import { useGPUDevice } from './hooks/useGPUDevice';
@@ -60,6 +61,10 @@ import { useGPUResourceRetirement } from './hooks/useGPUResourceRetirement';
 import { GPUCanvasHost, gpuCanvasStyles } from './GPUCanvasHost';
 import type { ReadableValue } from './controlValues';
 import { useGPUCanvasSurfaceCleanup } from './hooks/useGPUCanvasSurfaceCleanup';
+import {
+  dispatchWorkletCallback,
+  useWorkletCallback,
+} from './hooks/useWorkletCallback';
 
 export type GPUConfettiInitialization = {
   seed: number;
@@ -132,11 +137,7 @@ type RendererProps = Omit<
   device: GPUDevice;
 };
 
-type RawFrameState = {
-  config: FrameConfig;
-  device: GPUDevice;
-  queue: GPUQueue;
-  context: GPUCanvasContext & { present?: () => void };
+type RawFrameState = DedicatedGPUFrameState & {
   uniformBuffer: GPUBuffer;
   initPipeline: GPUComputePipeline;
   computePipeline: GPUComputePipeline;
@@ -159,6 +160,7 @@ type FrameConfig = {
 };
 
 type FrameRegistration = {
+  config: FrameConfig;
   rawFrameState: RawFrameState;
   retirement: GPUFrameRetirement;
 };
@@ -318,6 +320,7 @@ const GPUConfettiRenderer = ({
     () => resolveEasing(params.easing ?? Easing.linear),
     [params.easing]
   );
+  const cycleEndCallbackId = useWorkletCallback(onCycleEnd);
 
   const reportReady = useCallback(() => onReadyChange(true), [onReadyChange]);
 
@@ -375,7 +378,8 @@ const GPUConfettiRenderer = ({
     const currentFrame = initializedRef.current?.state;
     if (
       currentFrame &&
-      currentFrame.config === frameConfig &&
+      frameRegistration?.rawFrameState === currentFrame &&
+      frameRegistration.config === frameConfig &&
       currentFrame.uniformBuffer === resources.uniforms.buffer.buffer
     ) {
       return;
@@ -401,7 +405,6 @@ const GPUConfettiRenderer = ({
 
     resetClock();
     const nextRawFrameState: RawFrameState = {
-      config: frameConfig,
       device,
       queue: resources.queue,
       context,
@@ -436,7 +439,11 @@ const GPUConfettiRenderer = ({
       state: nextRawFrameState,
       initialization,
     };
-    setFrameRegistration({ rawFrameState: nextRawFrameState, retirement });
+    setFrameRegistration({
+      config: frameConfig,
+      rawFrameState: nextRawFrameState,
+      retirement,
+    });
     configureCanvasSurface(
       context,
       device,
@@ -462,6 +469,7 @@ const GPUConfettiRenderer = ({
     sizeVariations,
     needsRender,
     initialization,
+    frameRegistration,
   ]);
 
   const rawFrameState = frameRegistration?.rawFrameState ?? null;
@@ -470,7 +478,7 @@ const GPUConfettiRenderer = ({
     resources &&
     rawFrameState &&
     resources.config === resourceConfig &&
-    rawFrameState.config === frameConfig &&
+    frameRegistration?.config === frameConfig &&
     rawFrameState.uniformBuffer === resources.uniforms.buffer.buffer
       ? rawFrameState
       : null;
@@ -537,11 +545,10 @@ const GPUConfettiRenderer = ({
     (
       timestamp: number,
       _timeSinceFirstFrame: number,
-      target: DedicatedGPUFrameTarget
+      target: DedicatedGPUFrameTarget,
+      state: RawFrameState
     ): GPUCommandBuffer | null => {
       'worklet';
-
-      if (!activeRawFrameState) return null;
 
       const isRunning = running.get();
       const wasRunningBeforeFrame = wasRunning.get();
@@ -625,11 +632,11 @@ const GPUConfettiRenderer = ({
 
       const uniformData = uniformDataRef.current;
       uniformData[UNIFORM_FLOAT_OFFSETS.viewportX] =
-        activeRawFrameState.viewportWidth;
+        state.viewportWidth;
       uniformData[UNIFORM_FLOAT_OFFSETS.viewportY] =
-        activeRawFrameState.viewportHeight;
+        state.viewportHeight;
       uniformData[UNIFORM_FLOAT_OFFSETS.focalLength] =
-        activeRawFrameState.focalLength;
+        state.focalLength;
       uniformData[UNIFORM_FLOAT_OFFSETS.opacity] =
         opacity.get() * animatedOpacity;
       uniformData[UNIFORM_FLOAT_OFFSETS.dt] = FIXED_SIMULATION_STEP_SECONDS;
@@ -664,46 +671,42 @@ const GPUConfettiRenderer = ({
       uniformData[UNIFORM_FLOAT_OFFSETS.gravityDirectionZ] = gDir[2];
       uniformData[UNIFORM_FLOAT_OFFSETS.settleOnFloor] =
         params.settleOnFloor && !continuous ? 1 : 0;
-      activeRawFrameState.queue.writeBuffer(
-        activeRawFrameState.uniformBuffer,
-        0,
-        uniformData
-      );
+      state.queue.writeBuffer(state.uniformBuffer, 0, uniformData);
 
-      const encoder = activeRawFrameState.device.createCommandEncoder();
+      const encoder = state.device.createCommandEncoder();
       if (completedCycles > 0) {
         const initPass = encoder.beginComputePass();
-        initPass.setPipeline(activeRawFrameState.initPipeline);
-        initPass.setBindGroup(0, activeRawFrameState.initBindGroup);
-        initPass.dispatchWorkgroups(activeRawFrameState.workgroupCount);
+        initPass.setPipeline(state.initPipeline);
+        initPass.setBindGroup(0, state.initBindGroup);
+        initPass.dispatchWorkgroups(state.workgroupCount);
         initPass.end();
       }
       if (simulationSteps > 0) {
         const computePass = encoder.beginComputePass();
-        computePass.setPipeline(activeRawFrameState.computePipeline);
-        computePass.setBindGroup(0, activeRawFrameState.computeBindGroup);
-        computePass.dispatchWorkgroups(activeRawFrameState.workgroupCount);
+        computePass.setPipeline(state.computePipeline);
+        computePass.setBindGroup(0, state.computeBindGroup);
+        computePass.dispatchWorkgroups(state.workgroupCount);
         computePass.end();
       }
 
-      target.colorAttachment.view = activeRawFrameState.context
+      target.colorAttachment.view = state.context
         .getCurrentTexture()
         .createView();
       const renderPass = encoder.beginRenderPass(target.descriptor);
       renderPass.setPipeline(
-        params.textureMode === 0 && activeRawFrameState.textureRenderPipeline
-          ? activeRawFrameState.textureRenderPipeline
-          : activeRawFrameState.renderPipeline
+        params.textureMode === 0 && state.textureRenderPipeline
+          ? state.textureRenderPipeline
+          : state.renderPipeline
       );
-      renderPass.setBindGroup(0, activeRawFrameState.renderBindGroup);
-      renderPass.draw(VERTS_PER_FLAKE, activeRawFrameState.count);
+      renderPass.setBindGroup(0, state.renderBindGroup);
+      renderPass.draw(VERTS_PER_FLAKE, state.count);
       renderPass.end();
 
       const commandBuffer = encoder.finish();
       needsRender.set(false);
 
       if (completedCycles > 0) {
-        scheduleOnRN(onCycleEnd);
+        scheduleOnRN(dispatchWorkletCallback, cycleEndCallbackId);
       }
 
       if (!continuous && !infinite && cycleDuration > 0) {
@@ -712,7 +715,7 @@ const GPUConfettiRenderer = ({
           accumulator < FIXED_SIMULATION_STEP_SECONDS;
         if (done) {
           resetClock();
-          scheduleOnRN(onCycleEnd);
+          scheduleOnRN(dispatchWorkletCallback, cycleEndCallbackId);
         }
       }
 
@@ -721,6 +724,7 @@ const GPUConfettiRenderer = ({
     [
       continuous,
       cycleDataRef,
+      cycleEndCallbackId,
       cycleDuration,
       drift,
       elapsed,
@@ -733,10 +737,8 @@ const GPUConfettiRenderer = ({
       lastFrameTimestampMs,
       lastSimSeconds,
       needsRender,
-      onCycleEnd,
       opacity,
       params,
-      activeRawFrameState,
       running,
       resetClock,
       scheduleDataRef,
@@ -749,8 +751,7 @@ const GPUConfettiRenderer = ({
 
   useDedicatedGPUFrame(
     renderFrame,
-    activeRawFrameState?.device ?? null,
-    activeRawFrameState?.context ?? null,
+    activeRawFrameState,
     activeRawFrameState !== null,
     shouldScheduleFrame,
     activeFrameRetirement ? reportFrameRetired : undefined

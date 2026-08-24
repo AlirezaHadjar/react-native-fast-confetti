@@ -79,6 +79,9 @@ export const configureCanvasSurface = (
     return;
   }
 
+  // Keep this queued. On Android, the JS canvas object can arrive before the
+  // backing SurfaceView has completed surfaceCreated; synchronous UI dispatch
+  // would configure a swapchain that never becomes presentable.
   scheduleOnUI(
     configureCanvasSurfaceOnUI,
     context,

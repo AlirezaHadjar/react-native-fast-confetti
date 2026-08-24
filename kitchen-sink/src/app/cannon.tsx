@@ -20,7 +20,9 @@ export default function CannonScreen() {
   const isFocused = useIsFocused();
   const cannonConfettiRef = useRef<CannonConfettiMethods>(null);
   const { config, updateConfig } = useScreenConfig('cannon');
-  const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets();
+  const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets(
+    config.textureType
+  );
 
   if (isLoading) return null;
 

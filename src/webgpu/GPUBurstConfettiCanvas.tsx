@@ -20,6 +20,7 @@ import {
 } from './shaders/burstConfetti';
 import {
   useDedicatedGPUFrame,
+  type DedicatedGPUFrameState,
   type DedicatedGPUFrameTarget,
 } from './hooks/useDedicatedGPUFrame';
 import { useGPUDevice } from './hooks/useGPUDevice';
@@ -71,11 +72,7 @@ type RendererProps = Omit<
   device: GPUDevice;
 };
 
-type RawFrameState = {
-  config: FrameConfig;
-  device: GPUDevice;
-  queue: GPUQueue;
-  context: GPUCanvasContext & { present?: () => void };
+type RawFrameState = DedicatedGPUFrameState & {
   uniformBuffer: GPUBuffer;
   initPipeline: GPUComputePipeline;
   renderPipeline: GPURenderPipeline;
@@ -94,6 +91,7 @@ type FrameConfig = {
 };
 
 type FrameRegistration = {
+  config: FrameConfig;
   rawFrameState: RawFrameState;
   retirement: GPUFrameRetirement;
 };
@@ -218,7 +216,8 @@ const GPUBurstConfettiRenderer = ({
     const currentFrame = initializedRef.current?.state;
     if (
       currentFrame &&
-      currentFrame.config === frameConfig &&
+      frameRegistration?.rawFrameState === currentFrame &&
+      frameRegistration.config === frameConfig &&
       currentFrame.uniformBuffer === resources.uniforms.buffer.buffer
     ) {
       return;
@@ -238,7 +237,6 @@ const GPUBurstConfettiRenderer = ({
     );
 
     const nextRawFrameState: RawFrameState = {
-      config: frameConfig,
       device,
       queue: resources.queue,
       context,
@@ -259,7 +257,11 @@ const GPUBurstConfettiRenderer = ({
       state: nextRawFrameState,
       initialization,
     };
-    setFrameRegistration({ rawFrameState: nextRawFrameState, retirement });
+    setFrameRegistration({
+      config: frameConfig,
+      rawFrameState: nextRawFrameState,
+      retirement,
+    });
     configureCanvasSurface(
       context,
       device,
@@ -284,6 +286,7 @@ const GPUBurstConfettiRenderer = ({
     initialization.origins.length,
     sizeVariations,
     initialization,
+    frameRegistration,
   ]);
 
   const rawFrameState = frameRegistration?.rawFrameState ?? null;
@@ -292,7 +295,7 @@ const GPUBurstConfettiRenderer = ({
     resources &&
     rawFrameState &&
     resources.config === resourceConfig &&
-    rawFrameState.config === frameConfig &&
+    frameRegistration?.config === frameConfig &&
     rawFrameState.uniformBuffer === resources.uniforms.buffer.buffer
       ? rawFrameState
       : null;
@@ -349,11 +352,10 @@ const GPUBurstConfettiRenderer = ({
     (
       _timestamp: number,
       _timeSinceFirstFrame: number,
-      target: DedicatedGPUFrameTarget
+      target: DedicatedGPUFrameTarget,
+      state: RawFrameState
     ): GPUCommandBuffer | null => {
       'worklet';
-
-      if (!activeRawFrameState) return null;
 
       const currentProgress = progress.get();
       if (!running.get() && currentProgress === lastRenderedProgress.get()) {
@@ -363,9 +365,9 @@ const GPUBurstConfettiRenderer = ({
 
       const uniformData = uniformDataRef.current;
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.viewportX] =
-        activeRawFrameState.viewportWidth;
+        state.viewportWidth;
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.viewportY] =
-        activeRawFrameState.viewportHeight;
+        state.viewportHeight;
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.opacity] = opacity.get();
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.progress] =
         totalDuration > 0
@@ -386,20 +388,16 @@ const GPUBurstConfettiRenderer = ({
         floor.restitution;
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.floorFriction] = floor.friction;
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.floorVariation] = floor.variation;
-      activeRawFrameState.queue.writeBuffer(
-        activeRawFrameState.uniformBuffer,
-        0,
-        uniformData
-      );
+      state.queue.writeBuffer(state.uniformBuffer, 0, uniformData);
 
-      const encoder = activeRawFrameState.device.createCommandEncoder();
-      target.colorAttachment.view = activeRawFrameState.context
+      const encoder = state.device.createCommandEncoder();
+      target.colorAttachment.view = state.context
         .getCurrentTexture()
         .createView();
       const renderPass = encoder.beginRenderPass(target.descriptor);
-      renderPass.setPipeline(activeRawFrameState.renderPipeline);
-      renderPass.setBindGroup(0, activeRawFrameState.renderBindGroup);
-      renderPass.draw(BURST_VERTS_PER_FLAKE, activeRawFrameState.count);
+      renderPass.setPipeline(state.renderPipeline);
+      renderPass.setBindGroup(0, state.renderBindGroup);
+      renderPass.draw(BURST_VERTS_PER_FLAKE, state.count);
       renderPass.end();
 
       return encoder.finish();
@@ -417,7 +415,6 @@ const GPUBurstConfettiRenderer = ({
       lastRenderedProgress,
       opacity,
       progress,
-      activeRawFrameState,
       running,
       cycleDuration,
       totalDuration,
@@ -428,8 +425,7 @@ const GPUBurstConfettiRenderer = ({
 
   useDedicatedGPUFrame(
     renderFrame,
-    activeRawFrameState?.device ?? null,
-    activeRawFrameState?.context ?? null,
+    activeRawFrameState,
     activeRawFrameState !== null,
     shouldScheduleFrame,
     activeFrameRetirement ? reportFrameRetired : undefined

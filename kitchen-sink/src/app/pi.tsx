@@ -20,7 +20,9 @@ export default function PIScreen() {
   const isFocused = useIsFocused();
   const piConfettiRef = useRef<PIConfettiMethods>(null);
   const { config, updateConfig } = useScreenConfig('pi');
-  const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets();
+  const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets(
+    config.textureType
+  );
   const { width } = useWindowDimensions();
 
   if (isLoading) return null;

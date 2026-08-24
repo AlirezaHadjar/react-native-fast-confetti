@@ -21,7 +21,9 @@ export default function SingleScreen() {
   const isFocused = useIsFocused();
   const confettiRef = useRef<ConfettiMethods>(null);
   const { config, updateConfig } = useScreenConfig('single');
-  const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets();
+  const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets(
+    config.textureType
+  );
 
   if (isLoading) return null;
 
