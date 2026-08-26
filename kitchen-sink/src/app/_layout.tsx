@@ -69,6 +69,14 @@ export default function RootLayout() {
         <Stack.Screen name="continuous" options={{ title: 'Continuous' }} />
         <Stack.Screen name="pi" options={{ title: 'PI' }} />
         <Stack.Screen name="cannon" options={{ title: 'Cannon' }} />
+        <Stack.Screen
+          name="cannon-original"
+          options={{ title: 'Original Cannon' }}
+        />
+        <Stack.Screen
+          name="cannon-reconstruction"
+          options={{ title: 'Twin Bloom' }}
+        />
       </Stack>
     </View>
   );

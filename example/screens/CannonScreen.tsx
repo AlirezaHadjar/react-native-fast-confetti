@@ -1,47 +1,44 @@
 import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { CannonConfetti } from 'react-native-fast-confetti';
+import {
+  CannonConfetti,
+  recordingCannonParticleSystem,
+} from 'react-native-fast-confetti';
 import type { CannonConfettiMethods } from 'react-native-fast-confetti';
 import { Controls } from './Controls';
 
+const referenceColors = ['#F6D61B', '#EE6A10', '#6F1EE8', '#B21FBA', '#DC1F5D'];
+
 export function CannonScreen() {
   const ref = useRef<CannonConfettiMethods>(null);
+  const flakes = (
+    <>
+      <CannonConfetti.Flake size={32} radius={16} />
+      <CannonConfetti.Flake width={44} height={16} radius={8} />
+      <CannonConfetti.Flake size={28} radius={14} />
+      <CannonConfetti.Flake width={36} height={16} radius={8} />
+      <CannonConfetti.Flake size={36} shape="heart" />
+      <CannonConfetti.Flake size={36} shape="star" />
+      <CannonConfetti.Flake size={36} shape="flower" />
+      <CannonConfetti.Flake width={56} height={40} shape="streamer" />
+    </>
+  );
 
   return (
     <View style={styles.container}>
       <CannonConfetti
         ref={ref}
         autoplay
-        fadeOutOnEnd
-        infinite
-        initialScale={0.7}
+        colors={referenceColors}
+        particleSystem={recordingCannonParticleSystem}
+        reduceMotion="never"
+        flakeStyle="solid"
       >
-        <CannonConfetti.Origin
-          position="bottom-left"
-          count={150}
-          initialSpeed={3}
-          depth={{ min: 1, max: 1.1 }}
-        >
-          <CannonConfetti.Flake size={12} radius={6} />
-          <CannonConfetti.Flake width={8} height={14} />
+        <CannonConfetti.Origin position="center-left" count={20}>
+          {flakes}
         </CannonConfetti.Origin>
-        <CannonConfetti.Origin
-          position="bottom-right"
-          count={150}
-          initialSpeed={3}
-          depth={{ min: 1, max: 1.1 }}
-        >
-          <CannonConfetti.Flake size={12} radius={6} />
-          <CannonConfetti.Flake width={8} height={14} />
-        </CannonConfetti.Origin>
-        <CannonConfetti.Origin
-          position="bottom-center"
-          count={150}
-          initialSpeed={4}
-          target="center"
-        >
-          <CannonConfetti.Flake size={12} radius={6} />
-          <CannonConfetti.Flake width={8} height={14} />
+        <CannonConfetti.Origin position="center-right" count={16}>
+          {flakes}
         </CannonConfetti.Origin>
       </CannonConfetti>
       <Controls confettiRef={ref} />

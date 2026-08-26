@@ -52,6 +52,10 @@ import { Confetti } from 'react-native-fast-confetti';
 &lt;Confetti.Flake width={8} height={14} /&gt;
 &lt;Confetti.Flake width={8} height={14} radius={6.5} /&gt;
 &lt;Confetti.Flake width={8} height={14} radius={4} /&gt;
+&lt;Confetti.Flake size={18} shape="heart" /&gt;
+&lt;Confetti.Flake size={18} shape="star" /&gt;
+&lt;Confetti.Flake size={17} shape="flower" /&gt;
+&lt;Confetti.Flake width={24} height={17} shape="streamer" /&gt;
 &lt;/Confetti&gt;;
 
 </pre>
@@ -331,6 +335,7 @@ Same as `<Confetti />` except:
 | `rotation`       | N/A                    | Default rotation config for origins.                             |
 | `depth`          | { min: 1, max: 1.1 }   | Default depth range for origins.                                 |
 | `initialScale`   | 0.3                    | Scale at spawn before growing.                                   |
+| `particleSystem` | N/A                    | Deterministic fitted initial states and physical force values.   |
 | `containerStyle` | N/A                    | Style for the container. Supports any sizing (numeric, %, flex). |
 
 </details>
@@ -419,29 +424,30 @@ Same as `<Confetti />` except:
 
 Define flake sizes as children of any confetti component (or origin).
 
-| Name         | Default | Description                                                     |
-| ------------ | ------- | --------------------------------------------------------------- |
-| `size`       | -       | Sets both width and height.                                     |
-| `width`      | -       | Flake width (use instead of `size` for non-square).             |
-| `height`     | -       | Flake height (use instead of `size` for non-square).            |
-| `radius`     | 0       | Corner radius.                                                  |
-| `flakeStyle` | N/A     | Override the parent's `flakeStyle`.                             |
-| `image`      | N/A     | Skia image texture (overrides parent `image`/`svg`).            |
-| `svg`        | N/A     | Skia SVG texture (overrides parent `image`/`svg`).              |
-| `colors`     | N/A     | Color palette for this flake group (overrides parent `colors`). |
+| Name         | Default       | Description                                                                          |
+| ------------ | ------------- | ------------------------------------------------------------------------------------ |
+| `size`       | -             | Sets both width and height.                                                          |
+| `width`      | -             | Flake width (use instead of `size` for non-square).                                  |
+| `height`     | -             | Flake height (use instead of `size` for non-square).                                 |
+| `radius`     | 0             | Corner radius.                                                                       |
+| `shape`      | `'rectangle'` | Built-in `'rectangle'`, `'heart'`, `'star'`, `'flower'`, or `'streamer'` silhouette. |
+| `flakeStyle` | N/A           | Override the parent's `flakeStyle`.                                                  |
+| `image`      | N/A           | Skia image texture (overrides parent `image`/`svg`).                                 |
+| `svg`        | N/A           | Skia SVG texture (overrides parent `image`/`svg`).                                   |
+| `colors`     | N/A           | Color palette for this flake group (overrides parent `colors`).                      |
 
 ## Compatibility
 
 > [!IMPORTANT]
 > This library does not depend on a specific React Native version directly. Compatibility depends on [React Native Reanimated](https://docs.swmansion.com/react-native-reanimated/docs/guides/compatibility/), [React Native Worklets](https://docs.swmansion.com/react-native-worklets/docs/guides/compatibility/), and [React Native Skia](https://github.com/Shopify/react-native-skia). Skia does not publish a Reanimated-style compatibility matrix, so use its [installation requirements](https://shopify.github.io/react-native-skia/docs/getting-started/installation/) as the source of truth.
 
-| Package version | Tested with React Native | Tested with Skia | Tested with Reanimated | Worklets | Minimum inferred from API usage |
-| --- | --- | --- | --- | --- | --- |
-| `2.0.0` | `0.83.2` | `2.5.1` | `4.2.2` | Required via Reanimated 4 | React Native `>=0.79`, React `>=19`, Skia `>=2.0.0`, Reanimated `>=4.0.0`, Worklets `>=0.7.0` |
-| `1.0.0` - `1.1.2` | `0.79.2` | `2.0.0-next.4` | `3.18.0` | Not required directly | React Native `>=0.79`, React `>=19`, Skia `2.0.0-next.x` / `>=2.0.0`, Reanimated `>=3.18.0` |
-| `0.8.3` | `0.79.2` | `2.0.0-next.4` | `3.17.5` | Not required directly | React Native `>=0.79`, React `>=19`, Skia `2.0.0-next.x` / `>=2.0.0`, Reanimated `>=3.17.5` |
-| `0.8.1` - `0.8.2` | `0.76.6` | `1.4.2` | `3.16.1` | Not required directly | React Native `>=0.76`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.16.1` |
-| `0.2.0` - `0.7.0` | `0.74.5` | `1.4.2` | `3.15.5` | Not required directly | React Native `>=0.74`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.15.5` |
+| Package version   | Tested with React Native | Tested with Skia | Tested with Reanimated | Worklets                  | Minimum inferred from API usage                                                               |
+| ----------------- | ------------------------ | ---------------- | ---------------------- | ------------------------- | --------------------------------------------------------------------------------------------- |
+| `2.0.0`           | `0.83.2`                 | `2.5.1`          | `4.2.2`                | Required via Reanimated 4 | React Native `>=0.79`, React `>=19`, Skia `>=2.0.0`, Reanimated `>=4.0.0`, Worklets `>=0.7.0` |
+| `1.0.0` - `1.1.2` | `0.79.2`                 | `2.0.0-next.4`   | `3.18.0`               | Not required directly     | React Native `>=0.79`, React `>=19`, Skia `2.0.0-next.x` / `>=2.0.0`, Reanimated `>=3.18.0`   |
+| `0.8.3`           | `0.79.2`                 | `2.0.0-next.4`   | `3.17.5`               | Not required directly     | React Native `>=0.79`, React `>=19`, Skia `2.0.0-next.x` / `>=2.0.0`, Reanimated `>=3.17.5`   |
+| `0.8.1` - `0.8.2` | `0.76.6`                 | `1.4.2`          | `3.16.1`               | Not required directly     | React Native `>=0.76`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.16.1`                    |
+| `0.2.0` - `0.7.0` | `0.74.5`                 | `1.4.2`          | `3.15.5`               | Not required directly     | React Native `>=0.74`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.15.5`                    |
 
 For exact app support, check the compatibility pages for the installed versions of Reanimated and Worklets. For Skia, follow the official installation requirements: current Skia versions require React Native `>=0.79` and React `>=19`; React Native `<=0.78` / React `<=18` projects should use Skia `1.12.4` or below.
 

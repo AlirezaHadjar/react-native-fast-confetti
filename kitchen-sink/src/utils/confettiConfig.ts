@@ -20,6 +20,25 @@ export function getRotation(
   textureType: TextureType,
   mode: 'single' | 'continuous' | 'pi' | 'cannon'
 ) {
+  if (mode === 'cannon') {
+    switch (textureType) {
+      case 'money':
+        return {
+          x: { min: 0.5 * Math.PI, max: 1.5 * Math.PI },
+          z: { min: 0.5 * Math.PI, max: 2 * Math.PI },
+        };
+      case 'snowflake':
+        return {
+          x: { min: 0.5 * Math.PI, max: 2.5 * Math.PI },
+          z: { min: 1 * Math.PI, max: 4 * Math.PI },
+        };
+      default:
+        return {
+          x: { min: 0.75 * Math.PI, max: 3.5 * Math.PI },
+          z: { min: 1 * Math.PI, max: 4.5 * Math.PI },
+        };
+    }
+  }
   if (mode === 'pi') {
     switch (textureType) {
       case 'money':
