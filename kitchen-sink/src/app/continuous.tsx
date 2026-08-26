@@ -5,7 +5,7 @@ import { ContinuousConfetti } from 'react-native-fast-confetti';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
-import { textureOptions } from '../constants/config';
+import { TEXTURE_SIZES, textureOptions } from '../constants/config';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
 import { useScreenConfig } from '../hooks/useScreenConfig';
 import { getRotation, getTextureProps } from '../utils/confettiConfig';
@@ -28,10 +28,20 @@ export default function ContinuousScreen() {
 
   const renderFlakes = () => {
     if (config.textureType === 'money') {
-      return <ContinuousConfetti.Flake size={50} {...textureProps} />;
+      return (
+        <ContinuousConfetti.Flake
+          size={TEXTURE_SIZES.money}
+          {...textureProps}
+        />
+      );
     }
     if (config.textureType === 'snowflake') {
-      return <ContinuousConfetti.Flake size={10} {...textureProps} />;
+      return (
+        <ContinuousConfetti.Flake
+          size={TEXTURE_SIZES.snowflake}
+          {...textureProps}
+        />
+      );
     }
     return <ContinuousConfetti.Flake width={15} height={8} />;
   };

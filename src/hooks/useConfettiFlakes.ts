@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { SkImage, SkSVG } from '@shopify/react-native-skia';
-import type { FlakeProps, FlakeStyle } from '../types';
+import type { FlakeProps, FlakeShape, FlakeStyle } from '../types';
 import { pickChildren } from '../children';
 import { Flake } from '../FlakeComponent';
 import { DEFAULT_COLORS, DEFAULT_FLAKE_SIZE } from '../constants';
@@ -15,6 +15,7 @@ export type SizeVariation = {
   width: number;
   height: number;
   radius: number;
+  shape: FlakeShape;
   flakeStyle: FlakeStyle;
   texture?: TextureInfo;
   colors?: string[];
@@ -47,6 +48,7 @@ export function parseFlakeChildren(
         width: w,
         height: h,
         radius: fProps.radius ?? 0,
+        shape: fProps.shape ?? 'rectangle',
         flakeStyle: resolvedStyle,
         texture,
         colors: fProps.colors,
@@ -57,6 +59,7 @@ export function parseFlakeChildren(
     width: s.width,
     height: s.height,
     radius: s.radius ?? 0,
+    shape: 'rectangle',
     flakeStyle: defaultFlakeStyle,
     texture: parentTexture,
   }));

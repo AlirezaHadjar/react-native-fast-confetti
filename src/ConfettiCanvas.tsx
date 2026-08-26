@@ -1,9 +1,21 @@
 import type { ComponentProps } from 'react';
-import { Canvas, Atlas } from '@shopify/react-native-skia';
+import {
+  Canvas,
+  Atlas,
+  ImageShader,
+  Vertices,
+} from '@shopify/react-native-skia';
 import { StyleSheet, View } from 'react-native';
 import type { LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
 
 type AtlasComponentProps = ComponentProps<typeof Atlas>;
+type VerticesComponentProps = ComponentProps<typeof Vertices>;
+
+type ConfettiMesh = {
+  vertices: VerticesComponentProps['vertices'];
+  textureCoordinates: VerticesComponentProps['textures'];
+  indices: number[];
+};
 
 type ConfettiCanvasProps = {
   containerStyle?: StyleProp<ViewStyle>;
@@ -12,6 +24,7 @@ type ConfettiCanvasProps = {
   sprites: AtlasComponentProps['sprites'];
   transforms: AtlasComponentProps['transforms'];
   opacity: AtlasComponentProps['opacity'];
+  mesh?: ConfettiMesh;
   onContainerLayout?: (e: LayoutChangeEvent) => void;
 };
 
@@ -22,6 +35,7 @@ export function ConfettiCanvas({
   sprites,
   transforms,
   opacity,
+  mesh,
   onContainerLayout,
 }: ConfettiCanvasProps) {
   return (
@@ -31,7 +45,17 @@ export function ConfettiCanvas({
       onLayout={onContainerLayout}
     >
       <Canvas style={styles.canvasContainer}>
-        {ready ? (
+        {ready && mesh ? (
+          <Vertices
+            vertices={mesh.vertices}
+            textures={mesh.textureCoordinates}
+            indices={mesh.indices}
+            mode="triangles"
+            opacity={opacity}
+          >
+            <ImageShader image={texture} />
+          </Vertices>
+        ) : ready ? (
           <Atlas
             image={texture}
             sprites={sprites}

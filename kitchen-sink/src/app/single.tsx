@@ -5,7 +5,11 @@ import { Confetti } from 'react-native-fast-confetti';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
-import { textureOptions, verticalSpacingOptions } from '../constants/config';
+import {
+  TEXTURE_SIZES,
+  textureOptions,
+  verticalSpacingOptions,
+} from '../constants/config';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
 import { useScreenConfig } from '../hooks/useScreenConfig';
 import { getRotation, getTextureProps } from '../utils/confettiConfig';
@@ -28,10 +32,12 @@ export default function SingleScreen() {
 
   const renderFlakes = () => {
     if (config.textureType === 'money') {
-      return <Confetti.Flake size={50} {...textureProps} />;
+      return <Confetti.Flake size={TEXTURE_SIZES.money} {...textureProps} />;
     }
     if (config.textureType === 'snowflake') {
-      return <Confetti.Flake size={10} {...textureProps} />;
+      return (
+        <Confetti.Flake size={TEXTURE_SIZES.snowflake} {...textureProps} />
+      );
     }
     return (
       <>

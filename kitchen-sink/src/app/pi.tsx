@@ -5,7 +5,7 @@ import { PIConfetti } from 'react-native-fast-confetti';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
-import { textureOptions } from '../constants/config';
+import { TEXTURE_SIZES, textureOptions } from '../constants/config';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
 import { useScreenConfig } from '../hooks/useScreenConfig';
 import { getRotation, getTextureProps } from '../utils/confettiConfig';
@@ -29,10 +29,12 @@ export default function PIScreen() {
 
   const renderFlakes = () => {
     if (config.textureType === 'money') {
-      return <PIConfetti.Flake size={50} {...textureProps} />;
+      return <PIConfetti.Flake size={TEXTURE_SIZES.money} {...textureProps} />;
     }
     if (config.textureType === 'snowflake') {
-      return <PIConfetti.Flake size={10} {...textureProps} />;
+      return (
+        <PIConfetti.Flake size={TEXTURE_SIZES.snowflake} {...textureProps} />
+      );
     }
     return (
       <>

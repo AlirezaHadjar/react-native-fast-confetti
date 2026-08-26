@@ -10,6 +10,9 @@ type StrictOmit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
 
 export type FlakeStyle = 'solid' | 'glossy';
 
+/** Built-in vector silhouettes rendered directly into the confetti atlas. */
+export type FlakeShape = 'rectangle' | 'heart' | 'star' | 'flower' | 'streamer';
+
 export type FlakeSize = {
   width: number;
   height: number;
@@ -31,6 +34,49 @@ export type Drag = number | { horizontal: number; vertical: number };
 export type Rotation = {
   x?: Range;
   z?: Range;
+};
+
+export type CannonParticle = {
+  /** Index of the matching `<CannonConfetti.Origin>`. */
+  originIndex: number;
+  /** Index within that origin's color palette. */
+  colorIndex: number;
+  /** Index within that origin's `<CannonConfetti.Flake>` children. */
+  sizeIndex: number;
+  /** Milliseconds after the system starts. */
+  startTime: number;
+  /** Initial normalized screen position. */
+  x: number;
+  y: number;
+  /** Initial velocity in screen widths/heights per second. */
+  velocityX: number;
+  velocityY: number;
+  /** Linear drag coefficients in inverse seconds. */
+  horizontalDrag: number;
+  verticalDrag: number;
+  /** Downward acceleration in screen heights per second squared. */
+  gravity: number;
+  /** Continuous rotation in the screen plane (around the Z axis). */
+  rotation: number;
+  angularVelocity: number;
+  /** Continuous toward/away tumble (around the X axis). */
+  rotationX: number;
+  angularVelocityX: number;
+  /** Fraction of the full edge-on projection used by the X-axis tumble. */
+  flipDepth: number;
+  /** Major-axis size as a fraction of the container width. */
+  size: number;
+};
+
+/**
+ * A deterministic physical particle system. Each particle is integrated from
+ * one initial state; no positional keyframes are evaluated at runtime.
+ */
+export type CannonParticleSystem = {
+  duration: number;
+  particles: readonly CannonParticle[];
+  /** Normalized distance outside the viewport before a particle is culled. */
+  viewportPadding?: number;
 };
 
 export type ReduceMotionConfig =
@@ -435,6 +481,12 @@ type FlakeSizeExplicit = {
 
 type FlakeBase = {
   /**
+   * @description Built-in silhouette for the flake. Custom image/SVG textures
+   * take precedence when provided.
+   * @default 'rectangle'
+   */
+  shape?: FlakeShape;
+  /**
    * @description Corner radius of the flake.
    */
   radius?: number;
@@ -494,6 +546,8 @@ type CannonConfettiBaseProps = BurstConfettiBaseProps & {
    * @default center-top of the container
    */
   target?: NamedPosition | Position;
+  /** A deterministic per-particle physics system fitted from motion data. */
+  particleSystem?: CannonParticleSystem;
 };
 
 export type CannonConfettiProps = CannonConfettiBaseProps & FlakeTexture;
