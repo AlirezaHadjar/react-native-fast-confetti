@@ -12,7 +12,10 @@ import { Canvas, type CanvasRef } from 'react-native-webgpu';
 
 import type { ColorRange, SizeVariation } from '../hooks/useConfettiFlakes';
 import type { ResolvedOpacityAnimation } from '../fadeOut';
-import type { GPUBurstInitialization } from './burstResourcePacking';
+import type {
+  BurstParticle,
+  GPUBurstInitialization,
+} from './burstResourcePacking';
 import {
   createBurstConfettiResources,
   destroyBurstConfettiResources,
@@ -73,6 +76,8 @@ type Props = {
   onContainerLayout: (e: LayoutChangeEvent) => void;
   count: number;
   initialization: GPUBurstInitialization;
+  presetParticles?: BurstParticle[] | null;
+  presetViewportPadding?: number;
   sizeVariations: SizeVariation[];
   allColors: string[];
   colorOverrides: (ColorRange | null)[];
@@ -152,7 +157,9 @@ const initializeParticles = (
   resources: BurstConfettiResources,
   initialization: GPUBurstInitialization
 ) => {
-  resources.originsBuffer.write(initialization.origins);
+  if (initialization.origins.length > 0) {
+    resources.originsBuffer.write(initialization.origins);
+  }
   resources.initUniforms.write({
     counts: [
       initialization.seed >>> 0,
@@ -181,6 +188,8 @@ const GPUBurstConfettiRenderer = ({
   device,
   count,
   initialization,
+  presetParticles = null,
+  presetViewportPadding = 0,
   sizeVariations,
   allColors,
   colorOverrides,
@@ -256,6 +265,7 @@ const GPUBurstConfettiRenderer = ({
       colorOverrides,
       parentColorCount,
       opacityAnimation,
+      presetParticles,
     }),
     [
       device,
@@ -266,6 +276,7 @@ const GPUBurstConfettiRenderer = ({
       colorOverrides,
       parentColorCount,
       opacityAnimation,
+      presetParticles,
     ]
   );
   const resources = useGPUResources({
@@ -347,10 +358,7 @@ const GPUBurstConfettiRenderer = ({
       count,
       viewportWidth,
       viewportHeight,
-      focalLength: Math.max(
-        100,
-        viewportHeight * DEFAULT_FOCAL_LENGTH_RATIO
-      ),
+      focalLength: Math.max(100, viewportHeight * DEFAULT_FOCAL_LENGTH_RATIO),
     };
     const retirement = createGPUFrameRetirement();
     frameRetirementsRef.current.set(resources, retirement);
@@ -484,8 +492,7 @@ const GPUBurstConfettiRenderer = ({
       'worklet';
 
       const pendingResetVersion = resetVersion.get();
-      const shouldReset =
-        pendingResetVersion !== handledResetVersion.get();
+      const shouldReset = pendingResetVersion !== handledResetVersion.get();
       if (shouldReset) {
         resetClock();
         handledResetVersion.set(pendingResetVersion);
@@ -527,8 +534,7 @@ const GPUBurstConfettiRenderer = ({
 
       let reinitializeGeneration = shouldReset;
       if (completedCycles > 0) {
-        const nextGeneration =
-          (cycleGeneration.get() + completedCycles) >>> 0;
+        const nextGeneration = (cycleGeneration.get() + completedCycles) >>> 0;
         cycleGeneration.set(nextGeneration);
         const generationData = generationDataRef.current;
         generationData[0] = nextGeneration;
@@ -563,9 +569,7 @@ const GPUBurstConfettiRenderer = ({
         burstSchedule[BURST_SCHEDULE_REINITIALIZE]! > 0.5;
       const simulationSteps = burstSchedule[BURST_SCHEDULE_STEPS]!;
       const interpolationAlpha = burstSchedule[BURST_SCHEDULE_ALPHA]!;
-      simulationAccumulator.set(
-        burstSchedule[BURST_SCHEDULE_ACCUMULATOR]!
-      );
+      simulationAccumulator.set(burstSchedule[BURST_SCHEDULE_ACCUMULATOR]!);
       lastTargetSimulationSeconds.set(targetSimulationSeconds);
       if (shouldReinitialize) {
         simulatedSeconds.set(0);
@@ -579,25 +583,18 @@ const GPUBurstConfettiRenderer = ({
       }
 
       const safeGravity = Math.max(gravityPxPerSec2, 0.001);
-      const dragScale = Math.max(
-        (horizontalDrag + verticalDrag) / 6,
-        0.05
-      );
+      const dragScale = Math.max((horizontalDrag + verticalDrag) / 6, 0.05);
       const normalDrag = (4 / safeGravity) * dragScale;
 
       const uniformData = uniformDataRef.current;
-      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.viewportX] =
-        state.viewportWidth;
-      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.viewportY] =
-        state.viewportHeight;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.viewportX] = state.viewportWidth;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.viewportY] = state.viewportHeight;
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.visibility] = visibility.get();
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.focalLength] = state.focalLength;
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.dt] =
         FIXED_SIMULATION_STEP_SECONDS;
-      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.time] =
-        simulationTimeBeforeFrame;
-      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.stepsThisFrame] =
-        simulationSteps;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.time] = simulationTimeBeforeFrame;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.stepsThisFrame] = simulationSteps;
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.interpolationAlpha] =
         interpolationAlpha;
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.motionDuration] =
@@ -621,6 +618,10 @@ const GPUBurstConfettiRenderer = ({
         opacityAnimation?.timestamps.length ?? 0;
       uniformData[BURST_UNIFORM_FLOAT_OFFSETS.opacityDuration] =
         cycleDurationSeconds;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.presetViewportPadding] =
+        presetViewportPadding;
+      uniformData[BURST_UNIFORM_FLOAT_OFFSETS.presetTimeline] =
+        targetSimulationSeconds;
       state.queue.writeBuffer(state.uniformBuffer, 0, uniformData);
 
       const encoder = state.device.createCommandEncoder();
@@ -694,6 +695,7 @@ const GPUBurstConfettiRenderer = ({
       lastTargetSimulationSeconds,
       needsRender,
       opacityAnimation,
+      presetViewportPadding,
       resetClock,
       resetVersion,
       running,

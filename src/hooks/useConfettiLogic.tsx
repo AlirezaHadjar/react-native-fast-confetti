@@ -10,6 +10,7 @@ import {
   LinearGradient,
   ImageSVG,
   Image,
+  Path,
 } from '@shopify/react-native-skia';
 import type { SizeVariation, ColorRange } from './useConfettiFlakes';
 import {
@@ -18,6 +19,7 @@ import {
   BURST_SIZE_INDEX,
   type PackedBurstBoxes,
 } from '../packedBurstBoxes';
+import { makeFilledShapePath, makeStreamerPath } from '../flakeShapes';
 
 function renderAtlasCell(
   color: string,
@@ -68,8 +70,51 @@ function renderAtlasCell(
     return null;
   }
 
+  const gradient =
+    size.flakeStyle === 'glossy' ? (
+      <LinearGradient
+        start={vec(cellX, cellY)}
+        end={vec(cellX, cellY + size.height)}
+        colors={[lightenColor(color, 0.35), color]}
+        positions={[0, 0.6]}
+      />
+    ) : null;
+
+  if (size.shape === 'streamer') {
+    return (
+      <Path
+        key={key}
+        path={makeStreamerPath(cellX, cellY, size.width, size.height)}
+        style="stroke"
+        strokeWidth={Math.min(size.width, size.height) * 0.2}
+        strokeCap="round"
+        strokeJoin="round"
+        color={color}
+      >
+        {gradient}
+      </Path>
+    );
+  }
+
+  if (size.shape !== 'rectangle') {
+    return (
+      <Path
+        key={key}
+        path={makeFilledShapePath(
+          size.shape,
+          cellX,
+          cellY,
+          size.width,
+          size.height
+        )}
+        color={color}
+      >
+        {gradient}
+      </Path>
+    );
+  }
+
   if (size.flakeStyle === 'glossy') {
-    const lighter = lightenColor(color, 0.35);
     return (
       <RoundedRect
         key={key}
@@ -82,7 +127,7 @@ function renderAtlasCell(
         <LinearGradient
           start={vec(cellX, cellY)}
           end={vec(cellX, cellY + size.height)}
-          colors={[lighter, color]}
+          colors={[lightenColor(color, 0.35), color]}
           positions={[0, 0.6]}
         />
       </RoundedRect>
@@ -227,8 +272,7 @@ export const usePackedConfettiLogic = ({
       return;
     }
     const metaOffset = index * BURST_META_STRIDE;
-    const colorIndex =
-      current.metadata[metaOffset + BURST_COLOR_INDEX] ?? 0;
+    const colorIndex = current.metadata[metaOffset + BURST_COLOR_INDEX] ?? 0;
     const sizeIndex = current.metadata[metaOffset + BURST_SIZE_INDEX] ?? -1;
     const size = sizeVariations[sizeIndex];
     if (!size) {

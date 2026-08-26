@@ -10,6 +10,7 @@ import { colors } from '../constants/colors';
 import {
   PARTICLE_COUNTS,
   rendererOptions,
+  TEXTURE_SIZES,
   textureOptions,
 } from '../constants/config';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
@@ -40,10 +41,12 @@ export default function PIScreen() {
 
   const renderFlakes = () => {
     if (config.textureType === 'money') {
-      return <PIConfetti.Flake size={50} {...textureProps} />;
+      return <PIConfetti.Flake size={TEXTURE_SIZES.money} {...textureProps} />;
     }
     if (config.textureType === 'snowflake') {
-      return <PIConfetti.Flake size={10} {...textureProps} />;
+      return (
+        <PIConfetti.Flake size={TEXTURE_SIZES.snowflake} {...textureProps} />
+      );
     }
     return (
       <>

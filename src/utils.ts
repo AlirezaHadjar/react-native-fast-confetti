@@ -22,6 +22,7 @@ import {
 import type { ColorRange } from './hooks/useConfettiFlakes';
 import { integrateTrajectory } from './physics';
 import type {
+  CannonParticleSystem,
   FallingBox,
   NamedPosition,
   Position,
@@ -208,8 +209,7 @@ export const estimatePIDuration = ({
 
     const vy = -maxSpeed;
     const piLogArg = 1 - (vy * safeDrag) / scaledGravity;
-    const apexTime =
-      piLogArg > 0 ? Math.log(piLogArg) / safeDrag : 0;
+    const apexTime = piLogArg > 0 ? Math.log(piLogArg) / safeDrag : 0;
 
     const expAtApex = 1 - Math.exp(-safeDrag * apexTime);
     const apexY =
@@ -314,8 +314,7 @@ export const estimateCannonDuration = ({
     // v(t) = g/drag + (vy - g/drag) * e^(-drag*t) = 0
     // e^(-drag*t) = -g / (drag * (vy - g/drag)) = g / (g - vy*drag)
     const logArg = 1 - (vy * safeDrag) / scaledGravity;
-    const apexTime =
-      logArg > 0 ? Math.log(logArg) / safeDrag : 0;
+    const apexTime = logArg > 0 ? Math.log(logArg) / safeDrag : 0;
 
     // Position at apex
     const expAtApex = 1 - Math.exp(-safeDrag * apexTime);
@@ -366,6 +365,8 @@ export const generateCannonBoxesArray = ({
 
   const result: (BoxBase & {
     cannonIndex: number;
+    speedMultiplier: number;
+    verticalVariation: number;
   })[] = [];
 
   for (let cannonIndex = 0; cannonIndex < cannonConfigs.length; cannonIndex++) {
@@ -413,6 +414,8 @@ export const generateCannonBoxesArray = ({
         cannonIndex,
         vx: speed * Math.cos(angle),
         vy: speed * Math.sin(angle),
+        speedMultiplier,
+        verticalVariation: halfSpread === 0 ? 0 : angleOffset / halfSpread,
         launchDelay: getRandomValue(0, launchDelayMax),
         depthScale,
         clockwise: getRandomBoolean(),
@@ -431,6 +434,45 @@ export const generateCannonBoxesArray = ({
   }
 
   return result;
+};
+
+export const generateCannonParticleSystemBoxesArray = ({
+  particleSystem,
+  cannonConfigs,
+  sizeIsTextured,
+}: {
+  particleSystem: CannonParticleSystem;
+  cannonConfigs: CannonConfig[];
+  sizeIsTextured: boolean[];
+}) => {
+  'worklet';
+  return particleSystem.particles.map((particle) => {
+    const config = cannonConfigs[particle.originIndex] ?? cannonConfigs[0];
+    const colorOffset = config?.colorStart ?? 0;
+    const colorCount = Math.max(config?.colorCount ?? 1, 1);
+    const sizeOffset = config?.sizeStart ?? 0;
+    const sizeCount = Math.max(config?.sizeCount ?? 1, 1);
+    const colorIndex =
+      colorOffset + Math.min(Math.max(particle.colorIndex, 0), colorCount - 1);
+    const sizeIndex =
+      sizeOffset + Math.min(Math.max(particle.sizeIndex, 0), sizeCount - 1);
+
+    return {
+      cannonIndex: particle.originIndex,
+      vx: 0,
+      vy: 0,
+      speedMultiplier: 1,
+      verticalVariation: 0,
+      launchDelay: 0,
+      depthScale: 1,
+      clockwise: true,
+      maxRotation: { x: 0, z: 0 },
+      colorIndex,
+      sizeIndex,
+      initialRotation: 0,
+      isTextured: sizeIsTextured[sizeIndex] ?? false,
+    };
+  });
 };
 
 /**

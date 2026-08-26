@@ -27,6 +27,11 @@ export const PARTICLE_COUNTS = {
   },
 } as const;
 
+export const TEXTURE_SIZES = {
+  money: 50,
+  snowflake: 10,
+} as const satisfies Record<Exclude<TextureType, 'default'>, number>;
+
 export type DropdownOption<T = any> = {
   label: string;
   value: T;

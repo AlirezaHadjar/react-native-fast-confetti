@@ -1,7 +1,7 @@
 import type { ColorRange, SizeVariation } from '../../hooks/useConfettiFlakes';
 import type { ResolvedOpacityAnimation } from '../../fadeOut';
 import { toPaletteInputs } from './palette';
-import { toBurstSizeInputs } from '../burstResourcePacking';
+import { toBurstSizeInputs, type BurstParticle } from '../burstResourcePacking';
 import {
   canUseTextureOnlyPipeline,
   computeSizeFlags,
@@ -41,6 +41,7 @@ export type BurstConfettiResourceConfig = {
   colorOverrides: (ColorRange | null)[];
   parentColorCount: number;
   opacityAnimation: ResolvedOpacityAnimation | null;
+  presetParticles: BurstParticle[] | null;
 };
 
 export const createBurstConfettiResources = async (
@@ -56,6 +57,7 @@ export const createBurstConfettiResources = async (
     colorOverrides,
     parentColorCount,
     opacityAnimation,
+    presetParticles,
   } = config;
   const maxFlakeWidth = Math.max(...sizeVariations.map((s) => s.width));
   const maxFlakeHeight = Math.max(...sizeVariations.map((s) => s.height));
@@ -70,7 +72,10 @@ export const createBurstConfettiResources = async (
   try {
     const uniforms = root.createUniform(BurstUniformsSchema);
     const initUniforms = root.createUniform(BurstInitUniformsSchema);
-    const particlesBuffer = root.createMutable(BurstParticleArraySchema(count));
+    const particlesBuffer = root.createMutable(
+      BurstParticleArraySchema(count),
+      presetParticles ?? undefined
+    );
     const runtimeBuffer = root.createMutable(BurstRuntimeArraySchema(count));
     const transformsBuffer = root.createMutable(
       BurstTransformArraySchema(count)

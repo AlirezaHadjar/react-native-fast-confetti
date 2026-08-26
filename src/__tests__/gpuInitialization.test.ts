@@ -6,6 +6,7 @@ import type { SizeVariation } from '../hooks/useConfettiFlakes';
 import type { CannonConfig, PIConfig } from '../utils';
 import {
   toCannonBurstOrigins,
+  toCannonPresetParticles,
   toPIBurstOrigins,
 } from '../webgpu/burstResourcePacking';
 import {
@@ -51,12 +52,14 @@ const sizes: SizeVariation[] = [
     width: 8,
     height: 12,
     radius: 0,
+    shape: 'rectangle',
     flakeStyle: 'glossy',
   },
   {
     width: 14,
     height: 6,
     radius: 2,
+    shape: 'rectangle',
     flakeStyle: 'solid',
   },
 ];
@@ -130,6 +133,7 @@ describe('GPU-native particle initialization', () => {
         width: 10,
         height: 10,
         radius: 2,
+        shape: 'rectangle',
         flakeStyle: 'solid',
         texture: { type: 'image', content: sharedTexture },
       },
@@ -137,6 +141,7 @@ describe('GPU-native particle initialization', () => {
         width: 10,
         height: 10,
         radius: 2,
+        shape: 'rectangle',
         flakeStyle: 'glossy',
         texture: { type: 'image', content: sharedTexture },
       },
@@ -144,6 +149,7 @@ describe('GPU-native particle initialization', () => {
         width: 20,
         height: 12,
         radius: 3,
+        shape: 'rectangle',
         flakeStyle: 'solid',
         texture: { type: 'image', content: uniqueTexture },
       },
@@ -160,13 +166,69 @@ describe('GPU-native particle initialization', () => {
     expect(textureLayer(2)).toBe(1);
     expect(maskLayer(0)).toBe(0);
     expect(maskLayer(1)).toBe(0);
-    expect(maskLayer(2)).toBe(1);
-    expect(canUseTextureOnlyPipeline(layerSizes)).toBe(false);
+    expect(maskLayer(2)).toBe(0);
+    expect(canUseTextureOnlyPipeline(layerSizes)).toBe(true);
     expect(
       canUseTextureOnlyPipeline(
         layerSizes.map((size) => ({ ...size, radius: 0 }))
       )
     ).toBe(true);
+  });
+
+  it('marks built-in silhouettes for the shared shape-mask atlas', () => {
+    const flags = computeSizeFlags([
+      { ...sizes[0]!, shape: 'heart' },
+      { ...sizes[0]!, shape: 'star' },
+      { ...sizes[0]!, shape: 'heart' },
+    ]);
+
+    expect(flags.every((flag) => (flag & (2 ** 2)) !== 0)).toBe(true);
+    expect((flags[0]! >> SIZE_FLAG_MASK_LAYER_SHIFT) & 0xff).toBe(0);
+    expect((flags[1]! >> SIZE_FLAG_MASK_LAYER_SHIFT) & 0xff).toBe(1);
+    expect((flags[2]! >> SIZE_FLAG_MASK_LAYER_SHIFT) & 0xff).toBe(0);
+  });
+
+  it('packs fitted cannon particles without per-frame JavaScript state', () => {
+    const [packed] = toCannonPresetParticles(
+      {
+        duration: 1000,
+        particles: [
+          {
+            originIndex: 1,
+            colorIndex: 2,
+            sizeIndex: 3,
+            startTime: 100,
+            x: 0.2,
+            y: 0.4,
+            velocityX: 1,
+            velocityY: -2,
+            horizontalDrag: 0.5,
+            verticalDrag: 0.75,
+            gravity: 0.9,
+            rotation: 0.1,
+            angularVelocity: 2,
+            rotationX: 0.3,
+            angularVelocityX: 4,
+            flipDepth: 0.6,
+            size: 0.04,
+          },
+        ],
+      },
+      [
+        {} as CannonConfig,
+        {
+          colorStart: 5,
+          colorCount: 4,
+          sizeStart: 8,
+          sizeCount: 5,
+        } as CannonConfig,
+      ]
+    );
+
+    expect(packed?.originAndTiming).toEqual([0.2, 0.4, 100, 0.04]);
+    expect(packed?.velocityAndDepth).toEqual([1, -2, 0.5, 0.75]);
+    expect(packed?.rotationAndMeta).toEqual([0.1, 2, 0.3, 2.6]);
+    expect(packed?.indices).toEqual([11, 7, 4, 0.9]);
   });
 
   it('packs PI origins with prefix ranges instead of expanding particles', () => {

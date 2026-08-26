@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { Dimensions, FlatList, StyleSheet } from 'react-native';
 import {
   CannonConfetti as SkiaCannonConfetti,
   Confetti as SkiaConfetti,
@@ -12,16 +11,13 @@ import {
   ContinuousConfetti as WebGPUContinuousConfetti,
   PIConfetti as WebGPUPIConfetti,
 } from '../../../src/gpu';
-import { ModeCard } from '../components/ModeCard';
-import { colors } from '../constants/colors';
+import {
+  ModeMenu,
+  MODE_CARD_HEIGHT,
+  MODE_CARD_WIDTH,
+} from '../components/ModeMenu';
 import { PARTICLE_COUNTS, type RendererType } from '../constants/config';
 import { useRenderer } from '../hooks/useRenderer';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-const PADDING = 16;
-const ITEM_HEIGHT = 140;
-const ITEM_WIDTH = SCREEN_WIDTH - PADDING * 2;
 
 const previewFlakes = (Flake: typeof SkiaConfetti.Flake) => (
   <>
@@ -49,7 +45,7 @@ const createModes = (renderer: RendererType) => {
         <Confetti
           autoplay
           count={PARTICLE_COUNTS.menu.single}
-          containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
+          containerStyle={{ width: MODE_CARD_WIDTH, height: MODE_CARD_HEIGHT }}
           verticalSpacing={50}
           infinite
           flakeStyle="glossy"
@@ -67,7 +63,7 @@ const createModes = (renderer: RendererType) => {
         <ContinuousConfetti
           autoplay
           count={PARTICLE_COUNTS.menu.continuous}
-          containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
+          containerStyle={{ width: MODE_CARD_WIDTH, height: MODE_CARD_HEIGHT }}
           verticalSpacing={120}
           flakeStyle="glossy"
           gravity={2}
@@ -86,7 +82,7 @@ const createModes = (renderer: RendererType) => {
           flakeStyle="glossy"
           gravity={6}
           infinite
-          containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
+          containerStyle={{ width: MODE_CARD_WIDTH, height: MODE_CARD_HEIGHT }}
         >
           <PIConfetti.Origin
             blastPosition="center"
@@ -112,7 +108,7 @@ const createModes = (renderer: RendererType) => {
           drag={{ vertical: 3, horizontal: 6 }}
           sprayDuration={300}
           initialScale={0.7}
-          containerStyle={{ width: ITEM_WIDTH, height: ITEM_HEIGHT }}
+          containerStyle={{ width: MODE_CARD_WIDTH, height: MODE_CARD_HEIGHT }}
         >
           <CannonConfetti.Origin
             position="bottom-left"
@@ -150,51 +146,5 @@ export default function HomeScreen() {
   const { renderer } = useRenderer();
   const modes = useMemo(() => createModes(renderer), [renderer]);
 
-  return (
-    <FlatList
-      data={modes}
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={styles.list}
-      keyExtractor={(item) => item.key}
-      renderItem={({ item }) => <ModeCard item={item} styles={styles} />}
-    />
-  );
+  return <ModeMenu items={modes} />;
 }
-
-const styles = StyleSheet.create({
-  list: {
-    padding: PADDING,
-    gap: 10,
-    maxWidth: 600,
-    alignSelf: 'center',
-    width: '100%',
-  },
-  cardDescriptionContainer: {
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-  },
-  cardTitleContainer: {
-    paddingHorizontal: 18,
-    justifyContent: 'center',
-    flex: 1,
-  },
-  card: {
-    height: ITEM_HEIGHT,
-    backgroundColor: colors.secondaryBackground,
-    boxShadow:
-      'inset 0 0 10px 0 rgba(0, 0, 0, 0.03), 0 0 2px 0 rgba(0, 0, 0, 0.1)',
-    borderRadius: 24,
-    overflow: 'hidden',
-    borderCurve: 'continuous',
-  },
-  cardTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.label,
-    marginBottom: 2,
-  },
-  cardDescription: {
-    fontSize: 13,
-    color: colors.secondaryLabel,
-  },
-});

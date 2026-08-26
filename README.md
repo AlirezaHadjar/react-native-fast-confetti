@@ -111,6 +111,10 @@ import { Confetti } from 'react-native-fast-confetti';
 &lt;Confetti.Flake width={8} height={14} /&gt;
 &lt;Confetti.Flake width={8} height={14} radius={6.5} /&gt;
 &lt;Confetti.Flake width={8} height={14} radius={4} /&gt;
+&lt;Confetti.Flake size={18} shape="heart" /&gt;
+&lt;Confetti.Flake size={18} shape="star" /&gt;
+&lt;Confetti.Flake size={17} shape="flower" /&gt;
+&lt;Confetti.Flake width={24} height={17} shape="streamer" /&gt;
 &lt;/Confetti&gt;;
 
 </pre>
@@ -194,6 +198,21 @@ import { CannonConfetti } from 'react-native-fast-confetti';
 
   </tr>
 </table>
+
+Use a built-in motion preset when you want a specific choreographed cannon:
+
+```tsx
+import { CannonConfetti, ConfettiPresets } from 'react-native-fast-confetti';
+
+<CannonConfetti autoplay particleSystem={ConfettiPresets.TwinBloom}>
+  <CannonConfetti.Origin position="center-left" count={20}>
+    <CannonConfetti.Flake size={18} shape="flower" />
+  </CannonConfetti.Origin>
+  <CannonConfetti.Origin position="center-right" count={16}>
+    <CannonConfetti.Flake size={18} shape="star" />
+  </CannonConfetti.Origin>
+</CannonConfetti>;
+```
 
 ## Ref Methods
 
@@ -425,21 +444,22 @@ Same as `<Confetti />` except:
 
 ### `<CannonConfetti />` Props
 
-| Name               | Default          | Description                                  |
-| ------------------ | ---------------- | -------------------------------------------- |
-| `autoplay`         | true             | Play animation on mount.                     |
-| `autoStartDelay`   | 0                | Delay (ms) before autoplay.                  |
-| `infinite`         | false            | Loop the animation.                          |
-| `gravity`          | 3.0              | Gravity strength.                            |
-| `target`           | N/A              | Default aim point for all origins.           |
-| `colors`           | Built-in palette | Default colors for all origins.              |
-| `flakeStyle`       | 'glossy'         | Default `'solid'` or `'glossy'` for origins. |
-| `opacityAnimation` | N/A              | Default or custom opacity keyframes.         |
-| `image`            | N/A              | Default Skia image texture for all flakes.   |
-| `svg`              | N/A              | Default Skia SVG texture for all flakes.     |
-| `reduceMotion`     | 'system'         | Reduce motion using the system setting.      |
-| `onAnimationStart` | N/A              | Called when animation starts.                |
-| `onAnimationEnd`   | N/A              | Called when animation ends.                  |
+| Name               | Default          | Description                                                        |
+| ------------------ | ---------------- | ------------------------------------------------------------------ |
+| `autoplay`         | true             | Play animation on mount.                                           |
+| `autoStartDelay`   | 0                | Delay (ms) before autoplay.                                        |
+| `infinite`         | false            | Loop the animation.                                                |
+| `gravity`          | 3.0              | Gravity strength.                                                  |
+| `target`           | N/A              | Default aim point for all origins.                                 |
+| `particleSystem`   | N/A              | Deterministic physics preset, such as `ConfettiPresets.TwinBloom`. |
+| `colors`           | Built-in palette | Default colors for all origins.                                    |
+| `flakeStyle`       | 'glossy'         | Default `'solid'` or `'glossy'` for origins.                       |
+| `opacityAnimation` | N/A              | Default or custom opacity keyframes.                               |
+| `image`            | N/A              | Default Skia image texture for all flakes.                         |
+| `svg`              | N/A              | Default Skia SVG texture for all flakes.                           |
+| `reduceMotion`     | 'system'         | Reduce motion using the system setting.                            |
+| `onAnimationStart` | N/A              | Called when animation starts.                                      |
+| `onAnimationEnd`   | N/A              | Called when animation ends.                                        |
 
 <details>
 <summary>Advanced props — these work well out of the box, but you can tweak them for full customizability.</summary>
@@ -485,16 +505,17 @@ Same as `<Confetti />` except:
 
 Define flake sizes as children of any confetti component (or origin).
 
-| Name         | Default | Description                                                     |
-| ------------ | ------- | --------------------------------------------------------------- |
-| `size`       | -       | Sets both width and height.                                     |
-| `width`      | -       | Flake width (use instead of `size` for non-square).             |
-| `height`     | -       | Flake height (use instead of `size` for non-square).            |
-| `radius`     | 0       | Corner radius.                                                  |
-| `flakeStyle` | N/A     | Override the parent's `flakeStyle`.                             |
-| `image`      | N/A     | Skia image texture (overrides parent `image`/`svg`).            |
-| `svg`        | N/A     | Skia SVG texture (overrides parent `image`/`svg`).              |
-| `colors`     | N/A     | Color palette for this flake group (overrides parent `colors`). |
+| Name         | Default       | Description                                                                          |
+| ------------ | ------------- | ------------------------------------------------------------------------------------ |
+| `size`       | -             | Sets both width and height.                                                          |
+| `width`      | -             | Flake width (use instead of `size` for non-square).                                  |
+| `height`     | -             | Flake height (use instead of `size` for non-square).                                 |
+| `radius`     | 0             | Corner radius.                                                                       |
+| `shape`      | `'rectangle'` | Built-in `'rectangle'`, `'heart'`, `'star'`, `'flower'`, or `'streamer'` silhouette. |
+| `flakeStyle` | N/A           | Override the parent's `flakeStyle`.                                                  |
+| `image`      | N/A           | Skia image texture (overrides parent `image`/`svg`).                                 |
+| `svg`        | N/A           | Skia SVG texture (overrides parent `image`/`svg`).                                   |
+| `colors`     | N/A           | Color palette for this flake group (overrides parent `colors`).                      |
 
 ## Compatibility
 

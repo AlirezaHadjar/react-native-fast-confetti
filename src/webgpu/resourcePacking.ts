@@ -8,8 +8,7 @@ export const SIZE_FLAG_MASK_LAYER_SHIFT = 16;
 export const SIZE_FLAG_LAYER_MASK = 0xff;
 
 export const canUseTextureOnlyPipeline = (sizes: SizeVariation[]) =>
-  sizes.length > 0 &&
-  sizes.every((size) => size.texture !== undefined && size.radius <= 0);
+  sizes.length > 0 && sizes.every((size) => size.texture !== undefined);
 
 export const computeSizeFlags = (sizes: SizeVariation[]): number[] => {
   const flags: number[] = [];
@@ -34,8 +33,8 @@ export const computeSizeFlags = (sizes: SizeVariation[]): number[] => {
       flag |= SIZE_FLAG_TEXTURED;
       flag |= (layer & SIZE_FLAG_LAYER_MASK) << SIZE_FLAG_TEXTURE_LAYER_SHIFT;
     }
-    if (size.radius > 0) {
-      const maskKey = `${size.width}:${size.height}:${size.radius}`;
+    if (!size.texture && (size.radius > 0 || size.shape !== 'rectangle')) {
+      const maskKey = `${size.shape}:${size.width}:${size.height}:${size.radius}`;
       let layer = maskLayers.get(maskKey);
       if (layer === undefined) {
         layer = maskLayer++;

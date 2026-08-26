@@ -1,7 +1,10 @@
 export type {
+  CannonParticle,
+  CannonParticleSystem,
   CannonOriginProps,
   Drag,
   FlakeProps,
+  FlakeShape,
   FlakeStyle,
   NamedPosition,
   OpacityAnimation,
@@ -9,6 +12,7 @@ export type {
   PIOriginProps,
   Range,
   Rotation,
+  ReduceMotionConfig,
 } from '../types';
 
 export type {

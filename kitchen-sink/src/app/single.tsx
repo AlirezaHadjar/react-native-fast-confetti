@@ -10,6 +10,7 @@ import { colors } from '../constants/colors';
 import {
   PARTICLE_COUNTS,
   rendererOptions,
+  TEXTURE_SIZES,
   textureOptions,
   verticalSpacingOptions,
 } from '../constants/config';
@@ -39,10 +40,12 @@ export default function SingleScreen() {
 
   const renderFlakes = () => {
     if (config.textureType === 'money') {
-      return <Confetti.Flake size={50} {...textureProps} />;
+      return <Confetti.Flake size={TEXTURE_SIZES.money} {...textureProps} />;
     }
     if (config.textureType === 'snowflake') {
-      return <Confetti.Flake size={10} {...textureProps} />;
+      return (
+        <Confetti.Flake size={TEXTURE_SIZES.snowflake} {...textureProps} />
+      );
     }
     return (
       <>

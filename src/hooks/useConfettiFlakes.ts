@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { SkImage, SkSVG } from '@shopify/react-native-skia';
-import type { FlakeProps, FlakeStyle } from '../types';
+import type { FlakeProps, FlakeShape, FlakeStyle } from '../types';
 import { pickChildren } from '../children';
 import { Flake } from '../FlakeComponent';
 import { DEFAULT_COLORS, DEFAULT_FLAKE_SIZE } from '../constants';
@@ -29,6 +29,7 @@ export type SizeVariation = {
   width: number;
   height: number;
   radius: number;
+  shape: FlakeShape;
   flakeStyle: FlakeStyle;
   texture?: TextureInfo;
   colors?: string[];
@@ -41,13 +42,14 @@ export const getSizeVariationsSignature = (sizes: SizeVariation[]) =>
       size.width,
       size.height,
       size.radius,
+      size.shape,
       size.flakeStyle,
       getTextureIdentity(size.texture),
       size.colors ?? null,
     ])
   );
 
-export const useSemanticValue = <T,>(signature: string, value: T): T => {
+export const useSemanticValue = <T>(signature: string, value: T): T => {
   const [cache, setCache] = useState(() => ({ signature, value }));
   if (cache.signature !== signature) {
     setCache({ signature, value });
@@ -83,6 +85,7 @@ export function parseFlakeChildren(
         width: w,
         height: h,
         radius: fProps.radius ?? 0,
+        shape: fProps.shape ?? 'rectangle',
         flakeStyle: resolvedStyle,
         texture,
         colors: fProps.colors,
@@ -93,6 +96,7 @@ export function parseFlakeChildren(
     width: s.width,
     height: s.height,
     radius: s.radius ?? 0,
+    shape: 'rectangle',
     flakeStyle: defaultFlakeStyle,
     texture: parentTexture,
   }));
@@ -110,9 +114,7 @@ export function buildAtlasColors(
   const colorOverrides: (ColorRange | null)[] = new Array(sizes.length);
   const sizeIsTextured: boolean[] = new Array(sizes.length);
 
-  const needsParentColors = sizes.some(
-    (s) => !s.texture && !s.colors
-  );
+  const needsParentColors = sizes.some((s) => !s.texture && !s.colors);
   const allColors: string[] = needsParentColors ? [...parentColors] : [];
   const parentColorCount = needsParentColors ? parentColors.length : 0;
 
@@ -124,7 +126,10 @@ export function buildAtlasColors(
       allColors.push('#000');
     } else if (size?.colors && size.colors.length > 0) {
       sizeIsTextured[i] = false;
-      colorOverrides[i] = { start: allColors.length, count: size.colors.length };
+      colorOverrides[i] = {
+        start: allColors.length,
+        count: size.colors.length,
+      };
       allColors.push(...size.colors);
     } else {
       sizeIsTextured[i] = false;
@@ -160,7 +165,10 @@ export const useConfettiFlakes = ({
   rootFlakeStyle,
   parentTexture,
 }: UseConfettiFlakesParams): UseConfettiFlakesResult => {
-  const flakeChildren = pickChildren<FlakeProps>(children, Flake).targetChildren;
+  const flakeChildren = pickChildren<FlakeProps>(
+    children,
+    Flake
+  ).targetChildren;
   const parsedSizes = parseFlakeChildren(
     flakeChildren,
     rootFlakeStyle ?? 'glossy',

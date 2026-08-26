@@ -1,5 +1,5 @@
 import type { SizeVariation } from '../hooks/useConfettiFlakes';
-import type { Position } from '../types';
+import type { CannonParticleSystem, Position } from '../types';
 import type { CannonConfig, PIConfig } from '../utils';
 import { computeSizeFlags, toSizeInputs } from './resourcePacking';
 import {
@@ -117,6 +117,47 @@ export const toCannonBurstParticles = (
         box.colorIndex,
         box.isTextured ? 1 : 0,
         box.cannonIndex,
+      ],
+    };
+  });
+
+export const toCannonPresetParticles = (
+  particleSystem: CannonParticleSystem,
+  cannonConfigs: CannonConfig[]
+): BurstParticle[] =>
+  particleSystem.particles.map((particle) => {
+    const config = cannonConfigs[particle.originIndex] ?? cannonConfigs[0];
+    const colorCount = Math.max(config?.colorCount ?? 1, 1);
+    const sizeCount = Math.max(config?.sizeCount ?? 1, 1);
+
+    // Mode 2 marks fitted motion. Its otherwise-unused lanes carry the fitted
+    // size, drag, flip, angular velocity, and gravity without a second buffer.
+    return {
+      originAndTiming: [
+        particle.x,
+        particle.y,
+        particle.startTime,
+        particle.size,
+      ],
+      velocityAndDepth: [
+        particle.velocityX,
+        particle.velocityY,
+        particle.horizontalDrag,
+        particle.verticalDrag,
+      ],
+      rotationAndMeta: [
+        particle.rotation,
+        particle.angularVelocity,
+        particle.rotationX,
+        2 + Math.min(Math.max(particle.flipDepth, 0), 1),
+      ],
+      indices: [
+        (config?.sizeStart ?? 0) +
+          Math.min(Math.max(particle.sizeIndex, 0), sizeCount - 1),
+        (config?.colorStart ?? 0) +
+          Math.min(Math.max(particle.colorIndex, 0), colorCount - 1),
+        particle.angularVelocityX,
+        particle.gravity,
       ],
     };
   });

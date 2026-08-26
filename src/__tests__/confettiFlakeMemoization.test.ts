@@ -10,6 +10,7 @@ const baseSize = (): SizeVariation => ({
   width: 8,
   height: 14,
   radius: 4,
+  shape: 'rectangle',
   flakeStyle: 'glossy',
   colors: ['#ff0000', '#00ff00'],
 });

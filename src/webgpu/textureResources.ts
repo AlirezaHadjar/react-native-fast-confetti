@@ -1,11 +1,15 @@
 import {
   AlphaType,
   ColorType,
+  PaintStyle,
   Skia,
+  StrokeCap,
+  StrokeJoin,
   type SkImage,
   type SkSVG,
 } from '@shopify/react-native-skia';
 
+import { makeFilledShapePath, makeStreamerPath } from '../flakeShapes';
 import type { SizeVariation, TextureInfo } from '../hooks/useConfettiFlakes';
 import {
   SIZE_FLAG_LAYER_MASK,
@@ -260,6 +264,62 @@ const createShapeMaskLayer = (
   height: number,
   bytesPerRow: number
 ) => {
+  if (size.shape !== 'rectangle') {
+    const surface = Skia.Surface.MakeOffscreen(width, height);
+    if (!surface) throw new Error('Unable to create a confetti shape mask');
+
+    try {
+      const paint = Skia.Paint();
+      try {
+        surface.getCanvas().clear(Skia.Color('transparent'));
+        paint.setAntiAlias(true);
+        paint.setColor(Skia.Color('white'));
+        const path =
+          size.shape === 'streamer'
+            ? makeStreamerPath(0, 0, width, height)
+            : makeFilledShapePath(size.shape, 0, 0, width, height);
+        try {
+          if (size.shape === 'streamer') {
+            paint.setStyle(PaintStyle.Stroke);
+            paint.setStrokeWidth(Math.min(width, height) * 0.2);
+            paint.setStrokeCap(StrokeCap.Round);
+            paint.setStrokeJoin(StrokeJoin.Round);
+          }
+          surface.getCanvas().drawPath(path, paint);
+          surface.flush();
+        } finally {
+          path.dispose();
+        }
+      } finally {
+        paint.dispose();
+      }
+
+      const snapshot = surface.makeImageSnapshot();
+      try {
+        const pixels = snapshot.readPixels(0, 0, {
+          width,
+          height,
+          colorType: ColorType.RGBA_8888,
+          alphaType: AlphaType.Unpremul,
+        });
+        if (!(pixels instanceof Uint8Array)) {
+          throw new Error('Unable to read a confetti shape mask');
+        }
+        const data = new Uint8Array(bytesPerRow * height);
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            data[y * bytesPerRow + x] = pixels[(y * width + x) * 4 + 3] ?? 0;
+          }
+        }
+        return data;
+      } finally {
+        snapshot.dispose();
+      }
+    } finally {
+      surface.dispose();
+    }
+  }
+
   const data = new Uint8Array(bytesPerRow * height);
   const halfWidth = size.width * 0.5;
   const halfHeight = size.height * 0.5;

@@ -10,6 +10,7 @@ import { colors } from '../constants/colors';
 import {
   PARTICLE_COUNTS,
   rendererOptions,
+  TEXTURE_SIZES,
   textureOptions,
 } from '../constants/config';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
@@ -41,10 +42,20 @@ export default function ContinuousScreen() {
 
   const renderFlakes = () => {
     if (config.textureType === 'money') {
-      return <ContinuousConfetti.Flake size={50} {...textureProps} />;
+      return (
+        <ContinuousConfetti.Flake
+          size={TEXTURE_SIZES.money}
+          {...textureProps}
+        />
+      );
     }
     if (config.textureType === 'snowflake') {
-      return <ContinuousConfetti.Flake size={10} {...textureProps} />;
+      return (
+        <ContinuousConfetti.Flake
+          size={TEXTURE_SIZES.snowflake}
+          {...textureProps}
+        />
+      );
     }
     return <ContinuousConfetti.Flake width={15} height={8} />;
   };

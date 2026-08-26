@@ -209,6 +209,7 @@ export const implementedCannonConfettiProps = {
   sprayDuration: true,
   svg: true,
   target: true,
+  particleSystem: true,
 } satisfies Record<AllKeys<CoreCannonConfettiProps>, true>;
 
 export const implementedPIConfettiMethods = {

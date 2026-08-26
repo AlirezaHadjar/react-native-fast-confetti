@@ -25,7 +25,11 @@ import { useCannonOrigins } from '../hooks/useCannonOrigins';
 import { useContainerDimensions } from '../hooks/useContainerDimensions';
 import { useTextureProps } from '../hooks/useTextureProps';
 import { useReduceMotionFactor } from '../hooks/useReduceMotionFactor';
-import { scaleValueForMotion } from '../reduceMotion';
+import {
+  isReduceMotionPieceVisible,
+  reduceCountForMotion,
+  scaleValueForMotion,
+} from '../reduceMotion';
 import { resolveOpacityAnimation } from '../fadeOut';
 import type {
   CannonConfettiMethods,
@@ -38,7 +42,10 @@ import {
   resolveNamedPosition,
   type CannonConfig,
 } from '../utils';
-import { toCannonBurstOrigins } from './burstResourcePacking';
+import {
+  toCannonBurstOrigins,
+  toCannonPresetParticles,
+} from './burstResourcePacking';
 import { GPUBurstConfettiCanvas } from './GPUBurstConfettiCanvas';
 import type { GPUCannonConfettiProps } from './types';
 import {
@@ -74,6 +81,7 @@ const CannonConfettiInner = forwardRef<
       depth: rootDepth,
       speedVariation: rootSpeedVariation,
       target: rootTarget,
+      particleSystem,
       sprayDuration = 300,
       initialScale = DEFAULT_INITIAL_SCALE,
       flipIntensity = DEFAULT_FLIP_INTENSITY,
@@ -134,17 +142,19 @@ const CannonConfettiInner = forwardRef<
     const currentCannonsPositions = restartState.positions ?? cannonsPositions;
     const currentCannonConfigs = restartState.configs ?? cannonConfigs;
 
-    const duration = estimateCannonDuration({
-      cannonConfigs:
-        restartState.configs === null
-          ? durationCannonConfigs
-          : currentCannonConfigs,
-      cannonsPositions: currentCannonsPositions,
-      gravity,
-      drag: verticalDrag,
-      sprayDurationMs: sprayDuration,
-      containerHeight,
-    });
+    const duration = particleSystem
+      ? particleSystem.duration
+      : estimateCannonDuration({
+          cannonConfigs:
+            restartState.configs === null
+              ? durationCannonConfigs
+              : currentCannonConfigs,
+          cannonsPositions: currentCannonsPositions,
+          gravity,
+          drag: verticalDrag,
+          sprayDurationMs: sprayDuration,
+          containerHeight,
+        });
 
     const launchDelayMax =
       sprayDuration !== undefined
@@ -154,14 +164,35 @@ const CannonConfettiInner = forwardRef<
       () => resolveSettleOnFloor(settleOnFloor),
       [settleOnFloor]
     );
-    const settlingDurationSeconds =
-      estimateFloorSettlingDuration(resolvedFloor);
+    const settlingDurationSeconds = particleSystem
+      ? 0
+      : estimateFloorSettlingDuration(resolvedFloor);
     const cycleDuration = duration + settlingDurationSeconds * 1000;
     const resolvedOpacityAnimation = useMemo(
       () => resolveOpacityAnimation(opacityAnimation),
       [opacityAnimation]
     );
-    const renderCount = ready && reduceMotionReady ? visibleCount : 0;
+    const presetVisibleCount = particleSystem
+      ? reduceCountForMotion(
+          particleSystem.particles.length,
+          reduceMotionFactor
+        )
+      : 0;
+    const presetParticles = useMemo(() => {
+      if (!particleSystem) return null;
+      return toCannonPresetParticles(particleSystem, cannonConfigs).filter(
+        (_, index) =>
+          isReduceMotionPieceVisible(
+            index,
+            particleSystem.particles.length,
+            presetVisibleCount
+          )
+      );
+    }, [particleSystem, cannonConfigs, presetVisibleCount]);
+    const renderCount =
+      ready && reduceMotionReady
+        ? (presetParticles?.length ?? visibleCount)
+        : 0;
     const {
       running,
       visibility,
@@ -305,6 +336,8 @@ const CannonConfettiInner = forwardRef<
         onContainerLayout={onContainerLayout}
         count={renderCount}
         initialization={initialization}
+        presetParticles={presetParticles}
+        presetViewportPadding={particleSystem?.viewportPadding ?? 0.08}
         sizeVariations={sizeVariations}
         allColors={allColors}
         colorOverrides={colorOverrides}
