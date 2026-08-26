@@ -14,7 +14,8 @@ uv run --with-requirements scripts/confetti-motion/requirements.txt \
   --reference-video path/to/reference-2.mov \
   --app-video .argent/recordings/current-app-run.mp4 \
   --work-dir .context/confetti-reconstruction/next \
-  --output src/presets/recordingCannonParticleSystem.ts \
+  --output src/presets/TwinBloom.ts \
+  --preset-name TwinBloom \
   --optimizer-report .context/confetti-reconstruction/next/optimizer.json \
   --verifier-report .context/confetti-reconstruction/next/verifier.json
 ```
@@ -53,7 +54,8 @@ uv run --with-requirements scripts/confetti-motion/requirements.txt \
   scripts/confetti-motion/optimize.py \
   --train reference-burst-1-tracks.json.gz \
   --validation reference-burst-2-tracks.json.gz \
-  --output src/presets/recordingCannonParticleSystem.ts \
+  --output src/presets/TwinBloom.ts \
+  --preset-name TwinBloom \
   --report optimizer-report.json
 ```
 

@@ -140,6 +140,21 @@ import { CannonConfetti } from 'react-native-fast-confetti';
   </tr>
 </table>
 
+Use a built-in motion preset when you want a specific choreographed cannon:
+
+```tsx
+import { CannonConfetti, ConfettiPresets } from 'react-native-fast-confetti';
+
+<CannonConfetti autoplay particleSystem={ConfettiPresets.TwinBloom}>
+  <CannonConfetti.Origin position="center-left" count={20}>
+    <CannonConfetti.Flake size={18} shape="flower" />
+  </CannonConfetti.Origin>
+  <CannonConfetti.Origin position="center-right" count={16}>
+    <CannonConfetti.Flake size={18} shape="star" />
+  </CannonConfetti.Origin>
+</CannonConfetti>;
+```
+
 ## Ref Methods
 
 All components expose the same control methods via ref:
@@ -364,21 +379,22 @@ Same as `<Confetti />` except:
 
 ### `<CannonConfetti />` Props
 
-| Name               | Default          | Description                                  |
-| ------------------ | ---------------- | -------------------------------------------- |
-| `autoplay`         | true             | Play animation on mount.                     |
-| `autoStartDelay`   | 0                | Delay (ms) before autoplay.                  |
-| `infinite`         | false            | Loop the animation.                          |
-| `gravity`          | 3.0              | Gravity strength.                            |
-| `target`           | N/A              | Default aim point for all origins.           |
-| `colors`           | Built-in palette | Default colors for all origins.              |
-| `flakeStyle`       | 'glossy'         | Default `'solid'` or `'glossy'` for origins. |
-| `fadeOutOnEnd`     | false            | Fade pieces as they exit.                    |
-| `image`            | N/A              | Default Skia image texture for all flakes.   |
-| `svg`              | N/A              | Default Skia SVG texture for all flakes.     |
-| `reduceMotion`     | 'system'         | Reduce motion using the system setting.      |
-| `onAnimationStart` | N/A              | Called when animation starts.                |
-| `onAnimationEnd`   | N/A              | Called when animation ends.                  |
+| Name               | Default          | Description                                                        |
+| ------------------ | ---------------- | ------------------------------------------------------------------ |
+| `autoplay`         | true             | Play animation on mount.                                           |
+| `autoStartDelay`   | 0                | Delay (ms) before autoplay.                                        |
+| `infinite`         | false            | Loop the animation.                                                |
+| `gravity`          | 3.0              | Gravity strength.                                                  |
+| `target`           | N/A              | Default aim point for all origins.                                 |
+| `particleSystem`   | N/A              | Deterministic physics preset, such as `ConfettiPresets.TwinBloom`. |
+| `colors`           | Built-in palette | Default colors for all origins.                                    |
+| `flakeStyle`       | 'glossy'         | Default `'solid'` or `'glossy'` for origins.                       |
+| `fadeOutOnEnd`     | false            | Fade pieces as they exit.                                          |
+| `image`            | N/A              | Default Skia image texture for all flakes.                         |
+| `svg`              | N/A              | Default Skia SVG texture for all flakes.                           |
+| `reduceMotion`     | 'system'         | Reduce motion using the system setting.                            |
+| `onAnimationStart` | N/A              | Called when animation starts.                                      |
+| `onAnimationEnd`   | N/A              | Called when animation ends.                                        |
 
 <details>
 <summary>Advanced props — these work well out of the box, but you can tweak them for full customizability.</summary>

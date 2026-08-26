@@ -1,10 +1,7 @@
 import { useMemo, useRef } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import type { CannonConfettiMethods } from 'react-native-fast-confetti';
-import {
-  CannonConfetti,
-  recordingCannonParticleSystem,
-} from 'react-native-fast-confetti';
+import { CannonConfetti, ConfettiPresets } from 'react-native-fast-confetti';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
@@ -13,24 +10,24 @@ import { useConfettiAssets } from '../hooks/useConfettiAssets';
 import { useScreenConfig } from '../hooks/useScreenConfig';
 import { getTextureProps } from '../utils/confettiConfig';
 
-const referenceColors = ['#F6D61B', '#EE6A10', '#6F1EE8', '#B21FBA', '#DC1F5D'];
+const twinBloomColors = ['#F6D61B', '#EE6A10', '#6F1EE8', '#B21FBA', '#DC1F5D'];
 
-export default function CannonReconstructionScreen() {
+export default function TwinBloomScreen() {
   const cannonConfettiRef = useRef<CannonConfettiMethods>(null);
   const { width } = useWindowDimensions();
   const { config, updateConfig } = useScreenConfig('cannon');
   const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets();
 
-  const confettiKey = `cannon-${config.textureType}`;
-  const particleSystem = useMemo(() => {
+  const confettiKey = `twin-bloom-${config.textureType}`;
+  const twinBloomParticleSystem = useMemo(() => {
     if (config.textureType === 'default') {
-      return recordingCannonParticleSystem;
+      return ConfettiPresets.TwinBloom;
     }
 
     const size = TEXTURE_SIZES[config.textureType] / width;
     return {
-      ...recordingCannonParticleSystem,
-      particles: recordingCannonParticleSystem.particles.map((particle) => ({
+      ...ConfettiPresets.TwinBloom,
+      particles: ConfettiPresets.TwinBloom.particles.map((particle) => ({
         ...particle,
         size,
       })),
@@ -88,8 +85,8 @@ export default function CannonReconstructionScreen() {
         key={confettiKey}
         ref={cannonConfettiRef}
         autoplay
-        colors={referenceColors}
-        particleSystem={particleSystem}
+        colors={twinBloomColors}
+        particleSystem={twinBloomParticleSystem}
         reduceMotion="never"
         flakeStyle="solid"
       >

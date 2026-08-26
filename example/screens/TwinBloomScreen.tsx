@@ -1,15 +1,12 @@
 import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import {
-  CannonConfetti,
-  recordingCannonParticleSystem,
-} from 'react-native-fast-confetti';
+import { CannonConfetti, ConfettiPresets } from 'react-native-fast-confetti';
 import type { CannonConfettiMethods } from 'react-native-fast-confetti';
 import { Controls } from './Controls';
 
-const referenceColors = ['#F6D61B', '#EE6A10', '#6F1EE8', '#B21FBA', '#DC1F5D'];
+const twinBloomColors = ['#F6D61B', '#EE6A10', '#6F1EE8', '#B21FBA', '#DC1F5D'];
 
-export function CannonScreen() {
+export function TwinBloomScreen() {
   const ref = useRef<CannonConfettiMethods>(null);
   const flakes = (
     <>
@@ -29,8 +26,8 @@ export function CannonScreen() {
       <CannonConfetti
         ref={ref}
         autoplay
-        colors={referenceColors}
-        particleSystem={recordingCannonParticleSystem}
+        colors={twinBloomColors}
+        particleSystem={ConfettiPresets.TwinBloom}
         reduceMotion="never"
         flakeStyle="solid"
       >

@@ -73,10 +73,7 @@ export default function RootLayout() {
           name="cannon-original"
           options={{ title: 'Original Cannon' }}
         />
-        <Stack.Screen
-          name="cannon-reconstruction"
-          options={{ title: 'Twin Bloom' }}
-        />
+        <Stack.Screen name="twin-bloom" options={{ title: 'Twin Bloom' }} />
       </Stack>
     </View>
   );

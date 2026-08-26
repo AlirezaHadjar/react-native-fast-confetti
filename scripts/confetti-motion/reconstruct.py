@@ -43,6 +43,7 @@ def optimize(
     validation: list[Path],
     output: Path,
     report: Path,
+    preset_name: str,
 ) -> None:
     command = [
         sys.executable,
@@ -52,7 +53,16 @@ def optimize(
     ]
     for path in validation:
         command.extend(["--validation", str(path)])
-    command.extend(["--output", str(output), "--report", str(report)])
+    command.extend(
+        [
+            "--output",
+            str(output),
+            "--report",
+            str(report),
+            "--preset-name",
+            preset_name,
+        ]
+    )
     subprocess.run(command, check=True)
 
 
@@ -63,6 +73,7 @@ def main() -> None:
     parser.add_argument("--work-dir", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--optimizer-report", required=True, type=Path)
+    parser.add_argument("--preset-name", required=True)
     parser.add_argument("--verifier-report", type=Path)
     parser.add_argument("--duration", type=float, default=3.5)
     args = parser.parse_args()
@@ -70,7 +81,13 @@ def main() -> None:
     args.work_dir.mkdir(parents=True, exist_ok=True)
     tracks = track_references(args.reference_video, args.work_dir, args.duration)
     training, validation = optimization_order(tracks)
-    optimize(training, validation, args.output, args.optimizer_report)
+    optimize(
+        training,
+        validation,
+        args.output,
+        args.optimizer_report,
+        args.preset_name,
+    )
 
     verifier_report = None
     if args.app_video:
@@ -88,6 +105,7 @@ def main() -> None:
         "training": str(training),
         "validation": [str(path) for path in validation],
         "output": str(args.output),
+        "preset_name": args.preset_name,
         "optimizer_report": str(args.optimizer_report),
         "verifier_report": str(args.verifier_report) if verifier_report else None,
         "verified": verifier_report["passed"] if verifier_report else None,

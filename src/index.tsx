@@ -22,4 +22,4 @@ export { Confetti } from './Confetti';
 export { PIConfetti } from './PIConfetti';
 export { ContinuousConfetti } from './ContinuousConfetti';
 export { CannonConfetti } from './CannonConfetti';
-export { recordingCannonParticleSystem } from './presets/recordingCannonParticleSystem';
+export { ConfettiPresets } from './presets';

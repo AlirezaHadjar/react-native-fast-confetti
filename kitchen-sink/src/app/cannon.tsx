@@ -1,14 +1,11 @@
-import {
-  CannonConfetti,
-  recordingCannonParticleSystem,
-} from 'react-native-fast-confetti';
+import { CannonConfetti, ConfettiPresets } from 'react-native-fast-confetti';
 import {
   MODE_CARD_HEIGHT,
   MODE_CARD_WIDTH,
   ModeMenu,
 } from '../components/ModeMenu';
 
-const referenceColors = ['#F6D61B', '#EE6A10', '#6F1EE8', '#B21FBA', '#DC1F5D'];
+const twinBloomColors = ['#F6D61B', '#EE6A10', '#6F1EE8', '#B21FBA', '#DC1F5D'];
 
 const originalFlakes = (
   <>
@@ -19,7 +16,7 @@ const originalFlakes = (
   </>
 );
 
-const reconstructedFlakes = (
+const twinBloomFlakes = (
   <>
     <CannonConfetti.Flake size={32} radius={16} />
     <CannonConfetti.Flake width={44} height={16} radius={8} />
@@ -76,24 +73,24 @@ const cannonModes = [
     ),
   },
   {
-    key: 'cannon-reconstruction',
+    key: 'twin-bloom',
     title: 'Twin Bloom',
     description: 'Colorful confetti blooming in from both sides',
     render: () => (
       <CannonConfetti
         autoplay
         infinite
-        colors={referenceColors}
-        particleSystem={recordingCannonParticleSystem}
+        colors={twinBloomColors}
+        particleSystem={ConfettiPresets.TwinBloom}
         reduceMotion="never"
         flakeStyle="solid"
         containerStyle={{ width: MODE_CARD_WIDTH, height: MODE_CARD_HEIGHT }}
       >
         <CannonConfetti.Origin position="center-left" count={20}>
-          {reconstructedFlakes}
+          {twinBloomFlakes}
         </CannonConfetti.Origin>
         <CannonConfetti.Origin position="center-right" count={16}>
-          {reconstructedFlakes}
+          {twinBloomFlakes}
         </CannonConfetti.Origin>
       </CannonConfetti>
     ),
