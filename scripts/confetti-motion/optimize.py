@@ -134,7 +134,14 @@ def two_cluster_threshold(values: list[float]) -> tuple[float, list[float]]:
     centers = np.quantile(logs, [0.25, 0.75])
     for _ in range(100):
         labels = np.abs(logs[:, None] - centers[None, :]).argmin(axis=1)
-        updated = np.array([logs[labels == index].mean() for index in range(2)])
+        updated = np.array(
+            [
+                logs[labels == index].mean()
+                if np.any(labels == index)
+                else centers[index]
+                for index in range(2)
+            ]
+        )
         if np.allclose(updated, centers):
             break
         centers = updated

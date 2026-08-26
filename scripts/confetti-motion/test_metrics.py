@@ -10,6 +10,7 @@ from metrics import (
     population_curve,
     trajectory_quantiles,
 )
+from optimize import two_cluster_threshold
 
 
 def track(
@@ -35,6 +36,11 @@ def track(
 
 
 class MetricsTest(unittest.TestCase):
+    def test_uniform_sizes_keep_a_finite_cluster_threshold(self) -> None:
+        threshold, centers = two_cluster_threshold([0.04, 0.04])
+        self.assertAlmostEqual(threshold, 0.04)
+        np.testing.assert_allclose(centers, [0.04, 0.04])
+
     def test_population_is_normalized_by_intentional_tracks(self) -> None:
         values = population_curve(
             [track(0, 1), track(0.5, 1.5)], np.asarray([0, 0.5, 1, 1.5])

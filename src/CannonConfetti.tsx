@@ -270,10 +270,15 @@ const CannonConfettiInner = forwardRef<
       const result = new Array(meshParticleCount * 4);
       const viewportPadding = particleSystem.viewportPadding ?? 0.08;
       for (let index = 0; index < meshParticleCount; index++) {
+        const isVisible = isReduceMotionPieceVisible(
+          index,
+          renderedCount,
+          visibleCount
+        );
         const particle = particleSystem.particles[index];
         const piece = currentBoxes[index];
         const size = piece ? sizeVariations[piece.sizeIndex] : undefined;
-        const state = particle
+        const state = isVisible && particle
           ? evaluateCannonParticle(particle, systemTime)
           : null;
         const offset = index * 4;
