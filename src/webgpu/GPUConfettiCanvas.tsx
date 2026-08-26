@@ -33,8 +33,8 @@ import {
   SCHEDULE_ALPHA,
   SCHEDULE_STEPS,
   SCHEDULE_VALUE_COUNT,
-  SUSPENSION_GAP_SECONDS,
   getLoopingCycleDuration,
+  getRecoverableFrameDeltaSeconds,
   writeCycleClock,
   writeFixedStepSchedule,
 } from './fixedStepScheduler';
@@ -561,10 +561,9 @@ const GPUConfettiRenderer = ({
         isRunning && wasRunningBeforeFrame && previousTimestamp > 0
           ? Math.max((timestamp - previousTimestamp) / 1000, 0)
           : 0;
-      // Treat suspension/background gaps as a pause. Short render stalls retain
-      // their simulation debt and are caught up over bounded GPU dispatches.
-      const rawDt =
-        timestampDelta <= SUSPENSION_GAP_SECONDS ? timestampDelta : 0;
+      // Never carry a presentation interruption into later visible frames.
+      // Gaps larger than one dispatch can fully simulate are treated as pauses.
+      const rawDt = getRecoverableFrameDeltaSeconds(timestampDelta);
       lastFrameTimestampMs.set(isRunning ? timestamp : 0);
       wasRunning.set(isRunning);
 

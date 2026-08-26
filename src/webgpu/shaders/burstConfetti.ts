@@ -762,7 +762,7 @@ export const burstConfettiTransform = tgpu.computeFn({
       let low = d.u32(0);
       let high = lastKeyframeIndex;
       while (high - low > d.u32(1)) {
-        const middle = std.div(low + high, d.u32(2));
+        const middle = d.u32(std.div(low + high, d.u32(2)));
         const middleKeyframe =
           burstTransformLayout.$.opacityKeyframes[middle]!;
         if (localProgress < middleKeyframe.x) {

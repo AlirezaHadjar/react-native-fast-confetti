@@ -59,7 +59,7 @@ import {
   CYCLE_VALUE_COUNT,
   FIXED_SIMULATION_STEP_SECONDS,
   SCHEDULE_VALUE_COUNT,
-  SUSPENSION_GAP_SECONDS,
+  getRecoverableFrameDeltaSeconds,
   writeCycleClock,
 } from './fixedStepScheduler';
 import {
@@ -509,8 +509,7 @@ const GPUBurstConfettiRenderer = ({
         isRunning && wasRunningBeforeFrame && previousTimestamp > 0
           ? Math.max((timestamp - previousTimestamp) / 1000, 0)
           : 0;
-      const rawDt =
-        timestampDelta <= SUSPENSION_GAP_SECONDS ? timestampDelta : 0;
+      const rawDt = getRecoverableFrameDeltaSeconds(timestampDelta);
       lastFrameTimestampMs.set(isRunning ? timestamp : 0);
       wasRunning.set(isRunning);
 

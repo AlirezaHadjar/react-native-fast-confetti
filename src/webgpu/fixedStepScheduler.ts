@@ -1,6 +1,7 @@
 export const FIXED_SIMULATION_STEP_SECONDS = 1 / 120;
 export const MAX_SIMULATION_STEPS_PER_FRAME = 8;
-export const SUSPENSION_GAP_SECONDS = 0.25;
+export const MAX_RECOVERABLE_FRAME_DELTA_SECONDS =
+  FIXED_SIMULATION_STEP_SECONDS * MAX_SIMULATION_STEPS_PER_FRAME;
 
 export const SCHEDULE_ACCUMULATOR = 0;
 export const SCHEDULE_STEPS = 1;
@@ -18,6 +19,22 @@ export const getLoopingCycleDuration = (
 ) => {
   'worklet';
   return infinite && !continuous ? cycleDurationSeconds : 0;
+};
+
+/**
+ * Returns only frame time that can be simulated completely before rendering.
+ * A longer interruption is a presentation pause, not physics debt that should
+ * leak into later visible frames.
+ */
+export const getRecoverableFrameDeltaSeconds = (
+  frameDeltaSeconds: number
+) => {
+  'worklet';
+  const safeDelta = Math.max(frameDeltaSeconds, 0);
+  return safeDelta <=
+    MAX_RECOVERABLE_FRAME_DELTA_SECONDS + Number.EPSILON
+    ? safeDelta
+    : 0;
 };
 
 /**

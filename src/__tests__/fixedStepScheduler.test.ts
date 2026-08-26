@@ -5,12 +5,14 @@ import {
   CYCLE_ELAPSED,
   CYCLE_VALUE_COUNT,
   FIXED_SIMULATION_STEP_SECONDS,
+  MAX_RECOVERABLE_FRAME_DELTA_SECONDS,
   MAX_SIMULATION_STEPS_PER_FRAME,
   SCHEDULE_ACCUMULATOR,
   SCHEDULE_ALPHA,
   SCHEDULE_STEPS,
   SCHEDULE_VALUE_COUNT,
   getLoopingCycleDuration,
+  getRecoverableFrameDeltaSeconds,
   writeCycleClock,
   writeFixedStepSchedule,
 } from '../webgpu/fixedStepScheduler';
@@ -28,6 +30,46 @@ const runSchedule = (frameDeltas: number[]) => {
 };
 
 describe('fixed-step GPU schedule', () => {
+  it('accepts only frame time that can be recovered before rendering', () => {
+    expect(getRecoverableFrameDeltaSeconds(1 / 60)).toBe(1 / 60);
+    expect(
+      getRecoverableFrameDeltaSeconds(
+        MAX_RECOVERABLE_FRAME_DELTA_SECONDS
+      )
+    ).toBe(MAX_RECOVERABLE_FRAME_DELTA_SECONDS);
+    expect(
+      getRecoverableFrameDeltaSeconds(
+        MAX_RECOVERABLE_FRAME_DELTA_SECONDS +
+          FIXED_SIMULATION_STEP_SECONDS
+      )
+    ).toBe(0);
+  });
+
+  it('normalizes negative frame time without creating debt', () => {
+    expect(getRecoverableFrameDeltaSeconds(-1)).toBe(0);
+  });
+
+  it('resumes normally after an interruption without trailing catch-up', () => {
+    const output = new Float64Array(SCHEDULE_VALUE_COUNT);
+    const interruption = FIXED_SIMULATION_STEP_SECONDS * 20;
+
+    writeFixedStepSchedule(
+      0,
+      getRecoverableFrameDeltaSeconds(interruption),
+      output
+    );
+    expect(output[SCHEDULE_STEPS]).toBe(0);
+    expect(output[SCHEDULE_ACCUMULATOR]).toBe(0);
+
+    writeFixedStepSchedule(
+      output[SCHEDULE_ACCUMULATOR]!,
+      1 / 60,
+      output
+    );
+    expect(output[SCHEDULE_STEPS]).toBe(2);
+    expect(output[SCHEDULE_ACCUMULATOR]).toBeCloseTo(0, 10);
+  });
+
   it('produces the same physics step count at 60 Hz and 120 Hz', () => {
     const at60 = runSchedule(Array.from({ length: 60 }, () => 1 / 60));
     const at120 = runSchedule(Array.from({ length: 120 }, () => 1 / 120));
