@@ -87,7 +87,7 @@ export default function CannonOriginalScreen() {
           autoplay
           infinite
           rotation={rotation}
-          gravity={3}
+          gravity={2.5}
           sprayDuration={300}
           initialScale={0.7}
           flakeStyle="glossy"

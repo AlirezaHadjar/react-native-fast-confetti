@@ -31,13 +31,21 @@ import {
   confettiVertex,
 } from '../webgpu/shaders/confetti';
 import {
+  computeAerodynamicTorque,
   computeAirborneAcceleration,
+  computeBodyFrameDrag,
+  computeRelativeAirVelocity,
   integrateAngularVelocity,
 } from '../webgpu/shaders/physics/aerodynamics';
+import {
+  applyFloorContactFriction,
+  updateFloorSleepTime,
+} from '../webgpu/shaders/physics/contact';
 import {
   sampleCenteredUnit,
   sampleCenterWeightedRadius,
 } from '../webgpu/shaders/physics/launch';
+import { cullProjectedAxis } from '../webgpu/shaders/physics/projection';
 import {
   PARTICLE_RUNTIME_BYTES,
   PARTICLE_SPAWN_BYTES,
@@ -88,6 +96,61 @@ describe('GPU-native particle initialization', () => {
     expect(PARTICLE_RUNTIME_BYTES).toBe(96);
     expect(PARTICLE_SPAWN_BYTES).toBe(d.sizeOf(ParticleSpawnSchema));
     expect(PARTICLE_RUNTIME_BYTES).toBe(d.sizeOf(ParticleRuntimeSchema));
+    expect(
+      d.memoryLayoutOf(ParticleRuntimeSchema, (state) => state.floorSleepTime)
+        .offset
+    ).toBe(92);
+  });
+
+  it('applies stronger drag along the flake normal', () => {
+    const force = computeBodyFrameDrag(
+      d.vec4f(0, 0, 0, 1),
+      d.vec3f(2, 3, 4),
+      2,
+      0.5
+    );
+
+    expect(force.x).toBeCloseTo(-2, 5);
+    expect(force.y).toBeCloseTo(-4.5, 5);
+    expect(force.z).toBeCloseTo(-32, 5);
+  });
+
+  it('derives angular torque from orientation and relative airflow', () => {
+    const torque = computeAerodynamicTorque(
+      d.vec4f(0, 0, 0, 1),
+      d.vec3f(1, 0, 1),
+      10,
+      1
+    );
+
+    expect(torque.x).toBeCloseTo(0, 5);
+    expect(torque.y).toBeLessThan(0);
+    expect(torque.z).toBeCloseTo(0, 5);
+  });
+
+  it('couples floor friction to bounded spin and requires stable low motion', () => {
+    const contact = applyFloorContactFriction(
+      d.vec3f(10, 0, 0),
+      d.vec3f(0),
+      0.5
+    );
+    expect(contact.velocity.x).toBeCloseTo(5, 5);
+    expect(contact.angularVelocity.z).toBeGreaterThan(0);
+    expect(Number.isFinite(contact.angularVelocity.z)).toBe(true);
+
+    let sleepTime = 0;
+    for (let step = 0; step < 18; step++) {
+      sleepTime = updateFloorSleepTime(
+        sleepTime,
+        d.vec3f(0),
+        d.vec3f(0),
+        1 / 120
+      );
+    }
+    expect(sleepTime).toBeCloseTo(0.15, 5);
+    expect(
+      updateFloorSleepTime(sleepTime, d.vec3f(7, 0, 0), d.vec3f(0), 1 / 120)
+    ).toBe(0);
   });
 
   it('keeps continuous phases exactly stratified without a JS particle array', () => {
@@ -110,6 +173,13 @@ describe('GPU-native particle initialization', () => {
     expect(sampleCenteredUnit(0, 0)).toBe(0);
     expect(sampleCenteredUnit(0, 1)).toBe(0.5);
     expect(sampleCenteredUnit(1, 1)).toBe(1);
+  });
+
+  it('collapses culled burst geometry even when projection axes are huge', () => {
+    expect(cullProjectedAxis(d.vec2f(50_000, -50_000), false)).toEqual(
+      d.vec2f(0)
+    );
+    expect(cullProjectedAxis(d.vec2f(8, 12), true)).toEqual(d.vec2f(8, 12));
   });
 
   it('packs only size-level selection metadata for GPU initialization', () => {
@@ -345,8 +415,13 @@ describe('GPU-native particle initialization', () => {
     const textureFragmentWGSL = tgpu.resolve([confettiTextureFragment]);
     const burstTextureFragmentWGSL = tgpu.resolve([burstTextureFragment]);
     const sharedPhysicsWGSL = tgpu.resolve([
+      computeAerodynamicTorque,
       computeAirborneAcceleration,
+      computeBodyFrameDrag,
+      computeRelativeAirVelocity,
       integrateAngularVelocity,
+      applyFloorContactFriction,
+      updateFloorSleepTime,
       computeWindField,
     ]);
 
@@ -371,7 +446,12 @@ describe('GPU-native particle initialization', () => {
     expect(textureFragmentWGSL).not.toContain('fbm');
     expect(burstTextureFragmentWGSL).toContain('textureSampleLevel');
     expect(sharedPhysicsWGSL).toContain('fn computeAirborneAcceleration');
+    expect(sharedPhysicsWGSL).toContain('fn computeBodyFrameDrag');
+    expect(sharedPhysicsWGSL).toContain('fn computeRelativeAirVelocity');
+    expect(sharedPhysicsWGSL).toContain('fn computeAerodynamicTorque');
     expect(sharedPhysicsWGSL).toContain('fn integrateAngularVelocity');
+    expect(sharedPhysicsWGSL).toContain('fn applyFloorContactFriction');
+    expect(sharedPhysicsWGSL).toContain('fn updateFloorSleepTime');
     expect(sharedPhysicsWGSL).toContain('fn computeWindField');
   });
 });

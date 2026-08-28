@@ -10,6 +10,8 @@ type Params = {
   running: ReadableValue<boolean>;
   beginCycle: () => void;
   onAnimationStart: () => void;
+  empty?: boolean;
+  onEmpty?: () => void;
 };
 
 export const useRendererAutoplay = ({
@@ -19,6 +21,8 @@ export const useRendererAutoplay = ({
   running,
   beginCycle,
   onAnimationStart,
+  empty = false,
+  onEmpty,
 }: Params) => {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressedRef = useRef(false);
@@ -49,7 +53,12 @@ export const useRendererAutoplay = ({
     if (enabled && autoplay && !suppressedRef.current) {
       timerRef.current = setTimeout(() => {
         timerRef.current = null;
-        if (suppressedRef.current || running.get()) return;
+        if (suppressedRef.current) return;
+        if (empty) {
+          onEmpty?.();
+          return;
+        }
+        if (running.get()) return;
         scheduleOnUI(beginCycle);
         onAnimationStart();
       }, autoStartDelay);
@@ -63,6 +72,8 @@ export const useRendererAutoplay = ({
     running,
     beginCycle,
     onAnimationStart,
+    empty,
+    onEmpty,
     clearPendingAutoplay,
   ]);
 

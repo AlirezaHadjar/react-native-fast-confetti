@@ -26,6 +26,7 @@ export const ParticleRuntimeSchema = d.struct({
   quat: d.vec4f,
   prevQuat: d.vec4f,
   omega: d.vec3f,
+  floorSleepTime: d.f32,
 });
 
 export const PARTICLE_SPAWN_BYTES = d.sizeOf(ParticleSpawnSchema);

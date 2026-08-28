@@ -23,7 +23,7 @@ export const resolveOpacityAnimation = (
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return invalidOpacityAnimation('expected an object.');
   }
-  if (value.enabled !== undefined && typeof value.enabled !== 'boolean') {
+  if (typeof value.enabled !== 'boolean') {
     return invalidOpacityAnimation('enabled must be a boolean.');
   }
   if (value.enabled === false) return null;

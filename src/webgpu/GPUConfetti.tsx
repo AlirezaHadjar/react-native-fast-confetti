@@ -151,8 +151,15 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
     );
     const cycleDuration =
       motionDuration + estimateFloorSettlingDuration(resolvedFloor);
-    const { running, pause, resume, reset, beginCycle } =
-      useSimulationLifecycle();
+    const {
+      running,
+      visibility,
+      pause,
+      resume,
+      reset,
+      beginCycle,
+      completeCycle,
+    } = useSimulationLifecycle();
 
     const [seed, setSeed] = useState(0);
     const [resetRevision, setResetRevision] = useState(0);
@@ -168,6 +175,10 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       bumpSeed();
       notifyAnimationStart();
     }, [bumpSeed, notifyAnimationStart]);
+    const notifyEmptyCycle = useCallback(() => {
+      notifyAnimationStart();
+      notifyAnimationEnd();
+    }, [notifyAnimationEnd, notifyAnimationStart]);
 
     const rotationXMin = rotation?.x?.min;
     const rotationXMax = rotation?.x?.max;
@@ -260,27 +271,45 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       motionDuration,
       gravity,
     ]);
-    const hasParticles =
+    const animationReady =
       ready &&
       reduceMotionReady &&
-      visibleCount > 0 &&
       containerWidth > 0 &&
       containerHeight > 0;
+    const hasParticles = animationReady && visibleCount > 0;
+    const completeEmptyCycle = useCallback(() => {
+      scheduleOnUI(completeCycle);
+      notifyEmptyCycle();
+    }, [completeCycle, notifyEmptyCycle]);
 
     const suppressPendingAutoplay = useRendererAutoplay({
-      enabled: hasParticles && rendererReady,
+      enabled: animationReady && (visibleCount === 0 || rendererReady),
       autoplay,
       autoStartDelay,
       running,
       beginCycle,
       onAnimationStart: notifyAnimationStart,
+      empty: visibleCount === 0,
+      onEmpty: completeEmptyCycle,
     });
 
     const restart = useCallback(() => {
       'worklet';
+      if (reduceMotionReady && visibleCount === 0) {
+        completeCycle();
+        scheduleOnRN(notifyEmptyCycle);
+        return;
+      }
       scheduleOnRN(handleRestart);
       beginCycle();
-    }, [handleRestart, beginCycle]);
+    }, [
+      beginCycle,
+      completeCycle,
+      handleRestart,
+      notifyEmptyCycle,
+      reduceMotionReady,
+      visibleCount,
+    ]);
 
     const resetAndReinitialize = useCallback(() => {
       'worklet';
@@ -313,14 +342,8 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
     }));
 
     const handleCycleEnd = useCallback(() => {
-      if (!infinite) {
-        scheduleOnUI(() => {
-          'worklet';
-          running.set(false);
-        });
-      }
       notifyAnimationEnd();
-    }, [infinite, notifyAnimationEnd, running]);
+    }, [notifyAnimationEnd]);
 
     // Default gravity direction is +Y (down). Caller can override with a
     // SharedValue (e.g. driven by gyroscope).
@@ -379,6 +402,8 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
         cycleDuration={autoRestart ? cycleDuration : 0}
         motionDuration={motionDuration}
         running={running}
+        visibility={visibility}
+        completeCycle={completeCycle}
         onCycleEnd={handleCycleEnd}
         drift={effectiveDrift}
         initialScale={initialScale}

@@ -68,21 +68,28 @@ export const createBurstConfettiResources = async (
 
   const root = getSharedTypeGPURoot(device);
   const queue = device.queue;
+  const rawBuffers: { destroy: () => void }[] = [];
   const rawTextures: GPUTexture[] = [];
   try {
     const uniforms = root.createUniform(BurstUniformsSchema);
+    rawBuffers.push(uniforms.buffer);
     const initUniforms = root.createUniform(BurstInitUniformsSchema);
+    rawBuffers.push(initUniforms.buffer);
     const particlesBuffer = root.createMutable(
       BurstParticleArraySchema(count),
       presetParticles ?? undefined
     );
+    rawBuffers.push(particlesBuffer.buffer);
     const runtimeBuffer = root.createMutable(BurstRuntimeArraySchema(count));
+    rawBuffers.push(runtimeBuffer.buffer);
     const transformsBuffer = root.createMutable(
       BurstTransformArraySchema(count)
     );
+    rawBuffers.push(transformsBuffer.buffer);
     const originsBuffer = root.createReadonly(
       BurstOriginArraySchema(originCount)
     );
+    rawBuffers.push(originsBuffer.buffer);
     const initSizesBuffer = root.createReadonly(
       BurstInitSizeArraySchema(sizeVariations.length),
       toInitSizeInputs(
@@ -92,14 +99,17 @@ export const createBurstConfettiResources = async (
         parentColorCount
       )
     );
+    rawBuffers.push(initSizesBuffer.buffer);
     const sizesBuffer = root.createReadonly(
       BurstSizeArraySchema(sizeVariations.length),
       toBurstSizeInputs(sizeVariations)
     );
+    rawBuffers.push(sizesBuffer.buffer);
     const paletteBuffer = root.createReadonly(
       BurstPaletteArraySchema(Math.max(1, allColors.length)),
       toPaletteInputs(allColors)
     );
+    rawBuffers.push(paletteBuffer.buffer);
     const opacityKeyframes = opacityAnimation
       ? opacityAnimation.timestamps.map(
           (timestamp, index) =>
@@ -110,6 +120,7 @@ export const createBurstConfettiResources = async (
       BurstOpacityKeyframeArraySchema(opacityKeyframes.length),
       opacityKeyframes
     );
+    rawBuffers.push(opacityKeyframesBuffer.buffer);
     const shapeMasksArray = createShapeMasksArray(device, queue, preparedMasks);
     rawTextures.push(shapeMasksArray);
     const texturesArray = createFlakeTexturesArray(
@@ -171,7 +182,7 @@ export const createBurstConfettiResources = async (
       canUseTextureOnlyPipeline: canUseTextureOnlyPipeline(sizeVariations),
     };
   } catch (error) {
-    destroyGPUResourceSet({ buffers: [], textures: rawTextures });
+    destroyGPUResourceSet({ buffers: rawBuffers, textures: rawTextures });
     throw error;
   }
 };

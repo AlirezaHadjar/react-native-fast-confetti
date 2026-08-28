@@ -184,7 +184,7 @@ Launch confetti from multiple origins with individual control over each cannon.
       <pre lang="tsx">
 import { CannonConfetti } from 'react-native-fast-confetti';
 
-&lt;CannonConfetti autoplay gravity={3}&gt;
+&lt;CannonConfetti autoplay&gt;
 &lt;CannonConfetti.Origin position="bottom-left" count={150} initialSpeed={3}&gt;
 &lt;CannonConfetti.Flake size={12} radius={6} /&gt;
 &lt;/CannonConfetti.Origin&gt;
@@ -347,7 +347,7 @@ The factor is clamped between `0` and `1`. A factor of `0` keeps full motion; a 
 | `gravity`          | 1.0              | Gravity strength.                          |
 | `colors`           | Built-in palette | Array of color strings.                    |
 | `flakeStyle`       | 'glossy'         | `'solid'` or `'glossy'`.                   |
-| `opacityAnimation` | N/A              | Default or custom opacity keyframes.       |
+| `opacityAnimation` | N/A              | `enabled` required; keyframes optional.    |
 | `image`            | N/A              | Default Skia image texture for all flakes. |
 | `svg`              | N/A              | Default Skia SVG texture for all flakes.   |
 | `reduceMotion`     | 'system'         | Reduce motion using the system setting.    |
@@ -375,7 +375,12 @@ Keyframe timestamps and values use the `0`–`1` range. Timestamp `0` defaults t
 opacity `1`.
 
 ```tsx
-<Confetti opacityAnimation={{ keyframes: { 0.5: 0.5, 0.7: 0 } }} />
+<Confetti
+  opacityAnimation={{
+    enabled: true,
+    keyframes: { 0.5: 0.5, 0.7: 0 },
+  }}
+/>
 ```
 
 ### `<ContinuousConfetti />` Props
@@ -396,7 +401,7 @@ Same as `<Confetti />` except:
 | `gravity`          | 3.0              | Gravity strength.                            |
 | `colors`           | Built-in palette | Default colors for all origins.              |
 | `flakeStyle`       | 'glossy'         | Default `'solid'` or `'glossy'` for origins. |
-| `opacityAnimation` | N/A              | Default or custom opacity keyframes.         |
+| `opacityAnimation` | N/A              | `enabled` required; keyframes optional.      |
 | `image`            | N/A              | Default Skia image texture for all flakes.   |
 | `svg`              | N/A              | Default Skia SVG texture for all flakes.     |
 | `reduceMotion`     | 'system'         | Reduce motion using the system setting.      |
@@ -449,12 +454,12 @@ Same as `<Confetti />` except:
 | `autoplay`         | true             | Play animation on mount.                                           |
 | `autoStartDelay`   | 0                | Delay (ms) before autoplay.                                        |
 | `infinite`         | false            | Loop the animation.                                                |
-| `gravity`          | 3.0              | Gravity strength.                                                  |
+| `gravity`          | 2.5              | Gravity strength.                                                  |
 | `target`           | N/A              | Default aim point for all origins.                                 |
 | `particleSystem`   | N/A              | Deterministic physics preset, such as `ConfettiPresets.TwinBloom`. |
 | `colors`           | Built-in palette | Default colors for all origins.                                    |
 | `flakeStyle`       | 'glossy'         | Default `'solid'` or `'glossy'` for origins.                       |
-| `opacityAnimation` | N/A              | Default or custom opacity keyframes.                               |
+| `opacityAnimation` | N/A              | `enabled` required; keyframes optional.                            |
 | `image`            | N/A              | Default Skia image texture for all flakes.                         |
 | `svg`              | N/A              | Default Skia SVG texture for all flakes.                           |
 | `reduceMotion`     | 'system'         | Reduce motion using the system setting.                            |
@@ -555,9 +560,10 @@ For exact app support, check the compatibility pages for the installed versions 
 When a Liquid Glass or blur component is rendered above confetti, the OS must
 recalculate the effect every frame, which can cause performance drops. It's recommended to render the confetti component on top of everything else.
 
-## Migrating from v1
+## Migrating
 
-See the [migration guide](MIGRATION_V1_V2.md) for a detailed mapping of v1 props to v2.
+- [v2 to v3](MIGRATION_V2_V3.md)
+- [v1 to v2](MIGRATION_V1_V2.md)
 
 ## Contributing
 

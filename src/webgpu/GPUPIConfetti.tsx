@@ -163,6 +163,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
     } = useBurstConfettiController({
       onAnimationStart,
       onAnimationEnd,
+      ready: ready && reduceMotionReady,
       renderCount,
       autoplay,
       autoStartDelay,

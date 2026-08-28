@@ -49,7 +49,7 @@ const createCannonModes = (renderer: RendererType) => {
           opacityAnimation={{ enabled: true }}
           infinite
           flakeStyle="glossy"
-          gravity={3}
+          gravity={2.5}
           sprayDuration={300}
           initialScale={0.7}
           containerStyle={{ width: MODE_CARD_WIDTH, height: MODE_CARD_HEIGHT }}

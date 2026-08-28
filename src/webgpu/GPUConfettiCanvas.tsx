@@ -115,6 +115,7 @@ type Props = {
   cycleDuration: number;
   motionDuration: number;
   running: ReadableValue<boolean>;
+  visibility: ReadableValue<number>;
   drift: number;
   initialScale: number;
   continuous: boolean;
@@ -124,6 +125,7 @@ type Props = {
   viewportWidth: number;
   viewportHeight: number;
   params: GPUConfettiCanvasParams;
+  completeCycle: () => void;
   onCycleEnd: () => void;
   onReadyChange: (ready: boolean) => void;
   onError?: (error: unknown) => void;
@@ -276,6 +278,7 @@ const GPUConfettiRenderer = ({
   cycleDuration,
   motionDuration,
   running,
+  visibility,
   drift,
   initialScale,
   continuous,
@@ -285,6 +288,7 @@ const GPUConfettiRenderer = ({
   viewportWidth,
   viewportHeight,
   params,
+  completeCycle,
   onCycleEnd,
   onReadyChange,
   onError,
@@ -634,7 +638,8 @@ const GPUConfettiRenderer = ({
         state.viewportHeight;
       uniformData[UNIFORM_FLOAT_OFFSETS.focalLength] =
         state.focalLength;
-      uniformData[UNIFORM_FLOAT_OFFSETS.opacity] = animatedOpacity;
+      uniformData[UNIFORM_FLOAT_OFFSETS.opacity] =
+        visibility.get() * animatedOpacity;
       uniformData[UNIFORM_FLOAT_OFFSETS.dt] = FIXED_SIMULATION_STEP_SECONDS;
       uniformData[UNIFORM_FLOAT_OFFSETS.time] = simulationTimeBeforeFrame;
       uniformData[UNIFORM_FLOAT_OFFSETS.drift] = drift;
@@ -710,6 +715,7 @@ const GPUConfettiRenderer = ({
           rawElapsed >= cycleDuration &&
           accumulator < FIXED_SIMULATION_STEP_SECONDS;
         if (done) {
+          completeCycle();
           resetClock();
           scheduleOnRN(dispatchWorkletCallback, cycleEndCallbackId);
         }
@@ -721,6 +727,7 @@ const GPUConfettiRenderer = ({
       continuous,
       cycleDataRef,
       cycleEndCallbackId,
+      completeCycle,
       cycleDuration,
       drift,
       elapsed,
@@ -740,6 +747,7 @@ const GPUConfettiRenderer = ({
       simulatedSeconds,
       simulationAccumulator,
       uniformDataRef,
+      visibility,
       wasRunning,
     ]
   );
@@ -765,7 +773,14 @@ const GPUConfettiRenderer = ({
     destroyConfettiResources
   );
 
-  return <Canvas ref={canvasRef} style={gpuCanvasStyles.canvas} transparent />;
+  return (
+    <Canvas
+      ref={canvasRef}
+      style={gpuCanvasStyles.canvas}
+      transparent
+      androidTransparencyMode="surface-overlay"
+    />
+  );
 };
 
 export const GPUConfettiCanvas = (props: Props) => {

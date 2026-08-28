@@ -14,7 +14,6 @@ describe('opacityAnimation', () => {
   });
 
   it('uses the default animation when keyframes are omitted', () => {
-    expect(resolveOpacityAnimation({})).toBe(DEFAULT_OPACITY_ANIMATION);
     expect(resolveOpacityAnimation({ enabled: true })).toBe(
       DEFAULT_OPACITY_ANIMATION
     );
@@ -23,6 +22,7 @@ describe('opacityAnimation', () => {
   it.each([
     ['the former boolean API', true],
     ['an array', []],
+    ['an object without enabled', {}],
     ['a non-boolean enabled value', { enabled: 1 }],
   ])('rejects %s', (_label, value) => {
     expect(() =>
@@ -32,6 +32,7 @@ describe('opacityAnimation', () => {
 
   it('sorts custom timestamps and linearly interpolates every segment', () => {
     const curve = resolveOpacityAnimation({
+      enabled: true,
       keyframes: { 1: 0, 0.6: 0.4, 0.3: 1 },
     });
 
@@ -49,6 +50,7 @@ describe('opacityAnimation', () => {
 
   it('starts at full opacity and holds the final supplied opacity', () => {
     const curve = resolveOpacityAnimation({
+      enabled: true,
       keyframes: { 0.3: 0.8, 0.7: 0.2 },
     })!;
 
@@ -62,6 +64,7 @@ describe('opacityAnimation', () => {
 
   it('interpolates from full opacity through the supplied sequence', () => {
     const curve = resolveOpacityAnimation({
+      enabled: true,
       keyframes: { 0.5: 0.5, 0.7: 0 },
     })!;
 
@@ -83,6 +86,7 @@ describe('opacityAnimation', () => {
 
   it('allows an explicit timestamp-zero opacity to override the default', () => {
     const curve = resolveOpacityAnimation({
+      enabled: true,
       keyframes: { 0: 0.25, 1: 0 },
     })!;
 
@@ -102,6 +106,7 @@ describe('opacityAnimation', () => {
   ])('rejects %s', (_label, value) => {
     expect(() =>
       resolveOpacityAnimation({
+        enabled: true,
         keyframes: value as unknown as OpacityAnimation['keyframes'],
       })
     ).toThrow('[react-native-fast-confetti] Invalid opacityAnimation');

@@ -13,6 +13,7 @@ import {
   FLOOR_MAX_FAR_DEPTH_OFFSET,
   FLOOR_MAX_NEAR_DEPTH_OFFSET,
   FLOOR_SLEEP_BOUNCE_SCALE,
+  FLOOR_SLEEP_STABLE_SECONDS,
   FLOOR_TANGENTIAL_RETENTION,
 } from '../constants';
 import { MAX_SIMULATION_STEPS_PER_FRAME } from '../fixedStepScheduler';
@@ -38,8 +39,13 @@ import {
 import { createAlphaBlendTarget } from './blendTarget';
 import {
   computeAirborneAcceleration,
+  computeRelativeAirVelocity,
   integrateAngularVelocity,
 } from './physics/aerodynamics';
+import {
+  applyFloorContactFriction,
+  updateFloorSleepTime,
+} from './physics/contact';
 import {
   PARTICLE_RUNTIME_BYTES,
   ParticleRuntimeArraySchema,
@@ -48,6 +54,7 @@ import {
 import { sampleCenteredUnit, sampleSoftConeDirection } from './physics/launch';
 import {
   clampProjectedAxis,
+  cullProjectedAxis,
   normalizeOrFallback2,
   projectParticlePoint,
 } from './physics/projection';
@@ -369,6 +376,7 @@ export const burstConfettiInit = tgpu.computeFn({
       quat: d.vec4f(initialQuaternion),
       prevQuat: d.vec4f(initialQuaternion),
       omega: d.vec3f(0),
+      floorSleepTime: d.f32(0),
     });
     return;
   }
@@ -579,6 +587,7 @@ export const burstConfettiInit = tgpu.computeFn({
     quat: d.vec4f(quaternion),
     prevQuat: d.vec4f(quaternion),
     omega: d.vec3f(omega),
+    floorSleepTime: d.f32(0),
   });
 });
 
@@ -628,22 +637,31 @@ export const burstConfettiTransform = tgpu.computeFn({
         runtime.life += localDt;
 
         if (runtime.life >= 0) {
+          if (u.floor.x <= 0.5) runtime.floorSleepTime = 0;
+          const sleeping =
+            u.floor.x > 0.5 &&
+            runtime.floorSleepTime >= FLOOR_SLEEP_STABLE_SECONDS;
+          if (sleeping) continue;
           const drag = d.vec4f(
             u.aerodynamics.x,
             u.aerodynamics.y,
             u.aerodynamics.z,
             0
           );
-          const acceleration = computeAirborneAcceleration(
+          const stepTime = u.time + d.f32(step) * u.dt;
+          const relativeAirVelocity = computeRelativeAirVelocity(
             runtime.pos,
-            runtime.quat,
             runtime.vel,
+            u.aerodynamics.w,
+            stepTime
+          );
+          const acceleration = computeAirborneAcceleration(
+            runtime.quat,
+            relativeAirVelocity,
             runtime.omega,
             drag,
             d.vec3f(0, u.gravity, 0),
-            u.aerodynamics.w,
-            0,
-            u.time + d.f32(step) * u.dt
+            0
           );
           let nextVelocity = runtime.vel + acceleration * localDt;
           const maximumVelocity = std.max(u.gravity * 1.5, 1);
@@ -692,9 +710,13 @@ export const burstConfettiTransform = tgpu.computeFn({
                 ) *
                 FLOOR_TANGENTIAL_RETENTION *
                 std.sqrt(runtime.floorBounceScale);
-              runtime.vel.x *= floorFriction;
-              runtime.vel.z *= floorFriction;
-              runtime.omega *= floorFriction;
+              const contact = applyFloorContactFriction(
+                runtime.vel,
+                runtime.omega,
+                floorFriction
+              );
+              runtime.vel = d.vec3f(contact.velocity);
+              runtime.omega = d.vec3f(contact.angularVelocity);
               runtime.floorBounceScale *= FLOOR_BOUNCE_DECAY;
             }
 
@@ -721,6 +743,8 @@ export const burstConfettiTransform = tgpu.computeFn({
           let nextOmega = integrateAngularVelocity(
             initialOmega,
             runtime.omega,
+            runtime.quat,
+            relativeAirVelocity,
             u.aerodynamics.z,
             tumbleDrive,
             localDt
@@ -731,7 +755,18 @@ export const burstConfettiTransform = tgpu.computeFn({
               1 - FLOOR_ANGULAR_DAMPING_PER_SECOND * localDt
             );
             if (runtime.floorBounceScale <= FLOOR_SLEEP_BOUNCE_SCALE) {
-              nextOmega = d.vec3f(0);
+              runtime.floorSleepTime = updateFloorSleepTime(
+                runtime.floorSleepTime,
+                runtime.vel,
+                nextOmega,
+                localDt
+              );
+              if (runtime.floorSleepTime >= FLOOR_SLEEP_STABLE_SECONDS) {
+                runtime.vel = d.vec3f(0);
+                nextOmega = d.vec3f(0);
+              }
+            } else {
+              runtime.floorSleepTime = 0;
             }
           }
           runtime.omega = d.vec3f(nextOmega);
@@ -849,9 +884,9 @@ export const burstConfettiTransform = tgpu.computeFn({
     burstTransformLayout.$.transforms[idx] = BurstTransformSchema({
       centerAndAxisX: d.vec4f(
         std.select(d.vec2f(-10000), centerScreen, visible),
-        axisXScreen
+        cullProjectedAxis(axisXScreen, visible)
       ),
-      axisY: d.vec2f(axisYScreen),
+      axisY: d.vec2f(cullProjectedAxis(axisYScreen, visible)),
       colorAndOpacity: packedColorAndOpacity,
       flags: d.u32(size.dims.w),
     });
@@ -921,9 +956,9 @@ export const burstConfettiTransform = tgpu.computeFn({
   burstTransformLayout.$.transforms[idx] = BurstTransformSchema({
     centerAndAxisX: d.vec4f(
       std.select(d.vec2f(-10000), centerWorld.xy, visible),
-      axisXScreen
+      cullProjectedAxis(axisXScreen, visible)
     ),
-    axisY: d.vec2f(axisYScreen),
+    axisY: d.vec2f(cullProjectedAxis(axisYScreen, visible)),
     colorAndOpacity: packedColorAndOpacity,
     flags: d.u32(size.dims.w),
   });
@@ -994,7 +1029,9 @@ export const burstConfettiVertex = tgpu.vertexFn({
     uv: d.vec2f(uv.x, 1 - uv.y),
     color: d.vec4f(
       burstRenderLayout.$.palette[colorIdx]!.rgb,
-      u.visibility * particleOpacity
+      burstRenderLayout.$.palette[colorIdx]!.a *
+        u.visibility *
+        particleOpacity
     ),
     flagsAndLayers: d.vec3f(flags, textureLayer, maskLayer),
   };

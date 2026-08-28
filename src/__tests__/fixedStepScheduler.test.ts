@@ -30,17 +30,15 @@ const runSchedule = (frameDeltas: number[]) => {
 };
 
 describe('fixed-step GPU schedule', () => {
-  it('accepts only frame time that can be recovered before rendering', () => {
+  it('retains foreground frame time up to the suspension threshold', () => {
     expect(getRecoverableFrameDeltaSeconds(1 / 60)).toBe(1 / 60);
+    expect(getRecoverableFrameDeltaSeconds(0.07)).toBe(0.07);
     expect(
-      getRecoverableFrameDeltaSeconds(
-        MAX_RECOVERABLE_FRAME_DELTA_SECONDS
-      )
+      getRecoverableFrameDeltaSeconds(MAX_RECOVERABLE_FRAME_DELTA_SECONDS)
     ).toBe(MAX_RECOVERABLE_FRAME_DELTA_SECONDS);
     expect(
       getRecoverableFrameDeltaSeconds(
-        MAX_RECOVERABLE_FRAME_DELTA_SECONDS +
-          FIXED_SIMULATION_STEP_SECONDS
+        MAX_RECOVERABLE_FRAME_DELTA_SECONDS + Number.EPSILON * 2
       )
     ).toBe(0);
   });
@@ -51,7 +49,7 @@ describe('fixed-step GPU schedule', () => {
 
   it('resumes normally after an interruption without trailing catch-up', () => {
     const output = new Float64Array(SCHEDULE_VALUE_COUNT);
-    const interruption = FIXED_SIMULATION_STEP_SECONDS * 20;
+    const interruption = MAX_RECOVERABLE_FRAME_DELTA_SECONDS + 0.001;
 
     writeFixedStepSchedule(
       0,
@@ -61,13 +59,26 @@ describe('fixed-step GPU schedule', () => {
     expect(output[SCHEDULE_STEPS]).toBe(0);
     expect(output[SCHEDULE_ACCUMULATOR]).toBe(0);
 
-    writeFixedStepSchedule(
-      output[SCHEDULE_ACCUMULATOR]!,
-      1 / 60,
-      output
-    );
+    writeFixedStepSchedule(output[SCHEDULE_ACCUMULATOR]!, 1 / 60, output);
     expect(output[SCHEDULE_STEPS]).toBe(2);
     expect(output[SCHEDULE_ACCUMULATOR]).toBeCloseTo(0, 10);
+  });
+
+  it('keeps recoverable foreground time as bounded simulation debt', () => {
+    const output = new Float64Array(SCHEDULE_VALUE_COUNT);
+
+    writeFixedStepSchedule(
+      0,
+      getRecoverableFrameDeltaSeconds(MAX_RECOVERABLE_FRAME_DELTA_SECONDS),
+      output
+    );
+
+    expect(output[SCHEDULE_STEPS]).toBe(MAX_SIMULATION_STEPS_PER_FRAME);
+    expect(output[SCHEDULE_ACCUMULATOR]).toBeCloseTo(
+      MAX_RECOVERABLE_FRAME_DELTA_SECONDS -
+        MAX_SIMULATION_STEPS_PER_FRAME * FIXED_SIMULATION_STEP_SECONDS,
+      10
+    );
   });
 
   it('produces the same physics step count at 60 Hz and 120 Hz', () => {

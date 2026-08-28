@@ -14,6 +14,15 @@ export const projectParticlePoint = tgpu.fn(
   );
 });
 
+export const cullProjectedAxis = tgpu.fn(
+  [d.vec2f, d.bool],
+  d.vec2f
+)((axis, visible) => {
+  'use gpu';
+
+  return d.vec2f(std.select(d.vec2f(0), axis, visible));
+});
+
 export const normalizeOrFallback2 = tgpu.fn(
   [d.vec2f, d.vec2f],
   d.vec2f

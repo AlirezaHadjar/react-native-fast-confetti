@@ -63,18 +63,24 @@ export const createConfettiResources = async (
   // set is returned, so a failed upload cannot leak a partial atlas.
   const root = getSharedTypeGPURoot(device);
   const queue = device.queue;
+  const rawBuffers: { destroy: () => void }[] = [];
   const rawTextures: GPUTexture[] = [];
   try {
     const uniforms = root.createUniform(UniformsSchema);
+    rawBuffers.push(uniforms.buffer);
     const initUniforms = root.createUniform(InitUniformsSchema);
+    rawBuffers.push(initUniforms.buffer);
     const spawnsBuffer = root.createMutable(ParticleSpawnArraySchema(count));
+    rawBuffers.push(spawnsBuffer.buffer);
     const runtimeBuffer = root.createMutable(
       ParticleRuntimeArraySchema(count)
     );
+    rawBuffers.push(runtimeBuffer.buffer);
     const sizesBuffer = root.createReadonly(
       SizeArraySchema(sizeVariations.length),
       toSizeInputs(sizeVariations, sizeFlags)
     );
+    rawBuffers.push(sizesBuffer.buffer);
     const initSizesBuffer = root.createReadonly(
       InitSizeArraySchema(sizeVariations.length),
       toInitSizeInputs(
@@ -84,10 +90,12 @@ export const createConfettiResources = async (
         parentColorCount
       )
     );
+    rawBuffers.push(initSizesBuffer.buffer);
     const paletteBuffer = root.createReadonly(
       PaletteArraySchema(Math.max(1, allColors.length)),
       toPaletteInputs(allColors)
     );
+    rawBuffers.push(paletteBuffer.buffer);
     const shapeMasksArray = createShapeMasksArray(device, queue, preparedMasks);
     rawTextures.push(shapeMasksArray);
     const texturesArray = createFlakeTexturesArray(
@@ -145,7 +153,7 @@ export const createConfettiResources = async (
       canUseTextureOnlyPipeline: canUseTextureOnlyPipeline(sizeVariations),
     };
   } catch (error) {
-    destroyGPUResourceSet({ buffers: [], textures: rawTextures });
+    destroyGPUResourceSet({ buffers: rawBuffers, textures: rawTextures });
     throw error;
   }
 };

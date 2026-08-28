@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { scheduleOnUI } from 'react-native-worklets';
 
 import { useLatestCallback } from '../../hooks/useLatestCallback';
@@ -13,6 +13,7 @@ type StartRequest = {
 type Params = {
   onAnimationStart?: () => void;
   onAnimationEnd?: () => void;
+  ready: boolean;
   renderCount: number;
   autoplay: boolean;
   autoStartDelay: number;
@@ -26,6 +27,7 @@ type Params = {
 export const useBurstConfettiController = ({
   onAnimationStart,
   onAnimationEnd,
+  ready,
   renderCount,
   autoplay,
   autoStartDelay,
@@ -34,18 +36,29 @@ export const useBurstConfettiController = ({
     nonce: 0,
     notifyStart: true,
   });
+  const handledStartRequestRef = useRef(0);
   const [rendererReady, setRendererReady] = useState(false);
   const notifyAnimationStart = useLatestCallback(onAnimationStart);
   const notifyAnimationEnd = useLatestCallback(onAnimationEnd);
   const lifecycle = useBurstSimulationLifecycle();
+  const completeEmptyCycle = useCallback(
+    (notifyStart = true) => {
+      scheduleOnUI(lifecycle.completeCycle);
+      if (notifyStart) notifyAnimationStart();
+      notifyAnimationEnd();
+    },
+    [lifecycle.completeCycle, notifyAnimationEnd, notifyAnimationStart]
+  );
 
   const suppressPendingAutoplay = useRendererAutoplay({
-    enabled: rendererReady && renderCount > 0,
+    enabled: ready && (renderCount === 0 || rendererReady),
     autoplay,
     autoStartDelay,
     running: lifecycle.running,
     beginCycle: lifecycle.beginCycle,
     onAnimationStart: notifyAnimationStart,
+    empty: renderCount === 0,
+    onEmpty: completeEmptyCycle,
   });
 
   const requestStart = useCallback(
@@ -60,13 +73,27 @@ export const useBurstConfettiController = ({
   );
 
   useEffect(() => {
-    if (startRequest.nonce === 0 || !rendererReady || renderCount === 0) return;
+    if (
+      startRequest.nonce === 0 ||
+      startRequest.nonce === handledStartRequestRef.current ||
+      !ready ||
+      (renderCount > 0 && !rendererReady)
+    ) {
+      return;
+    }
+    handledStartRequestRef.current = startRequest.nonce;
+    if (renderCount === 0) {
+      completeEmptyCycle(startRequest.notifyStart);
+      return;
+    }
     scheduleOnUI(lifecycle.beginCycle);
     if (startRequest.notifyStart) notifyAnimationStart();
   }, [
     startRequest,
+    ready,
     rendererReady,
     renderCount,
+    completeEmptyCycle,
     lifecycle.beginCycle,
     notifyAnimationStart,
   ]);

@@ -34,8 +34,8 @@ export type Drag = number | { horizontal: number; vertical: number };
 export type OpacityKeyframes = Readonly<Record<number, number>>;
 
 export type OpacityAnimation = {
-  /** @default true */
-  enabled?: boolean;
+  /** Enables or disables the opacity animation. */
+  enabled: boolean;
   /** Normalized animation timestamps mapped to opacity values. */
   keyframes?: OpacityKeyframes;
 };

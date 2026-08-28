@@ -10,7 +10,11 @@ import {
 import { scheduleOnRN } from 'react-native-worklets';
 import { Canvas, type CanvasRef } from 'react-native-webgpu';
 
-import type { ColorRange, SizeVariation } from '../hooks/useConfettiFlakes';
+import {
+  useSemanticValue,
+  type ColorRange,
+  type SizeVariation,
+} from '../hooks/useConfettiFlakes';
 import type { ResolvedOpacityAnimation } from '../fadeOut';
 import type {
   BurstParticle,
@@ -252,6 +256,10 @@ const GPUBurstConfettiRenderer = ({
     [easing]
   );
   const cycleEndCallbackId = useWorkletCallback(onCycleEnd);
+  const stableOpacityAnimation = useSemanticValue(
+    JSON.stringify(opacityAnimation) ?? '',
+    opacityAnimation
+  );
 
   const reportReady = useCallback(() => onReadyChange(true), [onReadyChange]);
 
@@ -264,7 +272,7 @@ const GPUBurstConfettiRenderer = ({
       allColors,
       colorOverrides,
       parentColorCount,
-      opacityAnimation,
+      opacityAnimation: stableOpacityAnimation,
       presetParticles,
     }),
     [
@@ -275,7 +283,7 @@ const GPUBurstConfettiRenderer = ({
       allColors,
       colorOverrides,
       parentColorCount,
-      opacityAnimation,
+      stableOpacityAnimation,
       presetParticles,
     ]
   );
@@ -730,7 +738,14 @@ const GPUBurstConfettiRenderer = ({
     destroyBurstConfettiResources
   );
 
-  return <Canvas ref={canvasRef} style={gpuCanvasStyles.canvas} transparent />;
+  return (
+    <Canvas
+      ref={canvasRef}
+      style={gpuCanvasStyles.canvas}
+      transparent
+      androidTransparencyMode="surface-overlay"
+    />
+  );
 };
 
 export const GPUBurstConfettiCanvas = (props: Props) => {

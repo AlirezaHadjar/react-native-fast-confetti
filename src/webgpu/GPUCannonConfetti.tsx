@@ -208,6 +208,7 @@ const CannonConfettiInner = forwardRef<
     } = useBurstConfettiController({
       onAnimationStart,
       onAnimationEnd,
+      ready: ready && reduceMotionReady,
       renderCount,
       autoplay,
       autoStartDelay,

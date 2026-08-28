@@ -13,6 +13,7 @@ import {
   FLOOR_MAX_FAR_DEPTH_OFFSET,
   FLOOR_MAX_NEAR_DEPTH_OFFSET,
   FLOOR_SLEEP_BOUNCE_SCALE,
+  FLOOR_SLEEP_STABLE_SECONDS,
   FLOOR_TANGENTIAL_RETENTION,
 } from '../constants';
 import { MAX_SIMULATION_STEPS_PER_FRAME } from '../fixedStepScheduler';
@@ -38,12 +39,14 @@ import {
 import { InitSizeSchema } from './sharedSchemas';
 import {
   computeAirborneAcceleration,
+  computeRelativeAirVelocity,
   integrateAngularVelocity,
 } from './physics/aerodynamics';
 import {
-  ParticleRuntimeSchema,
-  ParticleSpawnSchema,
-} from './physics/state';
+  applyFloorContactFriction,
+  updateFloorSleepTime,
+} from './physics/contact';
+import { ParticleRuntimeSchema, ParticleSpawnSchema } from './physics/state';
 import {
   clampProjectedAxis,
   normalizeOrFallback2,
@@ -485,6 +488,7 @@ export const confettiInit = tgpu.computeFn({
     quat: d.vec4f(spawn.quat0),
     prevQuat: d.vec4f(spawn.quat0),
     omega: d.vec3f(spawn.omega0),
+    floorSleepTime: d.f32(0),
   });
 });
 
@@ -614,22 +618,31 @@ export const confettiCompute = tgpu.computeFn({
             quat: d.vec4f(spawn.quat0),
             prevQuat: d.vec4f(spawn.quat0),
             omega: d.vec3f(spawn.omega0),
+            floorSleepTime: d.f32(0),
           });
         }
 
+        if (u.settleOnFloor <= 0.5) rt.floorSleepTime = 0;
+        const sleeping =
+          u.settleOnFloor > 0.5 &&
+          rt.floorSleepTime >= FLOOR_SLEEP_STABLE_SECONDS;
+        if (sleeping) continue;
         const Crot = spawn.drag.z;
         const fGravity = u.gravityDir * u.gravityMag;
         const stepTime = u.time + d.f32(step) * u.dt;
-        const accel = computeAirborneAcceleration(
+        const relativeAirVelocity = computeRelativeAirVelocity(
           rt.pos,
-          rt.quat,
           rt.vel,
+          u.windStrength,
+          stepTime
+        );
+        const accel = computeAirborneAcceleration(
+          rt.quat,
+          relativeAirVelocity,
           rt.omega,
           spawn.drag,
           fGravity,
-          u.windStrength,
-          u.magnusStrength,
-          stepTime
+          u.magnusStrength
         );
 
         let newVel = rt.vel + accel * u.dt;
@@ -673,9 +686,13 @@ export const confettiCompute = tgpu.computeFn({
               ) *
               FLOOR_TANGENTIAL_RETENTION *
               std.sqrt(rt.floorBounceScale);
-            rt.vel.x *= floorFriction;
-            rt.vel.z *= floorFriction;
-            rt.omega *= floorFriction;
+            const contact = applyFloorContactFriction(
+              rt.vel,
+              rt.omega,
+              floorFriction
+            );
+            rt.vel = d.vec3f(contact.velocity);
+            rt.omega = d.vec3f(contact.angularVelocity);
             rt.floorBounceScale *= FLOOR_BOUNCE_DECAY;
           }
 
@@ -696,6 +713,8 @@ export const confettiCompute = tgpu.computeFn({
         let newOmega = integrateAngularVelocity(
           spawn.omega0,
           rt.omega,
+          rt.quat,
+          relativeAirVelocity,
           Crot,
           tumbleDrive,
           u.dt
@@ -703,7 +722,18 @@ export const confettiCompute = tgpu.computeFn({
         if (u.settleOnFloor > 0.5 && rt.floorBounceScale < 1) {
           newOmega *= std.max(0, 1 - FLOOR_ANGULAR_DAMPING_PER_SECOND * u.dt);
           if (rt.floorBounceScale <= FLOOR_SLEEP_BOUNCE_SCALE) {
-            newOmega = d.vec3f(0);
+            rt.floorSleepTime = updateFloorSleepTime(
+              rt.floorSleepTime,
+              rt.vel,
+              newOmega,
+              u.dt
+            );
+            if (rt.floorSleepTime >= FLOOR_SLEEP_STABLE_SECONDS) {
+              rt.vel = d.vec3f(0);
+              newOmega = d.vec3f(0);
+            }
+          } else {
+            rt.floorSleepTime = 0;
           }
         }
         rt.omega = d.vec3f(newOmega);
@@ -938,7 +968,10 @@ export const confettiVertex = tgpu.vertexFn({
   return {
     position: d.vec4f(clip, 0, 1),
     uv: d.vec2f(u0, 1 - v0),
-    color: d.vec4f(renderLayout.$.palette[colorIdx]!.rgb, u.opacity),
+    color: d.vec4f(
+      renderLayout.$.palette[colorIdx]!.rgb,
+      renderLayout.$.palette[colorIdx]!.a * u.opacity
+    ),
     normal: N,
     flagsAndLayers: d.vec3f(flags, textureLayer, maskLayer),
     seedAndRim: d.vec2f(iSeed, rim),
