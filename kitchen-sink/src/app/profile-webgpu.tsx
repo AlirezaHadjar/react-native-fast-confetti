@@ -96,7 +96,7 @@ export default function WebGPUProfileScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          headerShown: variant === 'current',
+          headerShown: false,
           title: `WebGPU: ${variant}`,
         }}
       />

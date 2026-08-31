@@ -101,6 +101,15 @@ export default function TwinBloomScreen() {
         />
       </View>
 
+      <ConfettiControls
+        actions={{
+          resume: () => cannonConfettiRef.current?.resume(),
+          pause: () => cannonConfettiRef.current?.pause(),
+          restart: () => cannonConfettiRef.current?.restart(),
+          reset: () => cannonConfettiRef.current?.reset(),
+        }}
+      />
+
       {isFocused ? (
         <CannonConfetti
           key={confettiKey}
@@ -119,15 +128,6 @@ export default function TwinBloomScreen() {
           </CannonConfetti.Origin>
         </CannonConfetti>
       ) : null}
-
-      <ConfettiControls
-        actions={{
-          resume: () => cannonConfettiRef.current?.resume(),
-          pause: () => cannonConfettiRef.current?.pause(),
-          restart: () => cannonConfettiRef.current?.restart(),
-          reset: () => cannonConfettiRef.current?.reset(),
-        }}
-      />
     </View>
   );
 }

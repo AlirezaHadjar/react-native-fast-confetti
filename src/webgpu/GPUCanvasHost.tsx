@@ -23,6 +23,6 @@ export const GPUCanvasHost = ({
 );
 
 export const gpuCanvasStyles = StyleSheet.create({
-  container: { ...StyleSheet.absoluteFill },
+  container: { ...StyleSheet.absoluteFill, zIndex: 1 },
   canvas: { flex: 1 },
 });
