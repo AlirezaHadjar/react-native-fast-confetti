@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { SkImage, SkSVG } from '@shopify/react-native-skia';
+import type { SkImage, SkSVG } from 'react-native-skia';
 import type { FlakeProps, FlakeShape, FlakeStyle } from '../types';
 import { pickChildren } from '../children';
 import { Flake } from '../FlakeComponent';
@@ -77,9 +77,7 @@ export function buildAtlasColors(
   const colorOverrides: (ColorRange | null)[] = new Array(sizes.length);
   const sizeIsTextured: boolean[] = new Array(sizes.length);
 
-  const needsParentColors = sizes.some(
-    (s) => !s.texture && !s.colors
-  );
+  const needsParentColors = sizes.some((s) => !s.texture && !s.colors);
   const allColors: string[] = needsParentColors ? [...parentColors] : [];
   const parentColorCount = needsParentColors ? parentColors.length : 0;
 
@@ -91,7 +89,10 @@ export function buildAtlasColors(
       allColors.push('#000');
     } else if (size?.colors && size.colors.length > 0) {
       sizeIsTextured[i] = false;
-      colorOverrides[i] = { start: allColors.length, count: size.colors.length };
+      colorOverrides[i] = {
+        start: allColors.length,
+        count: size.colors.length,
+      };
       allColors.push(...size.colors);
     } else {
       sizeIsTextured[i] = false;

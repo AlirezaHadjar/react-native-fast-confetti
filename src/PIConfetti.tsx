@@ -1,4 +1,4 @@
-import { useRSXformBuffer } from '@shopify/react-native-skia';
+import { useRSXformBuffer } from 'react-native-skia';
 import { useCallback, useEffect, useImperativeHandle, forwardRef } from 'react';
 import {
   Extrapolation,
@@ -202,7 +202,11 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         let resolvedDelays: number[] | null = null;
         if (options.origins) {
           resolvedPositions = options.origins.map((o) =>
-            resolveNamedPosition(o.blastPosition, containerWidth, containerHeight)
+            resolveNamedPosition(
+              o.blastPosition,
+              containerWidth,
+              containerHeight
+            )
           );
           resolvedDelays = options.origins.map((o) => o.delay ?? 0);
         }
@@ -234,8 +238,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
           refreshBoxes();
           return;
         }
-        if (autoplay)
-          workletRestart(null, null, autoStartDelay);
+        if (autoplay) workletRestart(null, null, autoStartDelay);
       })();
     }, [
       autoplay,
@@ -265,8 +268,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         return;
       }
 
-      const currentPositions =
-        dynamicBlastPositions.get() || blastPositions;
+      const currentPositions = dynamicBlastPositions.get() || blastPositions;
       const blast =
         currentPositions[piece.originIndex % currentPositions.length];
       if (!blast) {

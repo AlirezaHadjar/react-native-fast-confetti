@@ -1,10 +1,5 @@
-import { useRSXformBuffer } from '@shopify/react-native-skia';
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-} from 'react';
+import { useRSXformBuffer } from 'react-native-skia';
+import { forwardRef, useCallback, useEffect, useImperativeHandle } from 'react';
 import {
   Easing,
   Extrapolation,

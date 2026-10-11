@@ -1,4 +1,4 @@
-import { useRSXformBuffer } from '@shopify/react-native-skia';
+import { useRSXformBuffer } from 'react-native-skia';
 import {
   useCallback,
   useEffect,
@@ -278,9 +278,10 @@ const CannonConfettiInner = forwardRef<
         const particle = particleSystem.particles[index];
         const piece = currentBoxes[index];
         const size = piece ? sizeVariations[piece.sizeIndex] : undefined;
-        const state = isVisible && particle
-          ? evaluateCannonParticle(particle, systemTime)
-          : null;
+        const state =
+          isVisible && particle
+            ? evaluateCannonParticle(particle, systemTime)
+            : null;
         const offset = index * 4;
         if (
           !state ||

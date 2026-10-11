@@ -4,6 +4,12 @@ const { getDefaultConfig } = require('expo/metro-config');
 const monorepoRoot = path.resolve(__dirname, '..');
 const config = getDefaultConfig(__dirname);
 
+// Test this checkout instead of the published package and its Skia v2 peer.
+config.resolver.extraNodeModules = {
+  ...config.resolver.extraNodeModules,
+  'react-native-fast-confetti': monorepoRoot,
+};
+
 // Watch the monorepo root so Metro can resolve the library source
 config.watchFolders = [monorepoRoot];
 

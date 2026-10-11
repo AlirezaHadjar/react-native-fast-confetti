@@ -1,4 +1,4 @@
-import { useImage, useSVG } from '@shopify/react-native-skia';
+import { useImage, useSVG } from 'react-native-skia';
 
 export function useConfettiAssets() {
   const snowFlakeSVG = useSVG(require('../../assets/snow-flake.svg'));

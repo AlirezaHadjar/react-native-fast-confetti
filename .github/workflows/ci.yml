@@ -23,6 +23,9 @@ jobs:
       - name: Lint files
         run: bun run lint
 
+      - name: Check formatting
+        run: bun run format:check
+
       - name: Typecheck files
         run: bun run typecheck
 

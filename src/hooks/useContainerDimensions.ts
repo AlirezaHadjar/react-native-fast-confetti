@@ -9,10 +9,8 @@ export const useContainerDimensions = (
 
   const styleExtracted = useMemo(() => {
     const flat = StyleSheet.flatten(containerStyle);
-    const width =
-      typeof flat?.width === 'number' ? flat.width : null;
-    const height =
-      typeof flat?.height === 'number' ? flat.height : null;
+    const width = typeof flat?.width === 'number' ? flat.width : null;
+    const height = typeof flat?.height === 'number' ? flat.height : null;
     return { width, height };
   }, [containerStyle]);
 
@@ -36,8 +34,7 @@ export const useContainerDimensions = (
     styleExtracted.width === null || styleExtracted.height === null;
   const ready = !needsLayout || measured !== null;
 
-  const containerWidth =
-    measured?.width ?? styleExtracted.width ?? screenWidth;
+  const containerWidth = measured?.width ?? styleExtracted.width ?? screenWidth;
   const containerHeight =
     measured?.height ?? styleExtracted.height ?? screenHeight;
 

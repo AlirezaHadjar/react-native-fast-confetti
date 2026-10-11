@@ -1,9 +1,5 @@
 import { Easing } from 'react-native-reanimated';
-import type {
-  Rotation,
-  Range,
-  FlakeSize,
-} from './types';
+import type { Rotation, Range, FlakeSize } from './types';
 
 export const DEFAULT_BOXES_COUNT = 200;
 
