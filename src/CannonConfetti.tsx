@@ -68,6 +68,7 @@ const CannonConfettiInner = forwardRef<
       onAnimationEnd,
       onAnimationStart,
       containerStyle,
+      renderer,
       colors: rootColors,
       rotation: rootRotation,
       depth: rootDepth,
@@ -549,6 +550,7 @@ const CannonConfettiInner = forwardRef<
 
     return (
       <ConfettiCanvas
+        renderer={renderer}
         containerStyle={containerStyle}
         ready={ready && reduceMotionReady}
         texture={texture}

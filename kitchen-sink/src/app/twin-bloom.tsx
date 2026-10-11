@@ -1,4 +1,5 @@
 import { useMemo, useRef } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import type { CannonConfettiMethods } from 'react-native-fast-confetti';
 import { CannonConfetti, ConfettiPresets } from 'react-native-fast-confetti';
@@ -13,6 +14,7 @@ import { getTextureProps } from '../utils/confettiConfig';
 const twinBloomColors = ['#F6D61B', '#EE6A10', '#6F1EE8', '#B21FBA', '#DC1F5D'];
 
 export default function TwinBloomScreen() {
+  const { renderer } = useLocalSearchParams<{ renderer?: string }>();
   const cannonConfettiRef = useRef<CannonConfettiMethods>(null);
   const { width } = useWindowDimensions();
   const { config, updateConfig } = useScreenConfig('cannon');
@@ -82,6 +84,7 @@ export default function TwinBloomScreen() {
       </View>
 
       <CannonConfetti
+        renderer={renderer === 'graphite' ? 'graphite' : 'canvas'}
         key={confettiKey}
         ref={cannonConfettiRef}
         autoplay

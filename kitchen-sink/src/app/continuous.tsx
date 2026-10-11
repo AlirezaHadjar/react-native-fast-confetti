@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import type { ConfettiMethods } from 'react-native-fast-confetti';
 import { ContinuousConfetti } from 'react-native-fast-confetti';
@@ -11,6 +12,7 @@ import { useScreenConfig } from '../hooks/useScreenConfig';
 import { getRotation, getTextureProps } from '../utils/confettiConfig';
 
 export default function ContinuousScreen() {
+  const { renderer } = useLocalSearchParams<{ renderer?: string }>();
   const confettiRef = useRef<ConfettiMethods>(null);
   const { config, updateConfig } = useScreenConfig('continuous');
   const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets();
@@ -58,6 +60,7 @@ export default function ContinuousScreen() {
       </View>
 
       <ContinuousConfetti
+        renderer={renderer === 'graphite' ? 'graphite' : 'canvas'}
         key={confettiKey}
         ref={confettiRef}
         autoplay

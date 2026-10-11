@@ -1,29 +1,31 @@
-import type { ComponentProps } from 'react';
 import { Canvas, Atlas, ImageShader, Vertices } from 'react-native-skia';
-import { StyleSheet, View } from 'react-native';
+import type { SkImage, SkPoint, SkRect, SkRSXform } from 'react-native-skia';
+import type { SharedValue } from 'react-native-reanimated';
+import { Platform, StyleSheet, View } from 'react-native';
 import type { LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
-
-type AtlasComponentProps = ComponentProps<typeof Atlas>;
-type VerticesComponentProps = ComponentProps<typeof Vertices>;
+import type { ConfettiRenderer } from './types';
+import { GraphiteConfettiCanvas } from './GraphiteConfettiCanvas';
 
 type ConfettiMesh = {
-  vertices: VerticesComponentProps['vertices'];
-  textureCoordinates: VerticesComponentProps['textures'];
+  vertices: SharedValue<SkPoint[]>;
+  textureCoordinates: SharedValue<SkPoint[]>;
   indices: number[];
 };
 
-type ConfettiCanvasProps = {
+export type ConfettiCanvasProps = {
+  renderer?: ConfettiRenderer;
   containerStyle?: StyleProp<ViewStyle>;
   ready: boolean;
-  texture: AtlasComponentProps['image'];
-  sprites: AtlasComponentProps['sprites'];
-  transforms: AtlasComponentProps['transforms'];
-  opacity: AtlasComponentProps['opacity'];
+  texture: SharedValue<SkImage | null>;
+  sprites: SharedValue<SkRect[]>;
+  transforms: SharedValue<SkRSXform[]>;
+  opacity: SharedValue<number>;
   mesh?: ConfettiMesh;
   onContainerLayout?: (e: LayoutChangeEvent) => void;
 };
 
 export function ConfettiCanvas({
+  renderer = 'canvas',
   containerStyle,
   ready,
   texture,
@@ -39,26 +41,37 @@ export function ConfettiCanvas({
       style={[styles.container, containerStyle]}
       onLayout={onContainerLayout}
     >
-      <Canvas style={styles.canvasContainer}>
-        {ready && mesh ? (
-          <Vertices
-            vertices={mesh.vertices}
-            textures={mesh.textureCoordinates}
-            indices={mesh.indices}
-            mode="triangles"
-            opacity={opacity}
-          >
-            <ImageShader image={texture} />
-          </Vertices>
-        ) : ready ? (
-          <Atlas
-            image={texture}
-            sprites={sprites}
-            transforms={transforms}
-            opacity={opacity}
-          />
-        ) : null}
-      </Canvas>
+      {renderer === 'graphite' && Platform.OS !== 'web' ? (
+        <GraphiteConfettiCanvas
+          ready={ready}
+          texture={texture}
+          sprites={sprites}
+          transforms={transforms}
+          opacity={opacity}
+          mesh={mesh}
+        />
+      ) : (
+        <Canvas style={styles.canvasContainer}>
+          {ready && mesh ? (
+            <Vertices
+              vertices={mesh.vertices}
+              textures={mesh.textureCoordinates}
+              indices={mesh.indices}
+              mode="triangles"
+              opacity={opacity}
+            >
+              <ImageShader image={texture} />
+            </Vertices>
+          ) : ready ? (
+            <Atlas
+              image={texture}
+              sprites={sprites}
+              transforms={transforms}
+              opacity={opacity}
+            />
+          ) : null}
+        </Canvas>
+      )}
     </View>
   );
 }

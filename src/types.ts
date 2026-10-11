@@ -10,6 +10,8 @@ type StrictOmit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
 
 export type FlakeStyle = 'solid' | 'glossy';
 
+export type ConfettiRenderer = 'canvas' | 'graphite';
+
 /** Built-in vector silhouettes rendered directly into the confetti atlas. */
 export type FlakeShape = 'rectangle' | 'heart' | 'star' | 'flower' | 'streamer';
 
@@ -101,6 +103,8 @@ export type FallingBox = {
 };
 
 type ConfettiBaseProps = {
+  /** Native frame recording with SkiaGraphiteView. Web always uses Canvas. */
+  renderer?: ConfettiRenderer;
   /**
    * @description Flake size variants defined as children (<Confetti.Flake>).
    */
@@ -281,6 +285,8 @@ export type PIOriginProps = OriginPropsBase & {
 };
 
 type BurstConfettiBaseProps = {
+  /** Native frame recording with SkiaGraphiteView. Web always uses Canvas. */
+  renderer?: ConfettiRenderer;
   /**
    * @description Must contain at least one Origin child.
    */

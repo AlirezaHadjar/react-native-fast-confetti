@@ -58,6 +58,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       onAnimationEnd,
       onAnimationStart,
       containerStyle,
+      renderer,
       ...textureRootProps
     },
     ref
@@ -354,6 +355,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
 
     return (
       <ConfettiCanvas
+        renderer={renderer}
         containerStyle={containerStyle}
         ready={ready && reduceMotionReady}
         texture={texture}

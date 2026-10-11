@@ -59,6 +59,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       onAnimationEnd,
       onAnimationStart,
       containerStyle,
+      renderer,
       rotation,
       depth,
       verticalSpacing = DEFAULT_VERTICAL_SPACING,
@@ -344,6 +345,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
 
     return (
       <ConfettiCanvas
+        renderer={renderer}
         containerStyle={containerStyle}
         ready={ready && reduceMotionReady}
         texture={texture}
