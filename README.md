@@ -34,6 +34,8 @@ yarn add react-native-fast-confetti
 
 This checkout uses `react-native-skia` v3. For Expo apps, create a native development build with `expo run:ios` or `expo run:android`; Expo Go includes Skia v2. Android requires API level 26 or above.
 
+The repository's `example/` app stays compatible with Expo Go by using the published Skia v2-compatible confetti release and Expo SDK-supported dependencies. Run it with `bun run example start`. Use `kitchen-sink/` and its native builds to test this Skia v3 checkout.
+
 ### Renderer experiment
 
 All confetti components accept `renderer="graphite"` to record frames directly with Skia v3's `SkiaGraphiteView` on the Reanimated UI runtime. The default remains `renderer="canvas"`, which already uses Graphite on native platforms and draws through Skia's native worker threads. Web uses Canvas for both settings.

@@ -29,6 +29,12 @@ jobs:
       - name: Typecheck files
         run: bun run typecheck
 
+      - name: Check Expo Go example dependencies
+        run: bun --cwd example expo install --check
+
+      - name: Typecheck Expo Go example
+        run: bun --cwd example tsc --noEmit
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -64,3 +70,9 @@ jobs:
 
       - name: Build example for Web
         run: bun --cwd kitchen-sink expo export --platform web
+
+      - name: Bundle Expo Go example
+        run: bun --cwd example expo export --platform ios --platform android --source-maps
+
+      - name: Check Expo Go bundle package resolution
+        run: node scripts/check-expo-go-bundle.cjs example/dist

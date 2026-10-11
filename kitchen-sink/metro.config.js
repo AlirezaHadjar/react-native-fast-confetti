@@ -5,9 +5,12 @@ const monorepoRoot = path.resolve(__dirname, '..');
 const config = getDefaultConfig(__dirname);
 
 // Test this checkout instead of the published package and its Skia v2 peer.
-config.resolver.extraNodeModules = {
-  ...config.resolver.extraNodeModules,
-  'react-native-fast-confetti': monorepoRoot,
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  const target =
+    moduleName === 'react-native-fast-confetti'
+      ? path.resolve(monorepoRoot, 'src/index.tsx')
+      : moduleName;
+  return context.resolveRequest(context, target, platform);
 };
 
 // Watch the monorepo root so Metro can resolve the library source

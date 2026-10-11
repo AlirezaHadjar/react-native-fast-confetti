@@ -20,10 +20,8 @@ export function SingleScreen() {
       >
         <Confetti.Flake size={11} radius={5.5} />
         <Confetti.Flake width={8} height={17} radius={4} />
-        <Confetti.Flake size={18} shape="heart" />
-        <Confetti.Flake size={18} shape="star" />
-        <Confetti.Flake size={17} shape="flower" />
-        <Confetti.Flake width={24} height={17} shape="streamer" />
+        <Confetti.Flake size={18} radius={9} />
+        <Confetti.Flake width={24} height={17} radius={4} />
       </Confetti>
       <Controls confettiRef={ref} />
     </View>

@@ -9,8 +9,8 @@ We want this community to be friendly and respectful to each other. Please follo
 This project is a monorepo managed using [Bun workspaces](https://bun.sh/docs/install/workspaces). It contains the following packages:
 
 - The library package in the root directory.
-- A minimal example app in the `example/` directory.
-- A full-featured kitchen-sink app in the `kitchen-sink/` directory.
+- An Expo Go example app in the `example/` directory, using the published confetti package and Expo SDK-compatible native dependencies.
+- A full-featured kitchen-sink app in the `kitchen-sink/` directory, using this checkout and native development builds.
 
 To get started with the project, run `bun install` in the root directory to install the required dependencies for each package:
 
@@ -20,13 +20,15 @@ bun install
 
 > Since the project relies on Bun workspaces, you cannot use [`npm`](https://github.com/npm/cli) for development.
 
-The [example app](/example/) demonstrates basic usage of the library. The [kitchen-sink app](/kitchen-sink/) is a full-featured showcase. You need to run one of them to test any changes you make.
+The [example app](/example/) demonstrates basic usage of the published library in Expo Go. Keep it compatible with Expo Go: use the Skia, Reanimated, Worklets, Screens, and Safe Area versions supported by its Expo SDK, and update them with `expo install`. Do not add native modules that require a development build or aliases to this checkout. Its explicit npm dependency keeps it on the published Skia v2-compatible release instead of the workspace package. Twin Bloom and custom shape examples remain in the kitchen-sink app because they are absent from that published release.
 
-They are configured to use the local version of the library, so any changes you make to the library's source code will be reflected in the apps. Changes to the library's JavaScript code will be reflected without a rebuild, but native code changes will require a rebuild.
+The [kitchen-sink app](/kitchen-sink/) tests this checkout, including Skia v3 and the experimental renderer. Use it to test library changes. JavaScript changes refresh without a rebuild; native dependency changes require a rebuild.
+
+CI checks the example's Expo SDK dependency versions, typechecks against the published package, and verifies its iOS and Android bundles use the published confetti package and Skia v2 without including this checkout or development-client modules.
 
 You can use various commands from the root directory to work with the project.
 
-To start the packager:
+To start the Expo Go example:
 
 ```sh
 bun run example start
@@ -44,7 +46,14 @@ To run the example app on iOS:
 bun run example ios
 ```
 
-To run the example app on Web:
+To test this checkout in a native development build:
+
+```sh
+bun run kitchen-sink ios
+bun run kitchen-sink android
+```
+
+To run the kitchen-sink app on Web:
 
 ```sh
 bun run kitchen-sink web

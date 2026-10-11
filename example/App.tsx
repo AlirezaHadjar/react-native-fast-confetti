@@ -6,14 +6,14 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SingleScreen } from './screens/SingleScreen';
 import { ContinuousScreen } from './screens/ContinuousScreen';
 import { PIScreen } from './screens/PIScreen';
-import { TwinBloomScreen } from './screens/TwinBloomScreen';
+import { CannonScreen } from './screens/CannonScreen';
 
 type StackParamList = {
   Home: undefined;
   Single: undefined;
   Continuous: undefined;
   PI: undefined;
-  TwinBloom: undefined;
+  Cannon: undefined;
 };
 
 const Stack = createNativeStackNavigator<StackParamList>();
@@ -22,7 +22,7 @@ const modes: { key: keyof StackParamList; label: string }[] = [
   { key: 'Single', label: 'Single' },
   { key: 'Continuous', label: 'Continuous' },
   { key: 'PI', label: 'PI' },
-  { key: 'TwinBloom', label: 'Twin Bloom' },
+  { key: 'Cannon', label: 'Cannon' },
 ];
 
 function HomeScreen({
@@ -55,9 +55,9 @@ export default function App() {
         <Stack.Screen name="Continuous" component={ContinuousScreen} />
         <Stack.Screen name="PI" component={PIScreen} />
         <Stack.Screen
-          name="TwinBloom"
-          component={TwinBloomScreen}
-          options={{ title: 'Twin Bloom' }}
+          name="Cannon"
+          component={CannonScreen}
+          options={{ title: 'Cannon' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

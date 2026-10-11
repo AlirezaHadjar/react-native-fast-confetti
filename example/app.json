@@ -4,16 +4,6 @@
     "slug": "confetti-example",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "confetti-example",
-    "plugins": [
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "minSdkVersion": 26
-          }
-        }
-      ]
-    ]
+    "scheme": "confetti-example"
   }
 }
