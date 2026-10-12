@@ -11,10 +11,7 @@ import {
   type EasingFunctionFactory,
 } from 'react-native-reanimated';
 import { useAnimationCallbacks } from './useAnimationCallbacks';
-import {
-  interpolateOpacity,
-  resolveOpacityAnimation,
-} from '../fadeOut';
+import { interpolateOpacity, resolveOpacityAnimation } from '../fadeOut';
 import type { OpacityAnimation } from '../types';
 
 type UseAnimationLifecycleParams = {

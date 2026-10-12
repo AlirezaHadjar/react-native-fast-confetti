@@ -28,6 +28,13 @@ export type GPUDeviceProps = {
    * The library never destroys an injected device.
    */
   device?: GPUDevice;
+  /**
+   * Android transparent canvas composition mode.
+   * TextureView follows screen transitions, clipping, and regular view stacking.
+   * Use `surface-overlay` for a topmost effect whose host manages navigation.
+   * @default 'texture'
+   */
+  androidTransparencyMode?: 'texture' | 'surface-overlay';
   /** Reports GPU device acquisition and renderer resource failures. */
   onError?: (error: unknown) => void;
 };

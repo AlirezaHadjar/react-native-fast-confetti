@@ -64,9 +64,7 @@ const expectPackedCommon = (
   expect(packed.metadata[metaOffset + BURST_COLOR_INDEX]).toBe(
     object.colorIndex
   );
-  expect(packed.metadata[metaOffset + BURST_SIZE_INDEX]).toBe(
-    object.sizeIndex
-  );
+  expect(packed.metadata[metaOffset + BURST_SIZE_INDEX]).toBe(object.sizeIndex);
   const flags = packed.metadata[metaOffset + BURST_FLAGS] ?? 0;
   expect((flags & BURST_FLAG_CLOCKWISE) !== 0).toBe(object.clockwise);
   expect((flags & BURST_FLAG_TEXTURED) !== 0).toBe(object.isTextured);

@@ -1,4 +1,4 @@
-import { useIsFocused } from 'expo-router';
+import { useScreenEffectVisible } from '../hooks/useScreenEffectVisible';
 import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { CannonConfettiMethods } from 'react-native-fast-confetti';
@@ -18,7 +18,7 @@ import { useScreenConfig } from '../hooks/useScreenConfig';
 import { getRotation, getTextureProps } from '../utils/confettiConfig';
 
 export default function CannonOriginalScreen() {
-  const isFocused = useIsFocused();
+  const isFocused = useScreenEffectVisible();
   const cannonConfettiRef = useRef<CannonConfettiMethods>(null);
   const { config, updateConfig } = useScreenConfig('cannon');
   const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets(

@@ -1,5 +1,24 @@
 # Migrating from v2 to v3
 
+## Upgrade Skia and WebGPU
+
+This branch targets `react-native-skia` 3.4+ and `react-native-webgpu` 0.13.1+.
+Replace `@shopify/react-native-skia` with `react-native-skia` in dependencies
+and imports. Do not install both names: they provide the same native module.
+Upgrade Skia and WebGPU together so their Dawn versions match.
+
+Skia v3 uses Graphite and requires Android API 26 with Vulkan, or iOS 15.1+.
+Expo Go does not include this native backend; rebuild your development client.
+See the [Skia migration guide](https://wcandillon.github.io/react-native-skia/docs/getting-started/migration/).
+
+## Upgrade React Native and Worklets
+
+Use React Native 0.86+, Reanimated 4.7.1+, and Worklets 0.13.0+. The demos
+use Expo SDK 57. Worklets contains the upstream serialization race fix, so
+the former Worklets 0.11.4 patch is no longer needed.
+The WebGPU native patch remains separate; see
+[the dependency upgrade notes](docs/EXPO_57_UPGRADE.md).
+
 ## Replace `fadeOutOnEnd` with `opacityAnimation`
 
 v3 replaces the `fadeOutOnEnd` boolean with an opacity curve shared by the

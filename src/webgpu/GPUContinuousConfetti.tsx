@@ -32,4 +32,3 @@ const ContinuousConfetti =
 ContinuousConfetti.Flake = Flake;
 
 export { ContinuousConfetti };
-

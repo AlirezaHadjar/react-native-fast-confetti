@@ -68,9 +68,7 @@ const SETTLING_SAFETY_MARGIN_SECONDS = 0.25;
  * velocity cap bounds impact speed to 1.5 × gravity; drag and sleep make the
  * real settling time shorter.
  */
-export const estimateFloorSettlingDuration = (
-  floor: ResolvedSettleOnFloor
-) => {
+export const estimateFloorSettlingDuration = (floor: ResolvedSettleOnFloor) => {
   if (!floor.enabled) return 0;
   const highestRestitution = Math.min(floor.restitution + floor.variation, 1);
   let velocityToGravityRatio = MAX_IMPACT_SPEED_TO_GRAVITY_RATIO;

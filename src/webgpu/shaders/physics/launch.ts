@@ -46,8 +46,7 @@ export const sampleSoftConeDirection = tgpu.fn(
   const radialFraction = sampleCenterWeightedRadius(radialUnit);
   const polarAngle = std.clamp(halfSpread, 0, 3.14159265359) * radialFraction;
   const azimuth = azimuthUnit * 6.28318530718;
-  const radialAxis =
-    lateral * std.cos(azimuth) + depth * std.sin(azimuth);
+  const radialAxis = lateral * std.cos(azimuth) + depth * std.sin(azimuth);
 
   return std.normalize(
     forward * std.cos(polarAngle) + radialAxis * std.sin(polarAngle)

@@ -7,6 +7,7 @@ import { Confetti } from '../../../src/gpu';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
+import { useScreenEffectVisible } from '../hooks/useScreenEffectVisible';
 import {
   PARTICLE_COUNTS,
   rendererOptions,
@@ -61,13 +62,18 @@ const ProfileGlassUI = () => (
 
 const ProfileConfetti = ({
   confettiRef,
+  count,
+  androidTransparencyMode,
 }: {
   confettiRef: React.RefObject<ConfettiMethods | null>;
+  count: number;
+  androidTransparencyMode: 'texture' | 'surface-overlay';
 }) => (
   <Confetti
     ref={confettiRef}
     autoplay
-    count={PARTICLE_COUNTS.single}
+    count={count}
+    androidTransparencyMode={androidTransparencyMode}
     infinite
     flakeStyle="glossy"
     gravity={1}
@@ -82,15 +88,35 @@ const ProfileConfetti = ({
 );
 
 export default function WebGPUProfileScreen() {
-  const { variant: variantParam } = useLocalSearchParams<{
+  const {
+    variant: variantParam,
+    count: countParam,
+    surface,
+  } = useLocalSearchParams<{
     variant?: string | string[];
+    count?: string;
+    surface?: string;
   }>();
   const variant = getProfileVariant(variantParam);
   const confettiRef = useRef<ConfettiMethods>(null);
+  const effectVisible = useScreenEffectVisible();
   const showGlass = variant !== 'pure';
   const renderAboveContent = variant !== 'current';
 
-  const confetti = <ProfileConfetti confettiRef={confettiRef} />;
+  const parsedCount = Number(countParam);
+  const count =
+    Number.isFinite(parsedCount) && parsedCount > 0
+      ? Math.min(100_000, Math.round(parsedCount))
+      : PARTICLE_COUNTS.single;
+  const confetti = effectVisible ? (
+    <ProfileConfetti
+      confettiRef={confettiRef}
+      count={count}
+      androidTransparencyMode={
+        surface === 'surface-overlay' ? 'surface-overlay' : 'texture'
+      }
+    />
+  ) : null;
 
   return (
     <View style={styles.container}>

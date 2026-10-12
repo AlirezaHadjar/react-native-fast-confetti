@@ -76,12 +76,8 @@ const createAtlas = () => {
 
 describe('burst GPU confetti parity framework', () => {
   it('maps PI origin expansion and launch data into GPU particles', () => {
-    const {
-      sizeVariations,
-      colorOverrides,
-      parentColorCount,
-      sizeIsTextured,
-    } = createAtlas();
+    const { sizeVariations, colorOverrides, parentColorCount, sizeIsTextured } =
+      createAtlas();
     const blastPositions = [
       { x: CONTAINER.width / 2, y: 450 },
       { x: CONTAINER.width / 2, y: 150 },
@@ -177,12 +173,8 @@ describe('burst GPU confetti parity framework', () => {
   });
 
   it('maps Cannon named positions, targets, and velocities into GPU particles', () => {
-    const {
-      sizeVariations,
-      colorOverrides,
-      parentColorCount,
-      sizeIsTextured,
-    } = createAtlas();
+    const { sizeVariations, colorOverrides, parentColorCount, sizeIsTextured } =
+      createAtlas();
     const cannonsPositions = [
       resolveNamedPosition('bottom-left', CONTAINER.width, CONTAINER.height),
       resolveNamedPosition('bottom-right', CONTAINER.width, CONTAINER.height),

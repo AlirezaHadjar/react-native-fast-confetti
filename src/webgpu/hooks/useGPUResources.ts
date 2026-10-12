@@ -4,7 +4,7 @@ import { useLatestCallback } from '../../hooks/useLatestCallback';
 type Params<Config, Resources> = {
   config: Config;
   create: (config: Config, isCancelled: () => boolean) => Promise<Resources>;
-  destroy: (resources: Resources) => void;
+  destroy: (resources: Resources) => void | Promise<void>;
   onReadyChange: (ready: boolean) => void;
   onError?: (error: unknown) => void;
 };
@@ -29,7 +29,7 @@ export const useGPUResources = <Config, Resources>({
     void create(config, () => cancelled)
       .then((nextResources) => {
         if (cancelled) {
-          destroy(nextResources);
+          void destroy(nextResources);
           return;
         }
         setResources(nextResources);

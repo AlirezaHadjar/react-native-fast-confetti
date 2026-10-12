@@ -9,8 +9,8 @@ We want this community to be friendly and respectful to each other. Please follo
 This project is a monorepo managed using [Bun workspaces](https://bun.sh/docs/install/workspaces). It contains the following packages:
 
 - The library package in the root directory.
-- A minimal example app in the `example/` directory.
-- A full-featured kitchen-sink app in the `kitchen-sink/` directory.
+- A minimal native example app in the `example/` directory.
+- A full-featured native and web kitchen-sink app in the `kitchen-sink/` directory.
 
 To get started with the project, run `bun install` in the root directory to install the required dependencies for each package:
 
@@ -19,6 +19,8 @@ bun install
 ```
 
 > Since the project relies on Bun workspaces, you cannot use [`npm`](https://github.com/npm/cli) for development.
+
+Both apps use Expo SDK 57 and this checkout. Skia v3 and WebGPU require native builds; these demos do not run in Expo Go.
 
 The [example app](/example/) demonstrates basic usage of the library. The [kitchen-sink app](/kitchen-sink/) is a full-featured showcase. You need to run one of them to test any changes you make.
 
@@ -50,17 +52,18 @@ To run the example app on Web:
 bun run kitchen-sink web
 ```
 
-Make sure your code passes TypeScript and ESLint. Run the following to verify:
+Make sure your code passes TypeScript, Oxlint, and Oxfmt. Run the following to verify:
 
 ```sh
 bun run typecheck
 bun run lint
+bun run format:check
 ```
 
 To fix formatting errors, run the following:
 
 ```sh
-bun run lint --fix
+bun run format
 ```
 
 Remember to add tests for your change if possible. Run the unit tests by:
@@ -84,9 +87,9 @@ Our pre-commit hooks verify that your commit message matches this format when co
 
 ### Linting and tests
 
-[ESLint](https://eslint.org/), [Prettier](https://prettier.io/), [TypeScript](https://www.typescriptlang.org/)
+[Oxlint](https://oxc.rs/docs/guide/usage/linter), [Oxfmt](https://oxc.rs/docs/guide/usage/formatter), [TypeScript](https://www.typescriptlang.org/)
 
-We use [TypeScript](https://www.typescriptlang.org/) for type checking, [ESLint](https://eslint.org/) with [Prettier](https://prettier.io/) for linting and formatting the code, and [Jest](https://jestjs.io/) for testing.
+We use [TypeScript](https://www.typescriptlang.org/) for type checking, [Oxlint](https://oxc.rs/docs/guide/usage/linter) with [Oxfmt](https://oxc.rs/docs/guide/usage/formatter) for linting and formatting the code, and [Jest](https://jestjs.io/) for testing.
 
 Our pre-commit hooks verify that the linter and tests pass when committing.
 
@@ -106,7 +109,9 @@ The `package.json` file contains various scripts for common tasks:
 
 - `bun install`: setup project by installing dependencies.
 - `bun run typecheck`: type-check files with TypeScript.
-- `bun run lint`: lint files with ESLint.
+- `bun run lint`: lint files with Oxlint.
+- `bun run format`: format files with Oxfmt.
+- `bun run format:check`: check formatting.
 - `bun run test`: run unit tests with Jest.
 - `bun run example start`: start the Metro server for the example app.
 - `bun run example android`: run the example app on Android.

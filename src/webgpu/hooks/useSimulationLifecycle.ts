@@ -1,13 +1,13 @@
 import { useCallback } from 'react';
-import { useSharedValue } from 'react-native-reanimated';
+import { useGPURuntimeValue } from './useGPURuntimeValue';
 
 /**
  * Control-only lifecycle for the stateful GPU simulation. The canvas owns the
  * sole frame clock, so this hook deliberately registers no UI frame callback.
  */
 export const useSimulationLifecycle = () => {
-  const running = useSharedValue(false);
-  const visibility = useSharedValue(0);
+  const running = useGPURuntimeValue(false);
+  const visibility = useGPURuntimeValue(0);
 
   const pause = useCallback(() => {
     'worklet';

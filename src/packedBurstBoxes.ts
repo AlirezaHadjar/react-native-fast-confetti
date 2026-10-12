@@ -9,11 +9,7 @@ import {
 import type { ColorRange } from './hooks/useConfettiFlakes';
 import type { Position } from './types';
 import type { CannonConfig, PIConfig } from './utils';
-import {
-  getRandomBoolean,
-  getRandomValue,
-  resolveRange,
-} from './utils';
+import { getRandomBoolean, getRandomValue, resolveRange } from './utils';
 
 export const BURST_FLOAT_STRIDE = 8;
 export const BURST_META_STRIDE = 4;
@@ -150,14 +146,8 @@ export const generatePackedPIBoxes = ({
         config.initialSpeed * containerHeight * speedMultiplier * depthScale;
       const launchDelay = getRandomValue(0, launchDelayMax);
       const clockwise = getRandomBoolean();
-      const rotationX = getRandomValue(
-        xRotationRange.min,
-        xRotationRange.max
-      );
-      const rotationZ = getRandomValue(
-        zRotationRange.min,
-        zRotationRange.max
-      );
+      const rotationX = getRandomValue(xRotationRange.min, xRotationRange.max);
+      const rotationZ = getRandomValue(zRotationRange.min, zRotationRange.max);
       const colorIndex = range
         ? range.start + Math.round(getRandomValue(0, range.count - 1))
         : Math.round(getRandomValue(0, parentColorCount - 1));
@@ -243,14 +233,8 @@ export const generatePackedCannonBoxes = ({
         config.speed * containerHeight * speedMultiplier * depthScale;
       const launchDelay = getRandomValue(0, launchDelayMax);
       const clockwise = getRandomBoolean();
-      const rotationX = getRandomValue(
-        xRotationRange.min,
-        xRotationRange.max
-      );
-      const rotationZ = getRandomValue(
-        zRotationRange.min,
-        zRotationRange.max
-      );
+      const rotationX = getRandomValue(xRotationRange.min, xRotationRange.max);
+      const rotationZ = getRandomValue(zRotationRange.min, zRotationRange.max);
       const colorIndex = range
         ? range.start + Math.round(getRandomValue(0, range.count - 1))
         : Math.round(getRandomValue(0, parentColorCount - 1));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import type { SkImage } from '@shopify/react-native-skia';
+import type { SkImage } from 'react-native-skia';
 import { d, tgpu } from 'typegpu';
 
 import type { SizeVariation } from '../hooks/useConfettiFlakes';

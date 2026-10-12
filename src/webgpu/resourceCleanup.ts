@@ -1,3 +1,5 @@
+import { waitForGPUFrameRuntime } from './androidFrameRuntime';
+
 type Destroyable = {
   destroy: () => void;
 };
@@ -56,19 +58,22 @@ export const createGPUFrameRetirement = (): GPUFrameRetirement => {
 };
 
 export const retireGPUResourceSet = async (
-  queue: GPUQueue,
-  destroy: () => void,
+  destroy: () => void | Promise<void>,
   frameRetired?: Promise<void>
 ) => {
-  // A resource can be destroyed only after the UI runtime has dropped the
-  // callback that owns it and Dawn has completed every preceding submission.
+  // Layout cleanup queues removal before passive resource cleanup. The owner
+  // barrier covers every callback incarnation, including a mount that
+  // disappeared before its first registration.
   try {
     await frameRetired;
-    await queue.onSubmittedWorkDone();
+    await waitForGPUFrameRuntime();
+    // Future initialization/writes use this device's same queue, so they follow
+    // all retired submissions. Dawn also defers destroyed allocations until
+    // their queued uses finish; no CPU readback requires a completion fence.
   } catch {
-    // Device loss makes the completion fence reject; its resources are already
-    // unusable, so teardown must continue and must not leak a rejection.
+    // Runtime invalidation can race teardown. Its callbacks can no longer
+    // submit work, so resource cleanup must still continue.
   } finally {
-    destroy();
+    await destroy();
   }
 };

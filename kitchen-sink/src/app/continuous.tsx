@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { useIsFocused } from 'expo-router';
+import { useScreenEffectVisible } from '../hooks/useScreenEffectVisible';
 import { StyleSheet, View } from 'react-native';
 import type { ConfettiMethods } from 'react-native-fast-confetti';
 import { ContinuousConfetti as SkiaContinuousConfetti } from '../../../src';
@@ -18,7 +18,7 @@ import { useScreenConfig } from '../hooks/useScreenConfig';
 import { getRotation, getTextureProps } from '../utils/confettiConfig';
 
 export default function ContinuousScreen() {
-  const isFocused = useIsFocused();
+  const isFocused = useScreenEffectVisible();
   const confettiRef = useRef<ConfettiMethods>(null);
   const { config, updateConfig } = useScreenConfig('continuous');
   const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets(

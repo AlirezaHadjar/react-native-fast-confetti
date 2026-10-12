@@ -30,7 +30,10 @@ export const SINGLE_CONFETTI_VISUAL_BUDGET: VisualDiffBudget = {
 };
 
 const assertSameFrameShape = (reference: RgbaFrame, received: RgbaFrame) => {
-  if (reference.width !== received.width || reference.height !== received.height) {
+  if (
+    reference.width !== received.width ||
+    reference.height !== received.height
+  ) {
     throw new Error(
       `Frame sizes do not match: ${reference.width}x${reference.height} vs ${received.width}x${received.height}`
     );
@@ -104,4 +107,3 @@ export const compareRgbaFrames = (
     referenceAlphaCoverage,
   };
 };
-

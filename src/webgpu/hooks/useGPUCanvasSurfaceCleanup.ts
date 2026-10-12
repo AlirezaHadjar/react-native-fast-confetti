@@ -1,5 +1,5 @@
 import { useLayoutEffect } from 'react';
-import type { SharedValue } from 'react-native-reanimated';
+import type { WritableValue } from '../controlValues';
 
 import { unconfigureCanvasSurface } from '../configureCanvasSurface';
 
@@ -10,7 +10,7 @@ type SurfaceState = {
 /** Runs before React deletes the native canvas host, while unconfigure is safe. */
 export const useGPUCanvasSurfaceCleanup = (
   activeState: SurfaceState | null,
-  surfaceReady: SharedValue<boolean>,
+  surfaceReady: WritableValue<boolean>,
   onReadyChange: (ready: boolean) => void,
   clearInitialized: () => void
 ) => {

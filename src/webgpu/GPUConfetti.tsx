@@ -5,7 +5,7 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { useSharedValue } from 'react-native-reanimated';
+import { useGPURuntimeValue } from './hooks/useGPURuntimeValue';
 import { scheduleOnRN, scheduleOnUI } from 'react-native-worklets';
 
 import { GPUConfettiCanvas } from './GPUConfettiCanvas';
@@ -85,6 +85,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       textureMode = 0,
       gravityDir: externalGravityDir,
       device,
+      androidTransparencyMode,
       onError,
       ...textureRootProps
     },
@@ -272,10 +273,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
       gravity,
     ]);
     const animationReady =
-      ready &&
-      reduceMotionReady &&
-      containerWidth > 0 &&
-      containerHeight > 0;
+      ready && reduceMotionReady && containerWidth > 0 && containerHeight > 0;
     const hasParticles = animationReady && visibleCount > 0;
     const completeEmptyCycle = useCallback(() => {
       scheduleOnUI(completeCycle);
@@ -347,7 +345,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
 
     // Default gravity direction is +Y (down). Caller can override with a
     // SharedValue (e.g. driven by gyroscope).
-    const defaultGravityDir = useSharedValue<FixedLengthArray<number, 3>>([
+    const defaultGravityDir = useGPURuntimeValue<FixedLengthArray<number, 3>>([
       0, 1, 0,
     ]);
     const gravityDir = externalGravityDir ?? defaultGravityDir;
@@ -390,6 +388,7 @@ const ConfettiInner = forwardRef<GPUConfettiMethods, InternalGPUConfettiProps>(
     return (
       <GPUConfettiCanvas
         device={device}
+        androidTransparencyMode={androidTransparencyMode}
         onError={onError}
         containerStyle={containerStyle}
         onContainerLayout={onContainerLayout}

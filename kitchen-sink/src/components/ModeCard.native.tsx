@@ -7,12 +7,13 @@ import {
   Platform,
   useColorScheme,
 } from 'react-native';
-import { Link, useIsFocused } from 'expo-router';
+import { Link } from 'expo-router';
+import { useScreenEffectVisible } from '../hooks/useScreenEffectVisible';
 import { BlurView, BlurTargetView } from 'expo-blur';
 import type { ModeCardProps } from './ModeCard';
 
 export function ModeCard({ item, styles }: ModeCardProps) {
-  const isFocused = useIsFocused();
+  const isFocused = useScreenEffectVisible();
   const blurTargetRef = useRef(null);
   const colorScheme = useColorScheme();
   const isAndroidDark = Platform.OS === 'android' && colorScheme === 'dark';

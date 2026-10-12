@@ -11,7 +11,7 @@ import {
   ImageSVG,
   Image,
   Path,
-} from '@shopify/react-native-skia';
+} from 'react-native-skia';
 import type { SizeVariation, ColorRange } from './useConfettiFlakes';
 import {
   BURST_COLOR_INDEX,

@@ -103,12 +103,12 @@ effect on native surface ordering.
 The same release animation was profiled on the same 60 Hz Android emulator
 before and after changing the presentation path:
 
-| Metric | Transparent `TextureView` | Top translucent `SurfaceView` |
-| --- | ---: | ---: |
-| WebGPU `QueuePresentKHR` cadence | 45.03 FPS | 59.33 FPS |
-| Present intervals over 20 ms | 35.0% | 2.47% |
-| Present intervals over 33 ms | 17.0% | 0.45% |
-| React Native window swaps during steady animation | 332 / ~15 s | 0 |
+| Metric                                            | Transparent `TextureView` | Top translucent `SurfaceView` |
+| ------------------------------------------------- | ------------------------: | ----------------------------: |
+| WebGPU `QueuePresentKHR` cadence                  |                 45.03 FPS |                     59.33 FPS |
+| Present intervals over 20 ms                      |                     35.0% |                         2.47% |
+| Present intervals over 33 ms                      |                     17.0% |                         0.45% |
+| React Native window swaps during steady animation |               332 / ~15 s |                             0 |
 
 Traces:
 
@@ -147,11 +147,7 @@ Preserve the current compatibility behavior as `auto` and expose presentation
 selection explicitly. For example:
 
 ```ts
-type AndroidPresentation =
-  | "auto"
-  | "texture"
-  | "surface"
-  | "surface-overlay";
+type AndroidPresentation = 'auto' | 'texture' | 'surface' | 'surface-overlay';
 ```
 
 Suggested behavior:

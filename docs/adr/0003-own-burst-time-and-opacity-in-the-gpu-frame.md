@@ -63,10 +63,10 @@ WebGPU feature for now.
 A Release build ran the normal 450-particle infinite Cannon example on an
 iPhone 17 Pro Simulator. Ten-second, 1 ms process samples measured:
 
-| Configuration        | Main samples | Frame path | Presentation wait | Non-presentation frame work | Footprint |
-| -------------------- | -----------: | ---------: | ----------------: | --------------------------: | --------: |
-| No opacity curve     |        7,155 | 458 (6.4%) |       276 (3.9%) |                182 (2.54%) |  201.0 MB |
-| Per-particle curve   |        7,758 | 567 (7.3%) |       328 (4.2%) |                239 (3.08%) |  193.2 MB |
+| Configuration      | Main samples | Frame path | Presentation wait | Non-presentation frame work | Footprint |
+| ------------------ | -----------: | ---------: | ----------------: | --------------------------: | --------: |
+| No opacity curve   |        7,155 | 458 (6.4%) |        276 (3.9%) |                 182 (2.54%) |  201.0 MB |
+| Per-particle curve |        7,758 | 567 (7.3%) |        328 (4.2%) |                 239 (3.08%) |  193.2 MB |
 
 The 0.54 percentage-point difference in non-presentation samples is inside the
 observed run-to-run variance. This supports the architectural claim that the

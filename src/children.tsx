@@ -19,7 +19,10 @@ export function flattenChildren(
 ): FlatChild[] {
   return Children.toArray(children).reduce<FlatChild[]>(
     (acc, node, nodeIndex) => {
-      if (isValidElement<{ children?: ReactNode }>(node) && node.type === React.Fragment) {
+      if (
+        isValidElement<{ children?: ReactNode }>(node) &&
+        node.type === React.Fragment
+      ) {
         acc.push(
           ...flattenChildren(
             node.props.children,

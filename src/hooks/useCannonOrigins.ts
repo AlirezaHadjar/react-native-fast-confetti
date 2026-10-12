@@ -146,8 +146,7 @@ export const useCannonOrigins = ({
       const originColors = props.colors ?? rootColors ?? DEFAULT_COLORS;
       const fullMotionCount = props.count ?? DEFAULT_CANNON_ORIGIN_COUNT;
       const spread = props.spread ?? DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE;
-      const speed =
-        props.initialSpeed ?? DEFAULT_CANNON_CONFETTI_INITIAL_SPEED;
+      const speed = props.initialSpeed ?? DEFAULT_CANNON_CONFETTI_INITIAL_SPEED;
       const speedVariation =
         props.speedVariation ??
         rootSpeedVariation ??

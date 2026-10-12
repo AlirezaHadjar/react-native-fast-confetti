@@ -45,9 +45,7 @@ describe('stateful burst fixed-step scheduling', () => {
     const debtAfterFirstFrame = output[BURST_SCHEDULE_ACCUMULATOR]!;
 
     expect(output[BURST_SCHEDULE_STEPS]).toBe(8);
-    expect(debtAfterFirstFrame).toBeGreaterThan(
-      FIXED_SIMULATION_STEP_SECONDS
-    );
+    expect(debtAfterFirstFrame).toBeGreaterThan(FIXED_SIMULATION_STEP_SECONDS);
 
     writeBurstFixedStepSchedule(
       largeTarget,

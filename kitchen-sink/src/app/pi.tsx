@@ -1,4 +1,4 @@
-import { useIsFocused } from 'expo-router';
+import { useScreenEffectVisible } from '../hooks/useScreenEffectVisible';
 import { useRef } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import type { PIConfettiMethods } from 'react-native-fast-confetti';
@@ -18,7 +18,7 @@ import { useScreenConfig } from '../hooks/useScreenConfig';
 import { getRotation, getTextureProps } from '../utils/confettiConfig';
 
 export default function PIScreen() {
-  const isFocused = useIsFocused();
+  const isFocused = useScreenEffectVisible();
   const piConfettiRef = useRef<PIConfettiMethods>(null);
   const { config, updateConfig } = useScreenConfig('pi');
   const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets(

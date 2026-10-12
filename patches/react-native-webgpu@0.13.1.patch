@@ -1,118 +1,4 @@
-diff --git a/android/src/main/java/com/webgpu/WebGPUSurfaceView.java b/android/src/main/java/com/webgpu/WebGPUSurfaceView.java
-index 3ef30c1bb71b75582c80e10b08266cd51a26762c..a0374fb4415251ff20ce5c95d6bef3d57b5ff053 100644
---- a/android/src/main/java/com/webgpu/WebGPUSurfaceView.java
-+++ b/android/src/main/java/com/webgpu/WebGPUSurfaceView.java
-@@ -2,6 +2,7 @@ package com.webgpu;
- 
- import android.annotation.SuppressLint;
- import android.content.Context;
-+import android.graphics.PixelFormat;
- import android.view.SurfaceHolder;
- import android.view.SurfaceView;
- 
-@@ -13,8 +14,18 @@ public class WebGPUSurfaceView extends SurfaceView implements SurfaceHolder.Call
-   WebGPUAPI mApi;
- 
-   public WebGPUSurfaceView(Context context, WebGPUAPI api) {
-+    this(context, api, false);
-+  }
-+
-+  public WebGPUSurfaceView(Context context, WebGPUAPI api, boolean transparent) {
-     super(context);
-     mApi = api;
-+    if (transparent) {
-+      // Own SurfaceFlinger layer, so frames skip the app's HWUI renderer. The
-+      // cost is that this layer sits above every other view in the window.
-+      setZOrderOnTop(true);
-+      getHolder().setFormat(PixelFormat.TRANSLUCENT);
-+    }
-     getHolder().addCallback(this);
-   }
- 
-diff --git a/android/src/main/java/com/webgpu/WebGPUView.java b/android/src/main/java/com/webgpu/WebGPUView.java
-index c0c2a2eec158f8a373f228f9db88639f8df98aaf..1bbe65254da070559088d87bfc409b3fcc51803a 100644
---- a/android/src/main/java/com/webgpu/WebGPUView.java
-+++ b/android/src/main/java/com/webgpu/WebGPUView.java
-@@ -14,6 +14,7 @@ public class WebGPUView extends ReactViewGroup implements WebGPUAPI {
- 
-   private int mContextId;
-   private boolean mTransparent = false;
-+  private boolean mTransparentSurfaceLayer = false;
-   private WebGPUModule mModule;
-   private View mView = null;
- 
-@@ -32,23 +33,37 @@ public class WebGPUView extends ReactViewGroup implements WebGPUAPI {
-   }
- 
-   public void setTransparent(boolean value) {
-+    if (value == mTransparent && mView != null) {
-+      return;
-+    }
-+    mTransparent = value;
-+    rebuildView();
-+  }
-+
-+  // "surface-overlay" trades z-ordering for a cheaper composition path; see
-+  // the androidTransparencyMode prop on Canvas. Ignored when not transparent.
-+  public void setTransparencyMode(String mode) {
-+    boolean surfaceLayer = "surface-overlay".equals(mode);
-+    if (surfaceLayer == mTransparentSurfaceLayer && mView != null) {
-+      return;
-+    }
-+    mTransparentSurfaceLayer = surfaceLayer;
-+    rebuildView();
-+  }
-+
-+  private void rebuildView() {
-     Context ctx = getContext();
--    if (value != mTransparent || mView == null) {
--      if (mView != null) {
--        removeView(mView);
--      }
--      mTransparent = value;
--      if (mTransparent) {
--//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
--//          mView = new WebGPUAHBView(ctx, this);
--//        } else {
--          mView = new WebGPUTextureView(ctx, this);
--//        }
--      } else {
--        mView = new WebGPUSurfaceView(ctx, this);
--      }
--      addView(mView);
-+    if (mView != null) {
-+      removeView(mView);
-+    }
-+    if (mTransparent) {
-+      mView = mTransparentSurfaceLayer
-+        ? new WebGPUSurfaceView(ctx, this, true)
-+        : new WebGPUTextureView(ctx, this);
-+    } else {
-+      mView = new WebGPUSurfaceView(ctx, this);
-     }
-+    addView(mView);
-   }
- 
-   @Override
-diff --git a/android/src/main/java/com/webgpu/WebGPUViewManager.java b/android/src/main/java/com/webgpu/WebGPUViewManager.java
-index a7eae8ddc62e83589372c4894916805a55918097..d5b861c8bf9f5b82927f9e270a541d3df351da22 100644
---- a/android/src/main/java/com/webgpu/WebGPUViewManager.java
-+++ b/android/src/main/java/com/webgpu/WebGPUViewManager.java
-@@ -36,6 +36,12 @@ public class WebGPUViewManager extends WebGPUViewManagerSpec<WebGPUView> {
-     view.setTransparent(value);
-   }
- 
-+  @Override
-+  @ReactProp(name = "androidTransparencyMode")
-+  public void setAndroidTransparencyMode(WebGPUView view, String value) {
-+    view.setTransparencyMode(value);
-+  }
-+
-   @Override
-   @ReactProp(name = "contextId")
-   public void setContextId(WebGPUView view, int value) {
 diff --git a/apple/MetalLayerColorSpace.mm b/apple/MetalLayerColorSpace.mm
-index 1a918ee3e3e171f984783644a7f930ad10fd82b3..e8f963f448da92c3d80e1279541adbb5a6715d9f 100644
 --- a/apple/MetalLayerColorSpace.mm
 +++ b/apple/MetalLayerColorSpace.mm
 @@ -1,7 +1,6 @@
@@ -123,7 +9,7 @@ index 1a918ee3e3e171f984783644a7f930ad10fd82b3..e8f963f448da92c3d80e1279541adbb5
  
  #include "webgpu/webgpu_cpp.h"
  
-@@ -31,14 +30,6 @@ void applyCAMetalLayerColorSpace(void *nativeSurface,
+@@ -31,14 +30,6 @@
      // 8-bit format.
      metalLayer.colorspace = nil;
    }
@@ -139,10 +25,9 @@ index 1a918ee3e3e171f984783644a7f930ad10fd82b3..e8f963f448da92c3d80e1279541adbb5
  
  } // namespace rnwgpu
 diff --git a/cpp/rnwgpu/RNWebGPUManager.cpp b/cpp/rnwgpu/RNWebGPUManager.cpp
-index 871e31196605c9d260dbd24ce0f30d8309656f98..1f1d4f3a395059e8b340c8ecaf65396009c4f464 100644
 --- a/cpp/rnwgpu/RNWebGPUManager.cpp
 +++ b/cpp/rnwgpu/RNWebGPUManager.cpp
-@@ -239,11 +239,19 @@ void RNWebGPUManager::installWebGPUWorkletHelpers(jsi::Runtime &runtime) {
+@@ -240,11 +240,19 @@
  
  void RNWebGPUManager::flushPendingSurfaceTransition(
      std::shared_ptr<SurfaceInfo> info) {
@@ -164,10 +49,9 @@ index 871e31196605c9d260dbd24ce0f30d8309656f98..1f1d4f3a395059e8b340c8ecaf653960
  
  RNWebGPUManager::~RNWebGPUManager() {
 diff --git a/cpp/rnwgpu/RNWebGPUManager.h b/cpp/rnwgpu/RNWebGPUManager.h
-index cd2ea85a8c8206935ea468bb1ddc745c5f559d33..504de157657a84c403781824e7c3427319d8f975 100644
 --- a/cpp/rnwgpu/RNWebGPUManager.h
 +++ b/cpp/rnwgpu/RNWebGPUManager.h
-@@ -36,10 +36,9 @@ public:
+@@ -36,10 +36,9 @@
  
    /**
     * Applies a surface attach latched by the platform UI thread (see
@@ -182,7 +66,6 @@ index cd2ea85a8c8206935ea468bb1ddc745c5f559d33..504de157657a84c403781824e7c34273
    void flushPendingSurfaceTransition(std::shared_ptr<SurfaceInfo> info);
  
 diff --git a/cpp/rnwgpu/SurfaceRegistry.h b/cpp/rnwgpu/SurfaceRegistry.h
-index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec386616c606fe 100644
 --- a/cpp/rnwgpu/SurfaceRegistry.h
 +++ b/cpp/rnwgpu/SurfaceRegistry.h
 @@ -1,6 +1,7 @@
@@ -190,11 +73,11 @@ index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec3866
  
  #include <algorithm>
 +#include <exception>
- #include <functional>
- #include <memory>
- #include <mutex>
-@@ -13,6 +14,8 @@
- #include "webgpu/webgpu_cpp.h"
+ #include <atomic>
+ #include <cerrno>
+ #include <chrono>
+@@ -27,6 +28,8 @@
+ #endif
  
  #ifdef __APPLE__
 +#include <dispatch/dispatch.h>
@@ -202,7 +85,7 @@ index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec3866
  namespace dawn::native::metal {
  void WaitForCommandsToBeScheduled(WGPUDevice device);
  } // namespace dawn::native::metal
-@@ -21,6 +24,53 @@ void WaitForCommandsToBeScheduled(WGPUDevice device);
+@@ -35,6 +38,53 @@
  namespace rnwgpu {
  
  #ifdef __APPLE__
@@ -256,7 +139,7 @@ index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec3866
  // Tags the CAMetalLayer with the colorspace matching the configured texture
  // format. Implemented in apple/MetalLayerColorSpace.mm.
  void applyCAMetalLayerColorSpace(void *nativeSurface,
-@@ -58,21 +108,20 @@ using NativeSurfaceReleaser = std::function<void(void *)>;
+@@ -130,21 +180,20 @@
  //   destruction alone (backgrounding, TextureView teardown) never removes an
  //   entry; it only detaches the surface.
  // - Attaching a surface is LATCHED: the UI thread stores it as pending
@@ -292,25 +175,24 @@ index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec3866
  class SurfaceInfo {
  public:
    SurfaceInfo(wgpu::Instance gpu, int width, int height)
-@@ -82,6 +131,7 @@ public:
-     // Drop the Dawn objects before releasing the native surfaces they borrow.
-     _surface = nullptr;
+@@ -168,12 +217,16 @@
+     _surfaceDevice = nullptr;
+ #endif
      _pendingSurface = nullptr;
 +    _retiredSurface = nullptr;
      _texture = nullptr;
      if (_pendingReleaser && _pendingNativeSurface) {
        _pendingReleaser(_pendingNativeSurface);
-@@ -89,6 +139,9 @@ public:
+     }
      if (_releaser && _nativeSurface) {
        _releaser(_nativeSurface);
-     }
++    }
 +    if (_retiredReleaser && _retiredNativeSurface) {
 +      _retiredReleaser(_retiredNativeSurface);
-+    }
+     }
    }
  
-   // --- Platform UI thread ---------------------------------------------------
-@@ -150,6 +203,22 @@ public:
+@@ -236,6 +289,22 @@
    // block adoption. The flush path (other threads) leaves it false so it never
    // swaps the surface under a frame that is genuinely in flight.
    void applyPendingAttach(bool supersedeInFlightFrame = false) {
@@ -333,7 +215,7 @@ index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec3866
      bool presentBlit = false;
      uint64_t blitEpoch = 0;
      wgpu::Device device = nullptr;
-@@ -227,6 +296,17 @@ public:
+@@ -317,6 +386,17 @@
  
    void configure(wgpu::SurfaceConfiguration &newConfig,
                   std::vector<wgpu::TextureFormat> viewFormats) {
@@ -351,7 +233,7 @@ index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec3866
      applyPendingAttach(/* supersedeInFlightFrame = */ true);
      std::unique_lock<std::shared_mutex> lock(_mutex);
      _viewFormats = std::move(viewFormats);
-@@ -247,6 +327,13 @@ public:
+@@ -351,6 +431,13 @@
  
    // Resize the drawing buffer (canvas.width/height changed).
    void reconfigure(int newWidth, int newHeight) {
@@ -365,7 +247,7 @@ index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec3866
      std::unique_lock<std::shared_mutex> lock(_mutex);
      if (_config.device == nullptr) {
        return;
-@@ -259,6 +346,13 @@ public:
+@@ -363,6 +450,13 @@
    }
  
    void unconfigure() {
@@ -379,22 +261,28 @@ index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec3866
      std::unique_lock<std::shared_mutex> lock(_mutex);
      if (_surface) {
        _surface.Unconfigure();
-@@ -281,7 +375,8 @@ public:
-   // otherwise (see RNWebGPU::destroyContext).
-   bool hasNativeSurface() {
-     std::shared_lock<std::shared_mutex> lock(_mutex);
+@@ -441,7 +535,8 @@
+       return true;
+     }
+ #endif
 -    return _nativeSurface != nullptr || _hasPendingAttach;
 +    return _nativeSurface != nullptr || _hasPendingAttach ||
 +           _retiredNativeSurface != nullptr;
    }
  
    // Returns the texture for the current frame: the surface's swapchain texture
-@@ -290,30 +385,58 @@ public:
-   wgpu::Texture getCurrentTexture() {
+@@ -452,6 +547,7 @@
+   wgpu::Texture getCurrentTexture(uint64_t *frameEpoch = nullptr) {
      // Start-of-frame boundary; a new acquire supersedes any previous frame
      // that never presented.
 +    releaseRetiredSurface();
      applyPendingAttach(/* supersedeInFlightFrame = */ true);
+ #if defined(__ANDROID__)
+     if (_poolMode.load()) {
+@@ -484,32 +580,57 @@
+       // not shown.
+     }
+ #endif
 -    std::unique_lock<std::shared_mutex> lock(_mutex);
 -    if (_config.device == nullptr) {
 -      throw std::runtime_error(
@@ -404,11 +292,23 @@ index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec3866
 -    _frameInFlight = true;
 -    _acquiredFromSurface = false;
 -    _frameEpoch++;
+-    if (frameEpoch) {
+-      *frameEpoch = _frameEpoch;
+-    }
 -    if (_surface) {
 -      auto texture = acquireSurfaceTextureLocked();
 -      if (texture) {
 -        _acquiredFromSurface = true;
 -        return texture;
+-      }
+-      // The surface is transiently unusable (e.g. mid-resize, lost while
+-      // backgrounding): fall back to an offscreen texture so the render loop
+-      // survives; this frame is simply not presented.
+-    }
+-    if (!_texture) {
+-      _texture = createOffscreenTextureLocked();
+-    }
+-    return _texture;
 +    for (int attempt = 0; attempt < 2; attempt++) {
 +#ifdef __APPLE__
 +      uint64_t recoveryEpoch = 0;
@@ -423,6 +323,7 @@ index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec3866
 +        _frameInFlight = true;
 +        _acquiredFromSurface = false;
 +        _frameEpoch++;
++        if (frameEpoch) *frameEpoch = _frameEpoch;
 +        if (_surface) {
 +          auto acquired = acquireSurfaceTextureLocked();
 +          if (acquired.texture) {
@@ -453,23 +354,16 @@ index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec3866
 +          }
 +          return _texture;
 +        }
-       }
--      // The surface is transiently unusable (e.g. mid-resize, lost while
--      // backgrounding): fall back to an offscreen texture so the render loop
--      // survives; this frame is simply not presented.
--    }
--    if (!_texture) {
--      _texture = createOffscreenTextureLocked();
++      }
 +#ifdef __APPLE__
 +      reconfigureAfterAcquireFailure(recoveryEpoch);
 +#endif
-     }
--    return _texture;
++    }
 +    throw std::runtime_error("[WebGPU] surface recovery failed");
    }
  
-   // Present the current frame. Runs synchronously on the thread that did
-@@ -335,6 +458,8 @@ public:
+   // True while the frame started by the getCurrentTexture() call that
+@@ -549,6 +670,8 @@
        dawn::native::metal::WaitForCommandsToBeScheduled(device.Get());
      }
  #endif
@@ -478,7 +372,7 @@ index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec3866
      {
        std::unique_lock<std::shared_mutex> lock(_mutex);
        if (_surface && _acquiredFromSurface) {
-@@ -343,6 +468,10 @@ public:
+@@ -557,6 +680,10 @@
        _acquiredFromSurface = false;
        _frameInFlight = false;
        _frameEpoch++;
@@ -489,8 +383,8 @@ index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec3866
      }
      applyPendingAttach();
    }
-@@ -365,9 +494,48 @@ public:
-   }
+@@ -694,9 +821,48 @@
+ #endif
  
  private:
 +#ifdef __APPLE__
@@ -537,48 +431,44 @@ index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec3866
 -    NativeSurfaceReleaser releasers[2];
 +    void *releasedSurfaces[3] = {nullptr, nullptr, nullptr};
 +    NativeSurfaceReleaser releasers[3];
-     {
-       std::unique_lock<std::shared_mutex> lock(_mutex);
-       // The platform is tearing surfaces down; a not-yet-adopted attach is
-@@ -379,24 +547,40 @@ private:
+ #if defined(__ANDROID__)
+     // Destroyed outside the lock: it releases a JNI reference.
+     std::function<void()> releasedFrameReady;
+@@ -742,11 +908,23 @@
          releasers[0] = std::move(_pendingReleaser);
          _pendingNativeSurface = nullptr;
        }
-+
-+      // A retired surface can only belong to a frame already superseded by
-+      // the active one being detached now.
 +      takeRetiredSurfaceLocked(releasedSurfaces[1], releasers[1]);
-+
        if (_surface) {
          if (createFallbackTexture && _config.device != nullptr) {
            _texture = createOffscreenTextureLocked();
          }
 -        _surface = nullptr;
--        // The in-flight frame (if any) rendered into the destroyed surface;
--        // presentFrame() must not present it.
++#ifdef __APPLE__
 +        if (_frameInFlight && _acquiredFromSurface) {
 +          _retiredSurface = std::move(_surface);
 +          _retiredNativeSurface = _nativeSurface;
 +          _retiredReleaser = std::move(_releaser);
-+        } else {
++        } else
++#endif
++        {
 +          _surface = nullptr;
 +          releasedSurfaces[2] = _nativeSurface;
 +          releasers[2] = std::move(_releaser);
 +        }
-+        // The detached frame may still submit against _retiredSurface, but it
-+        // must never present into a native view that has gone away.
-         _acquiredFromSurface = false;
-+      } else if (_nativeSurface) {
-+        // Surface creation may fail while the retained native window remains
-+        // valid. It still needs a balanced release on detach.
-+        releasedSurfaces[2] = _nativeSurface;
-+        releasers[2] = std::move(_releaser);
-       }
+ #if defined(__ANDROID__)
+         // DAWN_WORKAROUND_DEVICE_DESTROY_BEFORE_SURFACE_RELEASE
+         _surfaceDevice = nullptr;
+@@ -758,12 +936,14 @@
        _frameEpoch++;
        // Window ownership is independent of the Dawn surface handle (which can
        // be null if surface creation failed): always return the window.
 -      releasedSurfaces[1] = _nativeSurface;
 -      releasers[1] = std::move(_releaser);
++      if (_nativeSurface && !_retiredNativeSurface && !releasedSurfaces[2]) {
++        releasedSurfaces[2] = _nativeSurface;
++        releasers[2] = std::move(_releaser);
++      }
        _nativeSurface = nullptr;
      }
      // Release outside the lock: the platform may do real work here.
@@ -587,7 +477,7 @@ index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec3866
        if (releasers[i] && releasedSurfaces[i]) {
          releasers[i](releasedSurfaces[i]);
        }
-@@ -424,21 +608,30 @@ private:
+@@ -791,26 +971,28 @@
  
    // Acquire the surface's current texture, reconfiguring once when the surface
    // reports it is stale (rotation, resize, coming back from background).
@@ -601,28 +491,37 @@ index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec3866
      wgpu::SurfaceTexture surfaceTexture;
      _surface.GetCurrentTexture(&surfaceTexture);
      if (!isAcquireSuccess(surfaceTexture)) {
-       if (surfaceTexture.status ==
-           wgpu::SurfaceGetCurrentTextureStatus::Error) {
+-      if (surfaceTexture.status ==
+-          wgpu::SurfaceGetCurrentTextureStatus::Error) {
 -        return nullptr;
+-      }
++      if (surfaceTexture.status == wgpu::SurfaceGetCurrentTextureStatus::Error) {
 +        return {};
-       }
++      }
 +#ifdef __APPLE__
 +      return {.texture = nullptr, .needsReconfigure = true};
 +#else
-       _surface.Configure(&_config);
-       _surface.GetCurrentTexture(&surfaceTexture);
-       if (!isAcquireSuccess(surfaceTexture)) {
+       configureSurfaceLocked(_config);
+-      // DAWN_WORKAROUND_DEVICE_DESTROY_BEFORE_SURFACE_RELEASE: the reconfigure
+-      // may have replaced the surface and failed to create a new one.
+-      if (!_surface) {
 -        return nullptr;
-+        return {};
-       }
-+#endif
-     }
+-      }
++      if (!_surface) return {};
+       _surface.GetCurrentTexture(&surfaceTexture);
+-      if (!isAcquireSuccess(surfaceTexture)) {
+-        return nullptr;
+-      }
+-    }
 -    return surfaceTexture.texture;
++      if (!isAcquireSuccess(surfaceTexture)) return {};
++#endif
++    }
 +    return {.texture = surfaceTexture.texture, .needsReconfigure = false};
    }
  
    static bool isAcquireSuccess(const wgpu::SurfaceTexture &surfaceTexture) {
-@@ -494,6 +687,11 @@ private:
+@@ -1201,6 +1383,11 @@
    void *_nativeSurface = nullptr;
    wgpu::Surface _surface = nullptr;
    NativeSurfaceReleaser _releaser;
@@ -634,207 +533,41 @@ index 8dad9d36f0a5b3dbf0683e3f82711f89da70e2b8..3d950ae0b3c7f9e278995e6d03ec3866
    // Offscreen fallback drawing buffer.
    wgpu::Texture _texture = nullptr;
    // Surface attached by the UI thread, awaiting adoption at a frame boundary.
-diff --git a/cpp/rnwgpu/api/GPUAdapter.cpp b/cpp/rnwgpu/api/GPUAdapter.cpp
-index 64317b51aee7c4088046f862a6740f7e06d76ded..1b93be01066f85cd2a67beaccfc8717dfc887a72 100644
---- a/cpp/rnwgpu/api/GPUAdapter.cpp
-+++ b/cpp/rnwgpu/api/GPUAdapter.cpp
-@@ -66,6 +66,33 @@ async::AsyncTaskHandle GPUAdapter::requestDevice(
-     }
-   }
+diff --git a/cpp/rnwgpu/api/GPUCanvasContext.cpp b/cpp/rnwgpu/api/GPUCanvasContext.cpp
+--- a/cpp/rnwgpu/api/GPUCanvasContext.cpp
++++ b/cpp/rnwgpu/api/GPUCanvasContext.cpp
+@@ -32,7 +32,15 @@
+   _surfaceInfo->configure(surfaceConfiguration, std::move(viewFormats));
+ }
  
-+  // A GPUDevice is reachable from every JS runtime it is boxed into (main JS,
-+  // Reanimated UI, worklet runtimes) and from SurfaceInfo, so Dawn's public
-+  // methods must be safe to call from several threads at once. Without this
-+  // feature DeviceBase::mMutex is null and every device->GetGuard() inside
-+  // Dawn is a no-op.
-+  bool injectedImplicitSync = false;
-+  {
-+    const auto sync = wgpu::FeatureName::ImplicitDeviceSynchronization;
-+    wgpu::SupportedFeatures supported;
-+    _instance.GetFeatures(&supported);
-+    const auto *end = supported.features + supported.featureCount;
-+    if (std::find(supported.features, end, sync) != end) {
-+      if (!descriptor.has_value()) {
-+        descriptor = std::make_shared<GPUDeviceDescriptor>();
-+      }
-+      auto &desc = descriptor.value();
-+      if (!desc->requiredFeatures.has_value()) {
-+        desc->requiredFeatures = std::vector<wgpu::FeatureName>{};
-+      }
-+      auto &features = desc->requiredFeatures.value();
-+      if (std::find(features.begin(), features.end(), sync) == features.end()) {
-+        features.push_back(sync);
-+        injectedImplicitSync = true;
-+      }
-+    }
-+  }
-+
-   wgpu::DeviceDescriptor aDescriptor;
-   Convertor conv;
-   if (!conv(aDescriptor, descriptor)) {
-@@ -144,7 +171,7 @@ async::AsyncTaskHandle GPUAdapter::requestDevice(
-       async::RuntimeContext::getOrCreate(runtime, _async->instance());
-   return context->postTask(
-       [this, aDescriptor, descriptor, label = std::move(label),
--       deviceLostBinding, context,
-+       deviceLostBinding, context, injectedImplicitSync,
-        creationRuntime](const async::AsyncTaskHandle::ResolveFunction &resolve,
-                         const async::AsyncTaskHandle::RejectFunction &reject) {
-         // Build a local mutable copy so we can chain Dawn's device toggles.
-@@ -201,7 +228,8 @@ async::AsyncTaskHandle GPUAdapter::requestDevice(
-         _instance.RequestDevice(
-             &deviceDesc, wgpu::CallbackMode::AllowProcessEvents,
-             [context, resolve, reject, label, creationRuntime,
--             deviceLostBinding](wgpu::RequestDeviceStatus status,
-+             deviceLostBinding,
-+             injectedImplicitSync](wgpu::RequestDeviceStatus status,
-                                 wgpu::Device device, wgpu::StringView message) {
-               if (message.length) {
-                 fprintf(stderr, "%s", message.data);
-@@ -250,6 +278,7 @@ async::AsyncTaskHandle GPUAdapter::requestDevice(
+-void GPUCanvasContext::unconfigure() { _surfaceInfo->unconfigure(); }
++void GPUCanvasContext::unconfigure() {
++  _surfaceInfo->unconfigure();
++  // Retiring the drawing buffer must also retire the wrapper cached by this
++  // context. Otherwise an unmounted JS context pins its last native image
++  // until both JS runtimes collect their wrappers.
++  std::lock_guard<std::mutex> lock(_currentTextureMutex);
++  _currentTexture.reset();
++  _currentTextureEpoch = 0;
++}
  
-               auto deviceHost = std::make_shared<GPUDevice>(std::move(device),
-                                                             context, label);
-+              deviceHost->setHidesImplicitSync(injectedImplicitSync);
-               *deviceLostBinding = deviceHost;
- 
-               // Register the device in the static registry so the uncaptured
+ std::shared_ptr<GPUTexture> GPUCanvasContext::getCurrentTexture() {
+   if (!_surfaceInfo->isConfigured()) {
 diff --git a/cpp/rnwgpu/api/GPUDevice.cpp b/cpp/rnwgpu/api/GPUDevice.cpp
-index 13ce67eb5dd18ad1719efe5fd918587e3d77fe92..715aa5534095b6a4dc18005a48dae1fc6aca07a3 100644
 --- a/cpp/rnwgpu/api/GPUDevice.cpp
 +++ b/cpp/rnwgpu/api/GPUDevice.cpp
-@@ -568,6 +568,10 @@ std::unordered_set<std::string> GPUDevice::getFeatures() {
-   for (size_t i = 0; i < supportedFeatures.featureCount; ++i) {
-     auto feature = supportedFeatures.features[i];
-     enabled.insert(feature);
-+    if (_hidesImplicitSync &&
-+        feature == wgpu::FeatureName::ImplicitDeviceSynchronization) {
-+      continue;
-+    }
-     std::string name;
-     convertEnumToJSUnion(feature, &name);
-     result.insert(name);
-diff --git a/cpp/rnwgpu/api/GPUDevice.h b/cpp/rnwgpu/api/GPUDevice.h
-index 1f55f135febd6adf84c4a9de81ec1d670eb1c732..484d539df974a56554d3aa51d0c963ddd82ff44b 100644
---- a/cpp/rnwgpu/api/GPUDevice.h
-+++ b/cpp/rnwgpu/api/GPUDevice.h
-@@ -162,6 +162,10 @@ public:
-   void addEventListener(std::string type, jsi::Function callback);
-   void removeEventListener(std::string type, jsi::Function callback);
+@@ -694,10 +694,10 @@
+     return;
+   }
  
-+  // True when requestDevice() added ImplicitDeviceSynchronization itself; the
-+  // caller never asked for it, so it stays out of device.features.
-+  void setHidesImplicitSync(bool value) { _hidesImplicitSync = value; }
-+
-   std::string getLabel() { return _label; }
-   void setLabel(const std::string &label) {
-     _label = label;
-@@ -285,6 +289,7 @@ private:
-   wgpu::Device _instance;
-   std::shared_ptr<async::RuntimeContext> _async;
-   std::string _label;
-+  bool _hidesImplicitSync = false;
-   // Guards the device-lost state below. getLost() runs on a JS thread, but
-   // Dawn's AllowSpontaneous device-lost callback (and device destruction) can
-   // fire notifyDeviceLost() from other threads, so the mutex keeps these
-diff --git a/lib/typescript/src/Canvas.d.ts b/lib/typescript/src/Canvas.d.ts
-index 12e94b9fb20e7d17acdb8e9e2380ee5cb428cf09..8c08136d6ff03b2b68c071eb66073fa9178cd91d 100644
---- a/lib/typescript/src/Canvas.d.ts
-+++ b/lib/typescript/src/Canvas.d.ts
-@@ -32,8 +32,9 @@
- }
- interface CanvasProps extends ViewProps {
-     transparent?: boolean;
-+    androidTransparencyMode?: "texture" | "surface-overlay";
-     ref?: React.Ref<CanvasRef>;
- }
--export declare const Canvas: ({ transparent, ref, ...props }: CanvasProps) => React.JSX.Element;
-+export declare const Canvas: ({ transparent, androidTransparencyMode, ref, ...props }: CanvasProps) => React.JSX.Element;
- export {};
- //# sourceMappingURL=Canvas.d.ts.map
-\ No newline at end of file
-diff --git a/src/Canvas.tsx b/src/Canvas.tsx
-index d19ccdf1e642ecaad9769f35d7c96f14e86edf21..ad6fc008ed027e9668f1e3fa1c0c4a6398fd8d59 100644
---- a/src/Canvas.tsx
-+++ b/src/Canvas.tsx
-@@ -47,10 +47,21 @@ export interface CanvasRef {
+-  auto runtime = getCreationRuntime();
+-  if (runtime == nullptr) {
+-    return;
+-  }
++  // The device's event callbacks belong to its original RuntimeContext.
++  // Unboxing temporarily changes NativeObject's runtime pointer before
++  // restoring it. Error delivery can race that window; the context is stable.
++  auto runtime = &_async->runtime();
  
- interface CanvasProps extends ViewProps {
-   transparent?: boolean;
-+  // Android only, and ignored unless `transparent` is set. "texture"
-+  // (default) draws through a TextureView and stacks like any other view.
-+  // "surface-overlay" gives the canvas its own translucent SurfaceFlinger
-+  // layer, which skips a composition pass but draws above every React Native
-+  // view in the window, so nothing can be layered on top of it.
-+  androidTransparencyMode?: "texture" | "surface-overlay";
-   ref?: React.Ref<CanvasRef>;
- }
- 
--export const Canvas = ({ transparent, ref, ...props }: CanvasProps) => {
-+export const Canvas = ({
-+  transparent,
-+  androidTransparencyMode,
-+  ref,
-+  ...props
-+}: CanvasProps) => {
-   const viewRef = useRef(null);
-   const [contextId, _] = useState(() => generateContextId());
-   // Retire the native registry entry for this contextId on unmount. When a
-@@ -96,6 +107,7 @@ export const Canvas = ({ transparent, ref, ...props }: CanvasProps) => {
-         style={{ flex: 1 }}
-         contextId={contextId}
-         transparent={!!transparent}
-+        androidTransparencyMode={androidTransparencyMode}
-       />
-     </View>
-   );
-diff --git a/src/WebGPUViewNativeComponent.ts b/src/WebGPUViewNativeComponent.ts
-index 63c14ddb16b21ca2674368053408e1d5462f6968..0110fa92a3a0dd1ea100b28a066ce210ed98a1ab 100644
---- a/src/WebGPUViewNativeComponent.ts
-+++ b/src/WebGPUViewNativeComponent.ts
-@@ -1,10 +1,17 @@
- import { codegenNativeComponent } from "react-native";
--import type { Int32 } from "react-native/Libraries/Types/CodegenTypes";
-+import type {
-+  Int32,
-+  WithDefault,
-+} from "react-native/Libraries/Types/CodegenTypes";
- import type { ViewProps } from "react-native";
- 
- export interface NativeProps extends ViewProps {
-   contextId: Int32;
-   transparent: boolean;
-+  androidTransparencyMode?: WithDefault<
-+    "texture" | "surface-overlay",
-+    "texture"
-+  >;
- }
- 
- // eslint-disable-next-line import/no-default-export
-diff --git a/src/WebGPUViewNativeComponent.web.ts b/src/WebGPUViewNativeComponent.web.ts
-index af77bdb84753fffc0ac8ecb36c8742a6a9b427f6..b99de377025d3263352b6cd1c55efa1c42b18ea1 100644
---- a/src/WebGPUViewNativeComponent.web.ts
-+++ b/src/WebGPUViewNativeComponent.web.ts
-@@ -8,6 +8,7 @@ import { contextIdToId } from "./utils";
- export interface NativeProps extends ViewProps {
-   contextId: Int32;
-   transparent: boolean;
-+  androidTransparencyMode?: "texture" | "surface-overlay";
- }
- 
- // eslint-disable-next-line @typescript-eslint/no-explicit-any
-@@ -54,7 +55,13 @@ function resizeCanvas(canvas: HTMLCanvasElement | null) {
- export default function WebGPUViewNativeComponent(
-   props: NativeProps,
- ): React.JSX.Element {
--  const { contextId, style, transparent, ...rest } = props;
-+  const {
-+    contextId,
-+    style,
-+    transparent,
-+    androidTransparencyMode: _androidTransparencyMode,
-+    ...rest
-+  } = props;
- 
-   const canvasElm = useRef<HTMLCanvasElement>();
- 
+   // Create the appropriate error object based on type
+   GPUErrorVariant error;

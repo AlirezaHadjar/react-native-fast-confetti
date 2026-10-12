@@ -6,6 +6,15 @@ import {
   retireGPUResourceSet,
 } from '../webgpu/resourceCleanup';
 
+const mockWaitForGPUFrameRuntime = jest.fn<() => Promise<void>>(async () => {});
+jest.mock('../webgpu/androidFrameRuntime', () => ({
+  waitForGPUFrameRuntime: () => mockWaitForGPUFrameRuntime(),
+}));
+
+const flushMicrotasks = async () => {
+  for (let index = 0; index < 6; index += 1) await Promise.resolve();
+};
+
 describe('GPU resource cleanup', () => {
   it('destroys every owned resource even when one teardown throws', () => {
     const calls: string[] = [];
@@ -25,41 +34,42 @@ describe('GPU resource cleanup', () => {
     expect(calls).toEqual(['buffer-a', 'buffer-b', 'texture', 'root']);
   });
 
-  it('waits for frame retirement and submitted GPU work', async () => {
-    const destroy = jest.fn();
-    let finishSubmittedWork!: () => void;
-    const queue = {
-      onSubmittedWorkDone: jest.fn(
-        () =>
-          new Promise<void>((resolve) => {
-            finishSubmittedWork = resolve;
-          })
-      ),
-    } as unknown as GPUQueue;
+  it('waits for explicit frame retirement before releasing a lease', async () => {
+    const destroy = jest.fn<() => void>();
     const frame = createGPUFrameRetirement();
 
-    const retirement = retireGPUResourceSet(queue, destroy, frame.promise);
+    const retirement = retireGPUResourceSet(destroy, frame.promise);
     await Promise.resolve();
-    expect(queue.onSubmittedWorkDone).not.toHaveBeenCalled();
     expect(destroy).not.toHaveBeenCalled();
 
     frame.resolve();
-    await Promise.resolve();
-    expect(queue.onSubmittedWorkDone).toHaveBeenCalledTimes(1);
-    expect(destroy).not.toHaveBeenCalled();
-
-    finishSubmittedWork();
     await retirement;
     expect(destroy).toHaveBeenCalledTimes(1);
   });
 
-  it('still destroys resources when the device queue is lost', async () => {
-    const destroy = jest.fn();
-    const queue = {
-      onSubmittedWorkDone: jest.fn(() => Promise.reject(new Error('lost'))),
-    } as unknown as GPUQueue;
+  it('cannot release a lease before the owning runtime stops submitting', async () => {
+    let releaseOwner!: () => void;
+    mockWaitForGPUFrameRuntime.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        releaseOwner = resolve;
+      })
+    );
+    const calls: string[] = [];
+    const retirement = retireGPUResourceSet(() => {
+      calls.push('destroy');
+    });
+    await flushMicrotasks();
+    expect(calls).toEqual([]);
+    releaseOwner();
+    await retirement;
+    expect(calls).toEqual(['destroy']);
+  });
 
-    await retireGPUResourceSet(queue, destroy);
+  it('still destroys resources when the owning runtime was invalidated', async () => {
+    const destroy = jest.fn<() => void>();
+    mockWaitForGPUFrameRuntime.mockRejectedValueOnce(new Error('invalidated'));
+
+    await retireGPUResourceSet(destroy);
 
     expect(destroy).toHaveBeenCalledTimes(1);
   });

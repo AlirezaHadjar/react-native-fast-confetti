@@ -26,7 +26,14 @@ The fastest confetti animation library for React Native, powered by Skia Atlas A
 ## Installation
 
 > [!IMPORTANT]
-> This library depends on [react-native-reanimated](https://docs.swmansion.com/react-native-reanimated/docs/guides/compatibility/), [@shopify/react-native-skia](https://github.com/Shopify/react-native-skia), and [react-native-worklets](https://docs.swmansion.com/react-native-worklets/docs/guides/compatibility/). Make sure to install those first.
+> This library depends on [react-native-reanimated](https://docs.swmansion.com/react-native-reanimated/docs/guides/compatibility/), [react-native-skia](https://github.com/wcandillon/react-native-skia), and [react-native-worklets](https://docs.swmansion.com/react-native-worklets/docs/guides/compatibility/). Make sure to install those first.
+
+This branch targets `react-native-skia` 3.4+ and `react-native-webgpu` 0.13.1+.
+Skia v3 uses Graphite on native platforms and requires Android API 26 with
+Vulkan, or iOS 15.1+. Use a development build with Expo. Replace
+`@shopify/react-native-skia` with `react-native-skia`; installing both creates
+conflicting native modules. When using both Skia and WebGPU, keep their Dawn
+versions matched. See the [Skia v3 migration guide](https://wcandillon.github.io/react-native-skia/docs/getting-started/migration/).
 
 ```sh
 yarn add react-native-fast-confetti
@@ -90,6 +97,12 @@ loss. Keep all work submitted to a shared device serialized on one runtime.
 
 Read about [WebGPU specific features](#webgpu-features) and
 [WebGPU caveats](#webgpu-caveats).
+
+The tested native stack is Expo 57, React Native 0.86.3, Reanimated 4.7.1,
+and Worklets 0.13.0. Worklets includes the serialization race fix upstream
+and needs no local patch. This workspace still applies a native WebGPU patch
+through Bun, described in [the Android renderer notes](docs/ANDROID_RENDERER_FIX.md).
+Installing the JavaScript library does not patch an application's WebGPU peer dependency.
 
 ## Components
 
@@ -270,7 +283,7 @@ Same as `<Confetti />` except `verticalSpacing` defaults to `200`.
 Pass a Skia image or SVG on the parent component or on individual Flake children. Flake-level textures override the parent default.
 
 ```tsx
-import { useImage, useSVG } from '@shopify/react-native-skia';
+import { useImage, useSVG } from 'react-native-skia';
 import { Confetti } from 'react-native-fast-confetti';
 
 const moneyImage = useImage(require('./money.png'));
@@ -525,15 +538,16 @@ Define flake sizes as children of any confetti component (or origin).
 ## Compatibility
 
 > [!IMPORTANT]
-> This library does not depend on a specific React Native version directly. Compatibility depends on [React Native Reanimated](https://docs.swmansion.com/react-native-reanimated/docs/guides/compatibility/), [React Native Worklets](https://docs.swmansion.com/react-native-worklets/docs/guides/compatibility/), and [React Native Skia](https://github.com/Shopify/react-native-skia). Skia does not publish a Reanimated-style compatibility matrix, so use its [installation requirements](https://shopify.github.io/react-native-skia/docs/getting-started/installation/) as the source of truth.
+> The unreleased v3 branch requires React Native `>=0.86 <0.89`, Reanimated `>=4.7.1 <5`, and Worklets `>=0.13.0 <1`. Both example apps use Expo SDK 57 and native builds. Historical release compatibility depends on [React Native Reanimated](https://docs.swmansion.com/react-native-reanimated/docs/guides/compatibility/), [React Native Worklets](https://docs.swmansion.com/react-native-worklets/docs/guides/compatibility/), and [React Native Skia](https://github.com/wcandillon/react-native-skia). Skia does not publish a Reanimated-style compatibility matrix, so use its [installation requirements](https://wcandillon.github.io/react-native-skia/docs/getting-started/installation/) as the source of truth.
 
-| Package version   | Tested with React Native | Tested with Skia | Tested with Reanimated | Worklets                  | Minimum inferred from API usage                                                               |
-| ----------------- | ------------------------ | ---------------- | ---------------------- | ------------------------- | --------------------------------------------------------------------------------------------- |
-| `2.0.0`           | `0.83.2`                 | `2.5.1`          | `4.2.2`                | Required via Reanimated 4 | React Native `>=0.79`, React `>=19`, Skia `>=2.0.0`, Reanimated `>=4.0.0`, Worklets `>=0.7.0` |
-| `1.0.0` - `1.1.2` | `0.79.2`                 | `2.0.0-next.4`   | `3.18.0`               | Not required directly     | React Native `>=0.79`, React `>=19`, Skia `2.0.0-next.x` / `>=2.0.0`, Reanimated `>=3.18.0`   |
-| `0.8.3`           | `0.79.2`                 | `2.0.0-next.4`   | `3.17.5`               | Not required directly     | React Native `>=0.79`, React `>=19`, Skia `2.0.0-next.x` / `>=2.0.0`, Reanimated `>=3.17.5`   |
-| `0.8.1` - `0.8.2` | `0.76.6`                 | `1.4.2`          | `3.16.1`               | Not required directly     | React Native `>=0.76`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.16.1`                    |
-| `0.2.0` - `0.7.0` | `0.74.5`                 | `1.4.2`          | `3.15.5`               | Not required directly     | React Native `>=0.74`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.15.5`                    |
+| Package version   | Tested with React Native | Tested with Skia | Tested with Reanimated | Worklets                  | Minimum inferred from API usage                                                                      |
+| ----------------- | ------------------------ | ---------------- | ---------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Unreleased v3     | `0.86.3`                 | `3.4.0`          | `4.7.1`                | `0.13.0`                  | React Native `>=0.86 <0.89`, React `>=19`, Skia `>=3.4.0`, Reanimated `>=4.7.1`, Worklets `>=0.13.0` |
+| `2.0.0`           | `0.83.2`                 | `2.5.1`          | `4.2.2`                | Required via Reanimated 4 | React Native `>=0.79`, React `>=19`, Skia `>=2.0.0`, Reanimated `>=4.0.0`, Worklets `>=0.7.0`        |
+| `1.0.0` - `1.1.2` | `0.79.2`                 | `2.0.0-next.4`   | `3.18.0`               | Not required directly     | React Native `>=0.79`, React `>=19`, Skia `2.0.0-next.x` / `>=2.0.0`, Reanimated `>=3.18.0`          |
+| `0.8.3`           | `0.79.2`                 | `2.0.0-next.4`   | `3.17.5`               | Not required directly     | React Native `>=0.79`, React `>=19`, Skia `2.0.0-next.x` / `>=2.0.0`, Reanimated `>=3.17.5`          |
+| `0.8.1` - `0.8.2` | `0.76.6`                 | `1.4.2`          | `3.16.1`               | Not required directly     | React Native `>=0.76`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.16.1`                           |
+| `0.2.0` - `0.7.0` | `0.74.5`                 | `1.4.2`          | `3.15.5`               | Not required directly     | React Native `>=0.74`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.15.5`                           |
 
 For exact app support, check the compatibility pages for the installed versions of Reanimated and Worklets. For Skia, follow the official installation requirements: current Skia versions require React Native `>=0.79` and React `>=19`; React Native `<=0.78` / React `<=18` projects should use Skia `1.12.4` or below.
 
@@ -552,6 +566,12 @@ For exact app support, check the compatibility pages for the installed versions 
 | `opacityAnimation` | `PIConfetti`, `CannonConfetti`             | `undefined`     | Evaluates opacity per flake from its launch time.       |
 | `device`           | All WebGPU components                      | `undefined`     | Borrows an app-owned `GPUDevice`.                       |
 | `onError`          | All WebGPU components                      | `console.error` | Reports device acquisition and renderer setup failures. |
+
+Android effects default to `androidTransparencyMode="texture"`. The TextureView
+moves, fades, and clips with its React Native screen. GPU submission runs on a
+shared Android worker, while iOS uses its main-thread Metal surface.
+Use `androidTransparencyMode="surface-overlay"` only for an intentional topmost
+overlay whose host manages navigation and stacking.
 
 ## WebGPU caveats
 

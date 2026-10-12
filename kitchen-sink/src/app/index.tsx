@@ -29,6 +29,10 @@ const previewFlakes = (Flake: typeof SkiaConfetti.Flake) => (
 );
 
 const createModes = (renderer: RendererType) => {
+  const previewCanvasProps =
+    renderer === 'webgpu'
+      ? ({ androidTransparencyMode: 'texture' } as const)
+      : {};
   const Confetti = renderer === 'webgpu' ? WebGPUConfetti : SkiaConfetti;
   const ContinuousConfetti =
     renderer === 'webgpu' ? WebGPUContinuousConfetti : SkiaContinuousConfetti;
@@ -43,6 +47,7 @@ const createModes = (renderer: RendererType) => {
       description: 'One-shot confetti burst',
       render: () => (
         <Confetti
+          {...previewCanvasProps}
           autoplay
           count={PARTICLE_COUNTS.menu.single}
           containerStyle={{ width: MODE_CARD_WIDTH, height: MODE_CARD_HEIGHT }}
@@ -61,9 +66,13 @@ const createModes = (renderer: RendererType) => {
       description: 'Continuous falling confetti',
       render: () => (
         <ContinuousConfetti
+          {...previewCanvasProps}
           autoplay
           count={PARTICLE_COUNTS.menu.continuous}
-          containerStyle={{ width: MODE_CARD_WIDTH, height: MODE_CARD_HEIGHT }}
+          containerStyle={{
+            width: MODE_CARD_WIDTH,
+            height: MODE_CARD_HEIGHT,
+          }}
           verticalSpacing={120}
           flakeStyle="glossy"
           gravity={2}
@@ -78,11 +87,15 @@ const createModes = (renderer: RendererType) => {
       description: 'Physics-inspired confetti',
       render: () => (
         <PIConfetti
+          {...previewCanvasProps}
           autoplay
           flakeStyle="glossy"
           gravity={6}
           infinite
-          containerStyle={{ width: MODE_CARD_WIDTH, height: MODE_CARD_HEIGHT }}
+          containerStyle={{
+            width: MODE_CARD_WIDTH,
+            height: MODE_CARD_HEIGHT,
+          }}
         >
           <PIConfetti.Origin
             blastPosition="center"
@@ -100,6 +113,7 @@ const createModes = (renderer: RendererType) => {
       description: 'Confetti cannons from edges',
       render: () => (
         <CannonConfetti
+          {...previewCanvasProps}
           autoplay
           opacityAnimation={{ enabled: true }}
           infinite
@@ -108,7 +122,10 @@ const createModes = (renderer: RendererType) => {
           drag={{ vertical: 3, horizontal: 6 }}
           sprayDuration={300}
           initialScale={0.7}
-          containerStyle={{ width: MODE_CARD_WIDTH, height: MODE_CARD_HEIGHT }}
+          containerStyle={{
+            width: MODE_CARD_WIDTH,
+            height: MODE_CARD_HEIGHT,
+          }}
         >
           <CannonConfetti.Origin
             position="bottom-left"

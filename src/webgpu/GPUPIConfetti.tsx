@@ -70,6 +70,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
       containerStyle,
       settleOnFloor,
       device,
+      androidTransparencyMode,
       onError,
       ...textureRootProps
     },
@@ -242,6 +243,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, GPUPIConfettiProps>(
     return (
       <GPUBurstConfettiCanvas
         device={device}
+        androidTransparencyMode={androidTransparencyMode}
         onError={onError}
         containerStyle={containerStyle}
         onContainerLayout={onContainerLayout}

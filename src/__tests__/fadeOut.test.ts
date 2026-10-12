@@ -54,12 +54,8 @@ describe('opacityAnimation', () => {
       keyframes: { 0.3: 0.8, 0.7: 0.2 },
     })!;
 
-    expect(interpolateOpacity(0, curve.timestamps, curve.opacities)).toBe(
-      1
-    );
-    expect(interpolateOpacity(1, curve.timestamps, curve.opacities)).toBe(
-      0.2
-    );
+    expect(interpolateOpacity(0, curve.timestamps, curve.opacities)).toBe(1);
+    expect(interpolateOpacity(1, curve.timestamps, curve.opacities)).toBe(0.2);
   });
 
   it('interpolates from full opacity through the supplied sequence', () => {
@@ -79,9 +75,7 @@ describe('opacityAnimation', () => {
     expect(
       interpolateOpacity(0.6, curve.timestamps, curve.opacities)
     ).toBeCloseTo(0.25, 10);
-    expect(interpolateOpacity(0.7, curve.timestamps, curve.opacities)).toBe(
-      0
-    );
+    expect(interpolateOpacity(0.7, curve.timestamps, curve.opacities)).toBe(0);
   });
 
   it('allows an explicit timestamp-zero opacity to override the default', () => {
@@ -90,9 +84,7 @@ describe('opacityAnimation', () => {
       keyframes: { 0: 0.25, 1: 0 },
     })!;
 
-    expect(interpolateOpacity(0, curve.timestamps, curve.opacities)).toBe(
-      0.25
-    );
+    expect(interpolateOpacity(0, curve.timestamps, curve.opacities)).toBe(0.25);
   });
 
   it.each([

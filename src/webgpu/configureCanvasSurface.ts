@@ -1,7 +1,9 @@
 import { Platform } from 'react-native';
-import type { SharedValue } from 'react-native-reanimated';
+import type { WritableValue } from './controlValues';
 import { installWebGPU } from 'react-native-webgpu';
-import { scheduleOnRN, scheduleOnUI } from 'react-native-worklets';
+import { scheduleOnRN } from 'react-native-worklets';
+import { scheduleOnGPUFrameRuntime } from './androidFrameRuntime';
+import { runOrDeferGPUOperationOnUI } from './gpuRuntimeOwnership';
 
 type PresentableCanvasContext = GPUCanvasContext & {
   present?: () => void;
@@ -12,13 +14,13 @@ type CanvasSurface = {
   height: number;
 };
 
-const configureCanvasSurfaceOnUI = (
+const performConfigureCanvasSurfaceOnUI = (
   context: PresentableCanvasContext,
   device: GPUDevice,
   width: number,
   height: number,
   format: GPUTextureFormat,
-  ready: SharedValue<boolean>,
+  ready: WritableValue<boolean>,
   onConfigured?: () => void
 ) => {
   'worklet';
@@ -36,9 +38,33 @@ const configureCanvasSurfaceOnUI = (
   if (onConfigured) scheduleOnRN(onConfigured);
 };
 
-const unconfigureCanvasSurfaceOnUI = (
+const configureCanvasSurfaceOnUI = (
   context: PresentableCanvasContext,
-  ready: SharedValue<boolean>
+  device: GPUDevice,
+  width: number,
+  height: number,
+  format: GPUTextureFormat,
+  ready: WritableValue<boolean>,
+  onConfigured?: () => void
+) => {
+  'worklet';
+  runOrDeferGPUOperationOnUI(() => {
+    'worklet';
+    performConfigureCanvasSurfaceOnUI(
+      context,
+      device,
+      width,
+      height,
+      format,
+      ready,
+      onConfigured
+    );
+  });
+};
+
+const performUnconfigureCanvasSurfaceOnUI = (
+  context: PresentableCanvasContext,
+  ready: WritableValue<boolean>
 ) => {
   'worklet';
   ready.set(false);
@@ -49,8 +75,20 @@ const unconfigureCanvasSurfaceOnUI = (
   }
 };
 
+const unconfigureCanvasSurfaceOnUI = (
+  context: PresentableCanvasContext,
+  ready: WritableValue<boolean>
+) => {
+  'worklet';
+  runOrDeferGPUOperationOnUI(() => {
+    'worklet';
+    performUnconfigureCanvasSurfaceOnUI(context, ready);
+  });
+};
+
 /**
- * Configures the native CAMetalLayer from the main/UI runtime. Dawn mutates
+ * Configures Android on its GPU worker and CAMetalLayer on the UI runtime.
+ * Dawn mutates
  * that layer while configuring a swapchain, which UIKit explicitly forbids
  * from React Native's background JavaScript thread. Web has no such split.
  */
@@ -60,7 +98,7 @@ export const configureCanvasSurface = (
   width: number,
   height: number,
   format: GPUTextureFormat,
-  ready: SharedValue<boolean>,
+  ready: WritableValue<boolean>,
   onConfigured?: () => void
 ) => {
   ready.set(false);
@@ -79,10 +117,9 @@ export const configureCanvasSurface = (
     return;
   }
 
-  // Keep this queued. On Android, the JS canvas object can arrive before the
-  // backing SurfaceView has completed surfaceCreated; synchronous UI dispatch
-  // would configure a swapchain that never becomes presentable.
-  scheduleOnUI(
+  // Queue on the same runtime as frame submission and retirement. On Android,
+  // the JS canvas can arrive before its native surface has been attached.
+  scheduleOnGPUFrameRuntime(
     configureCanvasSurfaceOnUI,
     context,
     device,
@@ -96,7 +133,7 @@ export const configureCanvasSurface = (
 
 export const unconfigureCanvasSurface = (
   context: PresentableCanvasContext,
-  ready: SharedValue<boolean>
+  ready: WritableValue<boolean>
 ) => {
   ready.set(false);
   if (Platform.OS === 'web') {
@@ -107,5 +144,5 @@ export const unconfigureCanvasSurface = (
     }
     return;
   }
-  scheduleOnUI(unconfigureCanvasSurfaceOnUI, context, ready);
+  scheduleOnGPUFrameRuntime(unconfigureCanvasSurfaceOnUI, context, ready);
 };

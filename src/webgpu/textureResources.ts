@@ -7,7 +7,7 @@ import {
   StrokeJoin,
   type SkImage,
   type SkSVG,
-} from '@shopify/react-native-skia';
+} from 'react-native-skia';
 
 import { makeFilledShapePath, makeStreamerPath } from '../flakeShapes';
 import type { SizeVariation, TextureInfo } from '../hooks/useConfettiFlakes';
@@ -105,7 +105,7 @@ const rasterizeTexture = (
     return cached;
   }
 
-  const surface = Skia.Surface.MakeOffscreen(width, height);
+  const surface = Skia.Surface.Make(width, height);
   if (!surface) {
     throw new Error('Unable to create an offscreen Skia texture surface');
   }
@@ -265,7 +265,7 @@ const createShapeMaskLayer = (
   bytesPerRow: number
 ) => {
   if (size.shape !== 'rectangle') {
-    const surface = Skia.Surface.MakeOffscreen(width, height);
+    const surface = Skia.Surface.Make(width, height);
     if (!surface) throw new Error('Unable to create a confetti shape mask');
 
     try {

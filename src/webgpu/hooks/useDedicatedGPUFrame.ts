@@ -6,7 +6,11 @@ import {
   type FrameInfo,
 } from 'react-native-reanimated';
 import { installWebGPU } from 'react-native-webgpu';
-import { runOnUISync } from 'react-native-worklets';
+import { scheduleOnRN, scheduleOnRuntime } from 'react-native-worklets';
+import {
+  getAndroidFrameRuntime,
+  scheduleOnGPUFrameRuntime,
+} from '../androidFrameRuntime';
 
 export type DedicatedGPUFrameTarget = {
   descriptor: GPURenderPassDescriptor;
@@ -40,7 +44,6 @@ type UIFrameRegistry = Map<string, UIFrameEntry>;
 
 let nextSurfaceId = 1;
 const nativeClockRegistrations = new Map<number, FrameCallback>();
-let nativeClockOwner: number | undefined;
 
 const createReusableFrameTarget = (): DedicatedGPUFrameTarget => {
   'worklet';
@@ -57,65 +60,30 @@ const createReusableFrameTarget = (): DedicatedGPUFrameTarget => {
   };
 };
 
-const electNativeClockOwner = () => {
-  const nextOwner = nativeClockRegistrations.keys().next().value as
-    | number
-    | undefined;
-  if (nativeClockOwner === nextOwner) return;
-
-  if (nativeClockOwner !== undefined) {
-    nativeClockRegistrations.get(nativeClockOwner)?.setActive(false);
-  }
-  nativeClockOwner = nextOwner;
-  if (nextOwner !== undefined) {
-    nativeClockRegistrations.get(nextOwner)?.setActive(true);
-  }
-};
-
 const registerNativeClock = (
   surfaceId: number,
   frameCallback: FrameCallback
 ) => {
   nativeClockRegistrations.set(surfaceId, frameCallback);
-  electNativeClockOwner();
+  frameCallback.setActive(true);
 };
 
 const unregisterNativeClock = (surfaceId: number) => {
   nativeClockRegistrations.get(surfaceId)?.setActive(false);
   nativeClockRegistrations.delete(surfaceId);
-  if (nativeClockOwner === surfaceId) nativeClockOwner = undefined;
-  electNativeClockOwner();
 };
 
 declare global {
-  // This registry exists only in the Reanimated UI runtime.
+  // Owned by the Android GPU worker or the iOS UI runtime.
   var __fastConfettiUIFrameRegistryV5: UIFrameRegistry | undefined;
   var __fastConfettiUIWebGPUInstalled: boolean | undefined;
+  var __fastConfettiUILastFrameTimestampV5: number | undefined;
+  var __fastConfettiWorkerDispatchV1:
+    | ((frameInfo: FrameInfo) => void)
+    | undefined;
 }
 
-const registerGPUFrameOnUI = <State extends DedicatedGPUFrameState>(
-  key: string,
-  callback: DedicatedGPUFrameCallback<State>,
-  shouldSchedule: ShouldScheduleGPUFrame,
-  state: State
-) => {
-  'worklet';
-  const registry =
-    globalThis.__fastConfettiUIFrameRegistryV5 ??
-    (globalThis.__fastConfettiUIFrameRegistryV5 = new Map());
-  registry.set(key, {
-    callback:
-      callback as unknown as DedicatedGPUFrameCallback<DedicatedGPUFrameState>,
-    shouldSchedule,
-    state,
-    // Allocate the submit sequence once in its owning runtime. Only the
-    // unavoidable native GPUCommandBuffer wrapper changes each frame.
-    commandBuffers: [],
-    target: createReusableFrameTarget(),
-  });
-};
-
-const retireGPUFrameOnUI = (key: string) => {
+const retireGPUFrameOnUI = (key: string, onRetired?: () => void) => {
   'worklet';
   const registry = globalThis.__fastConfettiUIFrameRegistryV5;
   const entry = registry?.get(key);
@@ -123,9 +91,10 @@ const retireGPUFrameOnUI = (key: string) => {
     entry.commandBuffers.length = 0;
     entry.target.colorAttachment.view = undefined as unknown as GPUTextureView;
     registry?.delete(key);
-    return;
+  } else {
+    registry?.delete(key);
   }
-  registry?.delete(key);
+  if (onRetired) scheduleOnRN(onRetired);
 };
 
 const commitGPUFrameSubmission = (
@@ -168,10 +137,49 @@ const dispatchGPUFrame = (entry: UIFrameEntry, frameInfo: FrameInfo) => {
   }
 };
 
+const dispatchRegisteredGPUFrames = (frameInfo: FrameInfo) => {
+  'worklet';
+  const registry = globalThis.__fastConfettiUIFrameRegistryV5;
+  if (!registry || registry.size === 0) return;
+  if (!globalThis.__fastConfettiUIWebGPUInstalled) {
+    installWebGPU();
+    globalThis.__fastConfettiUIWebGPUInstalled = true;
+  }
+  for (const entry of registry.values()) {
+    if (!entry.shouldSchedule()) continue;
+    dispatchGPUFrame(entry, frameInfo);
+  }
+};
+
+const registerGPUFrameOnUI = <State extends DedicatedGPUFrameState>(
+  key: string,
+  callback: DedicatedGPUFrameCallback<State>,
+  shouldSchedule: ShouldScheduleGPUFrame,
+  state: State
+) => {
+  'worklet';
+  // Install from RN directly into the owner. Capturing this function in a
+  // UI-to-worker closure would serialize a worklet across two runtime hops.
+  globalThis.__fastConfettiWorkerDispatchV1 = dispatchRegisteredGPUFrames;
+  const registry =
+    globalThis.__fastConfettiUIFrameRegistryV5 ??
+    (globalThis.__fastConfettiUIFrameRegistryV5 = new Map());
+  registry.set(key, {
+    callback:
+      callback as unknown as DedicatedGPUFrameCallback<DedicatedGPUFrameState>,
+    shouldSchedule,
+    state,
+    // Allocate the submit sequence once in its owning runtime. Only the
+    // unavoidable native GPUCommandBuffer wrapper changes each frame.
+    commandBuffers: [],
+    target: createReusableFrameTarget(),
+  });
+};
+
 /**
- * Runs every native canvas from one UI-runtime vsync callback. React JavaScript
- * is absent from the frame path, while swapchain access remains on iOS's main
- * thread as required by CAMetalLayer. Physics itself stays in GPU compute.
+ * Uses one native vsync clock. Android GPU submission runs on its own worker
+ * so TextureView consumption and navigation can continue on the UI thread.
+ * iOS swapchain access stays on the main thread required by CAMetalLayer.
  */
 export const useDedicatedGPUFrame = <State extends DedicatedGPUFrameState>(
   callback: DedicatedGPUFrameCallback<State>,
@@ -190,24 +198,36 @@ export const useDedicatedGPUFrame = <State extends DedicatedGPUFrameState>(
     return shouldSchedule?.() ?? true;
   }, [shouldSchedule]);
 
-  const scheduleNativeFrame = useCallback((frameInfo: FrameInfo) => {
-    'worklet';
-    const registry = globalThis.__fastConfettiUIFrameRegistryV5;
-    if (!registry || registry.size === 0) return;
+  const [androidFrameRuntime] = useState(getAndroidFrameRuntime);
 
-    if (!globalThis.__fastConfettiUIWebGPUInstalled) {
-      installWebGPU();
-      globalThis.__fastConfettiUIWebGPUInstalled = true;
-    }
-
-    // Every native canvas uses this one UI-runtime clock. Process them
-    // sequentially so this library never operates on a device concurrently,
-    // while still giving every surface one opportunity per display tick.
-    for (const entry of registry.values()) {
-      if (!entry.shouldSchedule()) continue;
-      dispatchGPUFrame(entry, frameInfo);
-    }
-  }, []);
+  const scheduleNativeFrame = useCallback(
+    (frameInfo: FrameInfo) => {
+      'worklet';
+      if (
+        globalThis.__fastConfettiUILastFrameTimestampV5 === frameInfo.timestamp
+      )
+        return;
+      globalThis.__fastConfettiUILastFrameTimestampV5 = frameInfo.timestamp;
+      if (androidFrameRuntime) {
+        const pending = androidFrameRuntime.framePending;
+        // Never queue more than one GPU tick. A slow GPU drops ticks instead of
+        // accumulating stale frames and blocking the view's consumer thread.
+        if (pending.getBlocking()) return;
+        pending.setBlocking(true);
+        scheduleOnRuntime(androidFrameRuntime.runtime, () => {
+          'worklet';
+          try {
+            globalThis.__fastConfettiWorkerDispatchV1?.(frameInfo);
+          } finally {
+            pending.setBlocking(false);
+          }
+        });
+      } else {
+        dispatchRegisteredGPUFrames(frameInfo);
+      }
+    },
+    [androidFrameRuntime]
+  );
 
   const scheduleWebFrame = useCallback(
     (frameInfo: FrameInfo) => {
@@ -237,7 +257,7 @@ export const useDedicatedGPUFrame = <State extends DedicatedGPUFrameState>(
   );
 
   // The native clock callback captures no canvas, resource, or user worklet.
-  // GPU objects cross to UI only once when their registry entry is installed.
+  // GPU objects cross to their frame runtime only once at registration.
   const frameCallback = useFrameCallback(
     Platform.OS === 'web' ? scheduleWebFrame : scheduleNativeFrame,
     false
@@ -259,10 +279,10 @@ export const useDedicatedGPUFrame = <State extends DedicatedGPUFrameState>(
 
     generationRef.current += 1;
     const key = `${surfaceId}:${generationRef.current}`;
-    // Registration and retirement must share one synchronous ordering domain.
-    // An async registration can otherwise land after its cleanup and leave a
-    // zombie entry holding every transferred GPU object indefinitely.
-    runOnUISync(
+    // Worklets preserves FIFO ordering, so an immediate cleanup cannot race
+    // ahead of this registration. Keeping the handoff asynchronous also avoids
+    // blocking React commits on the UI thread.
+    scheduleOnGPUFrameRuntime(
       registerGPUFrameOnUI,
       key,
       callback,
@@ -273,11 +293,7 @@ export const useDedicatedGPUFrame = <State extends DedicatedGPUFrameState>(
 
     return () => {
       unregisterNativeClock(surfaceId);
-      try {
-        runOnUISync(retireGPUFrameOnUI, key);
-      } finally {
-        onRetired?.();
-      }
+      scheduleOnGPUFrameRuntime(retireGPUFrameOnUI, key, onRetired);
     };
   }, [
     callback,

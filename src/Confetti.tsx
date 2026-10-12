@@ -1,4 +1,4 @@
-import { useRSXformBuffer } from '@shopify/react-native-skia';
+import { useRSXformBuffer } from 'react-native-skia';
 import {
   forwardRef,
   useCallback,

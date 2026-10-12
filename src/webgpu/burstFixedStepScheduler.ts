@@ -36,14 +36,9 @@ export const writeBurstFixedStepSchedule = (
     ? 0
     : Math.max(previousAccumulatorSeconds, 0);
 
-  writeFixedStepSchedule(
-    startingAccumulator,
-    targetDelta,
-    fixedStepScratch
-  );
+  writeFixedStepSchedule(startingAccumulator, targetDelta, fixedStepScratch);
 
-  output[BURST_SCHEDULE_ACCUMULATOR] =
-    fixedStepScratch[SCHEDULE_ACCUMULATOR]!;
+  output[BURST_SCHEDULE_ACCUMULATOR] = fixedStepScratch[SCHEDULE_ACCUMULATOR]!;
   output[BURST_SCHEDULE_STEPS] = fixedStepScratch[SCHEDULE_STEPS]!;
   output[BURST_SCHEDULE_ALPHA] = fixedStepScratch[SCHEDULE_ALPHA]!;
   output[BURST_SCHEDULE_REINITIALIZE] = reinitialize ? 1 : 0;

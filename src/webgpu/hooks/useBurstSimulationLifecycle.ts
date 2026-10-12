@@ -1,15 +1,15 @@
 import { useCallback } from 'react';
-import { useSharedValue } from 'react-native-reanimated';
+import { useGPURuntimeValue } from './useGPURuntimeValue';
 
 /**
  * Control signals specific to finite and repeating GPU burst simulations.
  * Animation time itself belongs to the canvas's dedicated frame callback.
  */
 export const useBurstSimulationLifecycle = () => {
-  const running = useSharedValue(false);
-  const visibility = useSharedValue(0);
-  const resetVersion = useSharedValue(0);
-  const finished = useSharedValue(false);
+  const running = useGPURuntimeValue(false);
+  const visibility = useGPURuntimeValue(0);
+  const resetVersion = useGPURuntimeValue(0);
+  const finished = useGPURuntimeValue(false);
 
   const pause = useCallback(() => {
     'worklet';

@@ -1,4 +1,4 @@
-import type { SkImage, SkSVG } from '@shopify/react-native-skia';
+import type { SkImage, SkSVG } from 'react-native-skia';
 import type React from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import type {

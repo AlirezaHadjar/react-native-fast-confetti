@@ -3,7 +3,6 @@ import type { LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
 import { PixelRatio } from 'react-native';
 import {
   Easing,
-  useSharedValue,
   type EasingFunction,
   type EasingFunctionFactory,
 } from 'react-native-reanimated';
@@ -15,6 +14,7 @@ import { DEFAULT_FOCAL_LENGTH_RATIO, DEFAULT_LIGHT_DIR } from './constants';
 import {
   createConfettiResources,
   destroyConfettiResources,
+  recycleConfettiResources,
   type ConfettiResourceConfig,
   type ConfettiResources,
 } from './resources/confettiResources';
@@ -46,10 +46,6 @@ import {
 import { useGPUDevice } from './hooks/useGPUDevice';
 import { configureCanvasSurface } from './configureCanvasSurface';
 import { createPhasePermutation } from './resourcePacking';
-import {
-  createGPUFrameRetirement,
-  type GPUFrameRetirement,
-} from './resourceCleanup';
 import type {
   FixedLengthArray,
   ReadonlyFixedLengthArray,
@@ -58,6 +54,7 @@ import { useLazyRef } from '../hooks/useLazyRef';
 import { interpolateOpacity, type ResolvedOpacityAnimation } from '../fadeOut';
 import { useGPUResources } from './hooks/useGPUResources';
 import { useGPUResourceRetirement } from './hooks/useGPUResourceRetirement';
+import { useGPURuntimeValue } from './hooks/useGPURuntimeValue';
 import { GPUCanvasHost, gpuCanvasStyles } from './GPUCanvasHost';
 import type { ReadableValue } from './controlValues';
 import { useGPUCanvasSurfaceCleanup } from './hooks/useGPUCanvasSurfaceCleanup';
@@ -65,6 +62,9 @@ import {
   dispatchWorkletCallback,
   useWorkletCallback,
 } from './hooks/useWorkletCallback';
+import { withExclusiveGPUAccess } from './gpuRuntimeOwnership';
+import { scheduleOnGPUFrameRuntime } from './androidFrameRuntime';
+import { recordFallingInitialization } from './initializationPasses';
 
 export type GPUConfettiInitialization = {
   seed: number;
@@ -104,6 +104,7 @@ export type GPUConfettiCanvasParams = {
 
 type Props = {
   device?: GPUDevice;
+  androidTransparencyMode?: 'texture' | 'surface-overlay';
   containerStyle?: StyleProp<ViewStyle>;
   onContainerLayout: (e: LayoutChangeEvent) => void;
   count: number;
@@ -141,6 +142,7 @@ type RendererProps = Omit<
 type RawFrameState = DedicatedGPUFrameState & {
   uniformBuffer: GPUBuffer;
   initPipeline: GPUComputePipeline;
+  runtimeInitPipeline: GPUComputePipeline;
   computePipeline: GPUComputePipeline;
   renderPipeline: GPURenderPipeline;
   textureRenderPipeline: GPURenderPipeline | null;
@@ -163,7 +165,6 @@ type FrameConfig = {
 type FrameRegistration = {
   config: FrameConfig;
   rawFrameState: RawFrameState;
-  retirement: GPUFrameRetirement;
 };
 
 const initializeParticles = (
@@ -246,11 +247,7 @@ const initializeParticles = (
   });
 
   const encoder = state.device.createCommandEncoder();
-  const pass = encoder.beginComputePass();
-  pass.setPipeline(state.initPipeline);
-  pass.setBindGroup(0, state.initBindGroup);
-  pass.dispatchWorkgroups(state.workgroupCount);
-  pass.end();
+  recordFallingInitialization(encoder, state);
   state.queue.submit([encoder.finish()]);
 };
 
@@ -269,6 +266,7 @@ const resolveEasing = (
 
 const GPUConfettiRenderer = ({
   device,
+  androidTransparencyMode = 'texture',
   count,
   sizeVariations,
   allColors,
@@ -296,9 +294,12 @@ const GPUConfettiRenderer = ({
   const canvasRef = useRef<CanvasRef>(null);
   const [frameRegistration, setFrameRegistration] =
     useState<FrameRegistration | null>(null);
-  const uniformDataRef = useLazyRef(
-    () => new Float32Array(UNIFORMS_BYTES / Float32Array.BYTES_PER_ELEMENT)
-  );
+  const uniformDataRef = useRef<Float32Array | null>(null);
+  if (uniformDataRef.current === null) {
+    uniformDataRef.current = new Float32Array(
+      UNIFORMS_BYTES / Float32Array.BYTES_PER_ELEMENT
+    );
+  }
   const scheduleDataRef = useLazyRef(
     () => new Float64Array(SCHEDULE_VALUE_COUNT)
   );
@@ -307,17 +308,14 @@ const GPUConfettiRenderer = ({
     state: RawFrameState;
     initialization: GPUConfettiInitialization;
   } | null>(null);
-  const frameRetirementsRef = useRef(
-    new WeakMap<ConfettiResources, GPUFrameRetirement>()
-  );
-  const elapsed = useSharedValue(0);
-  const lastSimSeconds = useSharedValue(0);
-  const simulatedSeconds = useSharedValue(0);
-  const simulationAccumulator = useSharedValue(0);
-  const wasRunning = useSharedValue(false);
-  const lastFrameTimestampMs = useSharedValue(0);
-  const surfaceReady = useSharedValue(false);
-  const needsRender = useSharedValue(false);
+  const elapsed = useGPURuntimeValue(0);
+  const lastSimSeconds = useGPURuntimeValue(0);
+  const simulatedSeconds = useGPURuntimeValue(0);
+  const simulationAccumulator = useGPURuntimeValue(0);
+  const wasRunning = useGPURuntimeValue(false);
+  const lastFrameTimestampMs = useGPURuntimeValue(0);
+  const surfaceReady = useGPURuntimeValue(false);
+  const needsRender = useGPURuntimeValue(false);
   const easingFunction = useMemo(
     () => resolveEasing(params.easing ?? Easing.linear),
     [params.easing]
@@ -367,7 +365,7 @@ const GPUConfettiRenderer = ({
   ]);
 
   useEffect(() => {
-    resetClock();
+    scheduleOnGPUFrameRuntime(resetClock);
   }, [cycleDuration, resetClock]);
 
   useEffect(() => {
@@ -393,68 +391,79 @@ const GPUConfettiRenderer = ({
 
     const dpr = PixelRatio.get();
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+    scheduleOnGPUFrameRuntime(resetClock);
+    let cancelled = false;
+    void withExclusiveGPUAccess<RawFrameState>(() => {
+      const {
+        initPipeline,
+        runtimeInitPipeline,
+        computePipeline,
+        renderPipeline,
+        textureRenderPipeline,
+      } = createConfettiPipelines(
+        resources.root,
+        presentationFormat,
+        resources.canUseTextureOnlyPipeline
+      );
+      const nextState: RawFrameState = {
+        device,
+        queue: resources.queue,
+        context,
+        uniformBuffer: resources.uniforms.buffer.buffer,
+        initPipeline: resources.root.unwrap(initPipeline),
+        runtimeInitPipeline: resources.root.unwrap(runtimeInitPipeline),
+        computePipeline: resources.root.unwrap(computePipeline),
+        renderPipeline: resources.root.unwrap(renderPipeline),
+        textureRenderPipeline: textureRenderPipeline
+          ? resources.root.unwrap(textureRenderPipeline)
+          : null,
+        computeBindGroup: resources.root.unwrap(resources.computeBindGroup),
+        initBindGroup: resources.root.unwrap(resources.initBindGroup),
+        renderBindGroup: resources.root.unwrap(resources.renderBindGroup),
+        workgroupCount: Math.ceil(count / 64),
+        count,
+        focalLength: Math.max(100, viewportHeight * DEFAULT_FOCAL_LENGTH_RATIO),
+        viewportWidth,
+        viewportHeight,
+      };
+      initializeParticles(
+        nextState,
+        resources,
+        initialization,
+        continuous,
+        infinite,
+        sizeVariations.length
+      );
+      return nextState;
+    })
+      .then((nextRawFrameState) => {
+        if (cancelled) return;
+        needsRender.set(true);
+        initializedRef.current = {
+          state: nextRawFrameState,
+          initialization,
+        };
+        setFrameRegistration({
+          config: frameConfig,
+          rawFrameState: nextRawFrameState,
+        });
+        configureCanvasSurface(
+          context,
+          device,
+          Math.max(1, Math.round(viewportWidth * dpr)),
+          Math.max(1, Math.round(viewportHeight * dpr)),
+          presentationFormat,
+          surfaceReady,
+          reportReady
+        );
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) (onError ?? console.error)(error);
+      });
 
-    const {
-      initPipeline,
-      computePipeline,
-      renderPipeline,
-      textureRenderPipeline,
-    } = createConfettiPipelines(
-      resources.root,
-      presentationFormat,
-      resources.canUseTextureOnlyPipeline
-    );
-
-    resetClock();
-    const nextRawFrameState: RawFrameState = {
-      device,
-      queue: resources.queue,
-      context,
-      uniformBuffer: resources.uniforms.buffer.buffer,
-      initPipeline: resources.root.unwrap(initPipeline),
-      computePipeline: resources.root.unwrap(computePipeline),
-      renderPipeline: resources.root.unwrap(renderPipeline),
-      textureRenderPipeline: textureRenderPipeline
-        ? resources.root.unwrap(textureRenderPipeline)
-        : null,
-      computeBindGroup: resources.root.unwrap(resources.computeBindGroup),
-      initBindGroup: resources.root.unwrap(resources.initBindGroup),
-      renderBindGroup: resources.root.unwrap(resources.renderBindGroup),
-      workgroupCount: Math.ceil(count / 64),
-      count,
-      focalLength: Math.max(100, viewportHeight * DEFAULT_FOCAL_LENGTH_RATIO),
-      viewportWidth,
-      viewportHeight,
+    return () => {
+      cancelled = true;
     };
-    const retirement = createGPUFrameRetirement();
-    frameRetirementsRef.current.set(resources, retirement);
-    initializeParticles(
-      nextRawFrameState,
-      resources,
-      initialization,
-      continuous,
-      infinite,
-      sizeVariations.length
-    );
-    needsRender.set(true);
-    initializedRef.current = {
-      state: nextRawFrameState,
-      initialization,
-    };
-    setFrameRegistration({
-      config: frameConfig,
-      rawFrameState: nextRawFrameState,
-      retirement,
-    });
-    configureCanvasSurface(
-      context,
-      device,
-      Math.max(1, Math.round(viewportWidth * dpr)),
-      Math.max(1, Math.round(viewportHeight * dpr)),
-      presentationFormat,
-      surfaceReady,
-      reportReady
-    );
   }, [
     device,
     resources,
@@ -472,6 +481,7 @@ const GPUConfettiRenderer = ({
     needsRender,
     initialization,
     frameRegistration,
+    onError,
   ]);
 
   const rawFrameState = frameRegistration?.rawFrameState ?? null;
@@ -496,21 +506,34 @@ const GPUConfettiRenderer = ({
     }
 
     onReadyChange(false);
-    initializeParticles(
-      activeRawFrameState,
-      resources,
-      initialization,
-      continuous,
-      infinite,
-      sizeVariations.length
-    );
-    needsRender.set(true);
-    initializedRef.current = {
-      state: activeRawFrameState,
-      initialization,
+    let cancelled = false;
+    void withExclusiveGPUAccess(() => {
+      initializeParticles(
+        activeRawFrameState,
+        resources,
+        initialization,
+        continuous,
+        infinite,
+        sizeVariations.length
+      );
+    })
+      .then(() => {
+        if (cancelled) return;
+        needsRender.set(true);
+        initializedRef.current = {
+          state: activeRawFrameState,
+          initialization,
+        };
+        scheduleOnGPUFrameRuntime(resetClock);
+        onReadyChange(true);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) (onError ?? console.error)(error);
+      });
+
+    return () => {
+      cancelled = true;
     };
-    resetClock();
-    onReadyChange(true);
   }, [
     activeRawFrameState,
     resources,
@@ -521,6 +544,7 @@ const GPUConfettiRenderer = ({
     needsRender,
     onReadyChange,
     resetClock,
+    onError,
   ]);
 
   const shouldScheduleFrame = useCallback(() => {
@@ -531,14 +555,6 @@ const GPUConfettiRenderer = ({
     );
   }, [needsRender, running, surfaceReady, wasRunning]);
 
-  const activeFrameRetirement =
-    activeRawFrameState === frameRegistration?.rawFrameState
-      ? frameRegistration?.retirement
-      : undefined;
-  const reportFrameRetired = useCallback(
-    () => activeFrameRetirement?.resolve(),
-    [activeFrameRetirement]
-  );
   const clearInitialized = useCallback(() => {
     initializedRef.current = null;
   }, []);
@@ -631,13 +647,10 @@ const GPUConfettiRenderer = ({
         Math.min(1, 1 - params.flipIntensity)
       );
 
-      const uniformData = uniformDataRef.current;
-      uniformData[UNIFORM_FLOAT_OFFSETS.viewportX] =
-        state.viewportWidth;
-      uniformData[UNIFORM_FLOAT_OFFSETS.viewportY] =
-        state.viewportHeight;
-      uniformData[UNIFORM_FLOAT_OFFSETS.focalLength] =
-        state.focalLength;
+      const uniformData = uniformDataRef.current!;
+      uniformData[UNIFORM_FLOAT_OFFSETS.viewportX] = state.viewportWidth;
+      uniformData[UNIFORM_FLOAT_OFFSETS.viewportY] = state.viewportHeight;
+      uniformData[UNIFORM_FLOAT_OFFSETS.focalLength] = state.focalLength;
       uniformData[UNIFORM_FLOAT_OFFSETS.opacity] =
         visibility.get() * animatedOpacity;
       uniformData[UNIFORM_FLOAT_OFFSETS.dt] = FIXED_SIMULATION_STEP_SECONDS;
@@ -676,17 +689,15 @@ const GPUConfettiRenderer = ({
 
       const encoder = state.device.createCommandEncoder();
       if (completedCycles > 0) {
-        const initPass = encoder.beginComputePass();
-        initPass.setPipeline(state.initPipeline);
-        initPass.setBindGroup(0, state.initBindGroup);
-        initPass.dispatchWorkgroups(state.workgroupCount);
-        initPass.end();
+        recordFallingInitialization(encoder, state);
       }
       if (simulationSteps > 0) {
         const computePass = encoder.beginComputePass();
         computePass.setPipeline(state.computePipeline);
         computePass.setBindGroup(0, state.computeBindGroup);
-        computePass.dispatchWorkgroups(state.workgroupCount);
+        for (let step = 0; step < simulationSteps; step += 1) {
+          computePass.dispatchWorkgroups(state.workgroupCount);
+        }
         computePass.end();
       }
 
@@ -756,8 +767,7 @@ const GPUConfettiRenderer = ({
     renderFrame,
     activeRawFrameState,
     activeRawFrameState !== null,
-    shouldScheduleFrame,
-    activeFrameRetirement ? reportFrameRetired : undefined
+    shouldScheduleFrame
   );
 
   useGPUCanvasSurfaceCleanup(
@@ -767,18 +777,18 @@ const GPUConfettiRenderer = ({
     clearInitialized
   );
 
-  useGPUResourceRetirement(
-    resources,
-    frameRetirementsRef,
-    destroyConfettiResources
-  );
+  useGPUResourceRetirement(resources, recycleConfettiResources);
 
   return (
     <Canvas
       ref={canvasRef}
       style={gpuCanvasStyles.canvas}
-      transparent
-      androidTransparencyMode="surface-overlay"
+      opaque={false}
+      android={{
+        surfaceType:
+          androidTransparencyMode === 'texture' ? 'TextureView' : 'SurfaceView',
+        zOrderOnTop: androidTransparencyMode !== 'texture',
+      }}
     />
   );
 };

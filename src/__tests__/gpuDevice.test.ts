@@ -35,9 +35,9 @@ describe('shared GPU device store', () => {
     } as unknown as GPU;
     const warnForFallback = jest.fn();
 
-    await expect(
-      requestDefaultGPUDevice(gpu, warnForFallback)
-    ).resolves.toBe(device);
+    await expect(requestDefaultGPUDevice(gpu, warnForFallback)).resolves.toBe(
+      device
+    );
 
     expect(gpu.requestAdapter).toHaveBeenCalledWith({
       powerPreference: 'high-performance',

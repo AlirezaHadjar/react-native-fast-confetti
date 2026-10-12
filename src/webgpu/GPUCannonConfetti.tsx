@@ -90,6 +90,7 @@ const CannonConfettiInner = forwardRef<
       reduceMotion,
       settleOnFloor,
       device,
+      androidTransparencyMode,
       onError,
       ...textureRootProps
     },
@@ -332,6 +333,7 @@ const CannonConfettiInner = forwardRef<
     return (
       <GPUBurstConfettiCanvas
         device={device}
+        androidTransparencyMode={androidTransparencyMode}
         onError={onError}
         containerStyle={containerStyle}
         onContainerLayout={onContainerLayout}

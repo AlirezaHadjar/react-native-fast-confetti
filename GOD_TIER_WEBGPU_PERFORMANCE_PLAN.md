@@ -282,14 +282,14 @@ The profiling workload positively identified each route, used the same installed
 development build and renderer menu, waited for initialization, and measured the
 process with `footprint`, `vmmap`, `heap`, and `sample`:
 
-| Scenario | Effective particles | Physical footprint |
-| --- | ---: | ---: |
-| Clean Single WebGPU | 20,000 | ~404 MB |
-| Clean Cannon WebGPU | 60,000 (20k × 3 origins) | ~401 MB |
-| WebGPU route sequence | 20k → 40k → 60k | ~397–533 MB plateau |
-| Single Skia | 20,000 | ~529 MB |
-| Cannon Skia before cleanup work | 60,000 | ~1,372 MB |
-| Cannon Skia after eager-generation removal and packed state | 60,000 | ~718 MB |
+| Scenario                                                    |      Effective particles |  Physical footprint |
+| ----------------------------------------------------------- | -----------------------: | ------------------: |
+| Clean Single WebGPU                                         |                   20,000 |             ~404 MB |
+| Clean Cannon WebGPU                                         | 60,000 (20k × 3 origins) |             ~401 MB |
+| WebGPU route sequence                                       |          20k → 40k → 60k | ~397–533 MB plateau |
+| Single Skia                                                 |                   20,000 |             ~529 MB |
+| Cannon Skia before cleanup work                             |                   60,000 |           ~1,372 MB |
+| Cannon Skia after eager-generation removal and packed state |                   60,000 |             ~718 MB |
 
 The original ~1.5 GB report was therefore reproducible and causal: it was the
 60,000-particle Skia Cannon path plus retained high-water allocations, not the

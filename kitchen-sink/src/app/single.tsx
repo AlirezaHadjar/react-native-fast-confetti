@@ -1,4 +1,4 @@
-import { useIsFocused } from 'expo-router';
+import { useScreenEffectVisible } from '../hooks/useScreenEffectVisible';
 import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { ConfettiMethods } from 'react-native-fast-confetti';
@@ -19,7 +19,7 @@ import { useScreenConfig } from '../hooks/useScreenConfig';
 import { getRotation, getTextureProps } from '../utils/confettiConfig';
 
 export default function SingleScreen() {
-  const isFocused = useIsFocused();
+  const isFocused = useScreenEffectVisible();
   const confettiRef = useRef<ConfettiMethods>(null);
   const { config, updateConfig } = useScreenConfig('single');
   const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets(

@@ -55,13 +55,11 @@ describe('settleOnFloor', () => {
   });
 
   it('extends bouncier cycles without changing disabled cycles', () => {
+    expect(estimateFloorSettlingDuration(resolveSettleOnFloor(undefined))).toBe(
+      0
+    );
     expect(
-      estimateFloorSettlingDuration(resolveSettleOnFloor(undefined))
-    ).toBe(0);
-    expect(
-      estimateFloorSettlingDuration(
-        resolveSettleOnFloor({ restitution: 0.3 })
-      )
+      estimateFloorSettlingDuration(resolveSettleOnFloor({ restitution: 0.3 }))
     ).toBeGreaterThan(1);
     expect(
       estimateFloorSettlingDuration(

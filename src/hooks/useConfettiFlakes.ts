@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { SkImage, SkSVG } from '@shopify/react-native-skia';
+import type { SkImage, SkSVG } from 'react-native-skia';
 import type { FlakeProps, FlakeShape, FlakeStyle } from '../types';
 import { pickChildren } from '../children';
 import { Flake } from '../FlakeComponent';

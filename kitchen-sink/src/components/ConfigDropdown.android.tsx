@@ -1,4 +1,4 @@
-import { Pressable, Text as RNText, StyleSheet, View } from 'react-native';
+import { Text as RNText, StyleSheet, View } from 'react-native';
 import { MenuView } from '@expo/ui/community/menu';
 import { colors } from '../constants/colors';
 import type { DropdownOption } from '../constants/config';
@@ -38,9 +38,9 @@ export function ConfigDropdown<T extends string | number>({
           }
         }}
       >
-        <Pressable style={styles.trigger}>
+        <View style={styles.trigger}>
           <RNText style={styles.triggerText}>{selectedLabel}</RNText>
-        </Pressable>
+        </View>
       </MenuView>
     </View>
   );

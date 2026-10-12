@@ -16,7 +16,6 @@ import {
   FLOOR_SLEEP_STABLE_SECONDS,
   FLOOR_TANGENTIAL_RETENTION,
 } from '../constants';
-import { MAX_SIMULATION_STEPS_PER_FRAME } from '../fixedStepScheduler';
 import {
   getParticleNearPlaneDistance,
   isParticleInFrontOfNearPlane,
@@ -49,7 +48,6 @@ import {
 import {
   PARTICLE_RUNTIME_BYTES,
   ParticleRuntimeArraySchema,
-  ParticleRuntimeSchema,
 } from './physics/state';
 import { sampleCenteredUnit, sampleSoftConeDirection } from './physics/launch';
 import {
@@ -366,18 +364,16 @@ export const burstConfettiInit = tgpu.computeFn({
     const initialLife = -presetParticle.originAndTiming.z / 1000;
     const initialPosition = d.vec3f(presetParticle.originAndTiming.xy, 0);
     const initialQuaternion = d.vec4f(0, 0, 0, 1);
-    burstInitLayout.$.runtime[idx] = ParticleRuntimeSchema({
-      pos: d.vec3f(initialPosition),
-      life: initialLife,
-      prevPos: d.vec3f(initialPosition),
-      prevLife: initialLife,
-      vel: d.vec3f(0),
-      floorBounceScale: d.f32(1),
-      quat: d.vec4f(initialQuaternion),
-      prevQuat: d.vec4f(initialQuaternion),
-      omega: d.vec3f(0),
-      floorSleepTime: d.f32(0),
-    });
+    burstInitLayout.$.runtime[idx]!.pos = d.vec3f(initialPosition);
+    burstInitLayout.$.runtime[idx]!.life = initialLife;
+    burstInitLayout.$.runtime[idx]!.prevPos = d.vec3f(initialPosition);
+    burstInitLayout.$.runtime[idx]!.prevLife = initialLife;
+    burstInitLayout.$.runtime[idx]!.vel = d.vec3f(0);
+    burstInitLayout.$.runtime[idx]!.floorBounceScale = 1;
+    burstInitLayout.$.runtime[idx]!.quat = d.vec4f(initialQuaternion);
+    burstInitLayout.$.runtime[idx]!.prevQuat = d.vec4f(initialQuaternion);
+    burstInitLayout.$.runtime[idx]!.omega = d.vec3f(0);
+    burstInitLayout.$.runtime[idx]!.floorSleepTime = 0;
     return;
   }
 
@@ -557,38 +553,38 @@ export const burstConfettiInit = tgpu.computeFn({
     d.vec3f(maxRotationX, maxRotationX * 0.125, maxRotationZ) *
     ((rotationDirection * timeScale) / safeFlightDuration);
 
-  burstInitLayout.$.particles[idx] = BurstParticleSchema({
-    originAndTiming: d.vec4f(
-      initialPosition.xy,
-      std.select(d.f32(0), origin.originAndCount.z, mode < 0.5),
-      launchDelay
-    ),
-    velocityAndDepth: d.vec4f(velocity.xy, depthScale, initialRotation),
-    rotationAndMeta: d.vec4f(
-      maxRotationX,
-      maxRotationZ,
-      rotationDirection,
-      mode
-    ),
-    indices: d.vec4f(
-      d.f32(sizeIndex),
-      d.f32(colorIndex),
-      isTextured,
-      timeScale
-    ),
-  });
-  burstInitLayout.$.runtime[idx] = ParticleRuntimeSchema({
-    pos: d.vec3f(initialPosition),
-    life: initialLife,
-    prevPos: d.vec3f(initialPosition),
-    prevLife: initialLife,
-    vel: d.vec3f(velocity),
-    floorBounceScale: d.f32(1),
-    quat: d.vec4f(quaternion),
-    prevQuat: d.vec4f(quaternion),
-    omega: d.vec3f(omega),
-    floorSleepTime: d.f32(0),
-  });
+  burstInitLayout.$.particles[idx]!.originAndTiming = d.vec4f(
+    initialPosition.xy,
+    std.select(d.f32(0), origin.originAndCount.z, mode < 0.5),
+    launchDelay
+  );
+  burstInitLayout.$.particles[idx]!.velocityAndDepth = d.vec4f(
+    velocity.xy,
+    depthScale,
+    initialRotation
+  );
+  burstInitLayout.$.particles[idx]!.rotationAndMeta = d.vec4f(
+    maxRotationX,
+    maxRotationZ,
+    rotationDirection,
+    mode
+  );
+  burstInitLayout.$.particles[idx]!.indices = d.vec4f(
+    d.f32(sizeIndex),
+    d.f32(colorIndex),
+    isTextured,
+    timeScale
+  );
+  burstInitLayout.$.runtime[idx]!.pos = d.vec3f(initialPosition);
+  burstInitLayout.$.runtime[idx]!.life = initialLife;
+  burstInitLayout.$.runtime[idx]!.prevPos = d.vec3f(initialPosition);
+  burstInitLayout.$.runtime[idx]!.prevLife = initialLife;
+  burstInitLayout.$.runtime[idx]!.vel = d.vec3f(velocity);
+  burstInitLayout.$.runtime[idx]!.floorBounceScale = 1;
+  burstInitLayout.$.runtime[idx]!.quat = d.vec4f(quaternion);
+  burstInitLayout.$.runtime[idx]!.prevQuat = d.vec4f(quaternion);
+  burstInitLayout.$.runtime[idx]!.omega = d.vec3f(omega);
+  burstInitLayout.$.runtime[idx]!.floorSleepTime = 0;
 });
 
 /**
@@ -616,7 +612,17 @@ export const burstConfettiTransform = tgpu.computeFn({
   const size = burstTransformLayout.$.sizes[sizeIdx]!;
   const colorIdx = particle.indices.y;
   const isPreset = particle.rotationAndMeta.w >= 2;
-  let runtime = ParticleRuntimeSchema(burstTransformLayout.$.runtime[idx]!);
+  const stored = burstTransformLayout.$.runtime[idx]!;
+  let position = d.vec3f(stored.pos);
+  let life = stored.life;
+  let previousPosition = d.vec3f(stored.prevPos);
+  let previousLife = stored.prevLife;
+  let velocity = d.vec3f(stored.vel);
+  let floorBounceScale = stored.floorBounceScale;
+  let quaternion = d.vec4f(stored.quat);
+  let previousQuaternion = d.vec4f(stored.prevQuat);
+  let angularVelocity = d.vec3f(stored.omega);
+  let floorSleepTime = stored.floorSleepTime;
   const timeScale = std.select(particle.indices.w, d.f32(1), isPreset);
   const localDt = u.dt * timeScale;
   const initialOmega =
@@ -628,163 +634,164 @@ export const burstConfettiTransform = tgpu.computeFn({
     ((particle.rotationAndMeta.z * particle.indices.w) /
       std.max(u.motionDuration, 0.0001));
 
-  if (!isPreset) {
-    for (const step of std.range(MAX_SIMULATION_STEPS_PER_FRAME)) {
-      if (d.f32(step) < u.stepsThisFrame) {
-        runtime.prevPos = d.vec3f(runtime.pos);
-        runtime.prevLife = runtime.life;
-        runtime.prevQuat = d.vec4f(runtime.quat);
-        runtime.life += localDt;
+  if (!isPreset && u.stepsThisFrame > 0.5) {
+    previousPosition = d.vec3f(position);
+    previousLife = life;
+    previousQuaternion = d.vec4f(quaternion);
+    life += localDt;
 
-        if (runtime.life >= 0) {
-          if (u.floor.x <= 0.5) runtime.floorSleepTime = 0;
-          const sleeping =
-            u.floor.x > 0.5 &&
-            runtime.floorSleepTime >= FLOOR_SLEEP_STABLE_SECONDS;
-          if (sleeping) continue;
-          const drag = d.vec4f(
-            u.aerodynamics.x,
-            u.aerodynamics.y,
-            u.aerodynamics.z,
-            0
-          );
-          const stepTime = u.time + d.f32(step) * u.dt;
-          const relativeAirVelocity = computeRelativeAirVelocity(
-            runtime.pos,
-            runtime.vel,
-            u.aerodynamics.w,
-            stepTime
-          );
-          const acceleration = computeAirborneAcceleration(
-            runtime.quat,
-            relativeAirVelocity,
-            runtime.omega,
-            drag,
-            d.vec3f(0, u.gravity, 0),
-            0
-          );
-          let nextVelocity = runtime.vel + acceleration * localDt;
-          const maximumVelocity = std.max(u.gravity * 1.5, 1);
-          const velocityMagnitudeSquared = std.dot(nextVelocity, nextVelocity);
-          if (velocityMagnitudeSquared > maximumVelocity * maximumVelocity) {
-            nextVelocity =
-              nextVelocity *
-              (maximumVelocity * std.inverseSqrt(velocityMagnitudeSquared));
-          }
-          runtime.vel = d.vec3f(nextVelocity);
-          runtime.pos = d.vec3f(runtime.pos + runtime.vel * localDt);
-
-          if (u.floor.x > 0.5) {
-            const floorPerspectiveDistance = std.max(
-              runtime.pos.z + u.focalLength,
-              getParticleNearPlaneDistance(
-                u.focalLength / std.max(particle.velocityAndDepth.z, 0.0001)
-              )
-            );
-            const perspectiveScale = u.focalLength / floorPerspectiveDistance;
-            const floorInset =
-              std.length(size.dims.xy) * 0.5 * perspectiveScale;
-            const floorY = u.viewport.y - floorInset;
-            if (runtime.pos.y > floorY && runtime.vel.y > 0) {
-              const floorRandom = std.fract(
-                particle.velocityAndDepth.w * 17.17 + d.f32(sizeIdx) * 0.37
-              );
-              const variation = std.clamp(u.floor.w, 0, 1);
-              const restitution =
-                std.clamp(u.floor.y + (floorRandom * 2 - 1) * variation, 0, 1) *
-                runtime.floorBounceScale;
-              runtime.pos.y = floorY;
-              runtime.vel.y = -runtime.vel.y * restitution;
-              if (
-                std.abs(runtime.vel.y) <=
-                u.gravity * localDt * (1 + restitution)
-              ) {
-                runtime.vel.y = 0;
-              }
-              const frictionRandom = std.fract(floorRandom * 17.17 + 0.37);
-              const floorFriction =
-                std.clamp(
-                  u.floor.z + (frictionRandom * 2 - 1) * variation,
-                  0,
-                  1
-                ) *
-                FLOOR_TANGENTIAL_RETENTION *
-                std.sqrt(runtime.floorBounceScale);
-              const contact = applyFloorContactFriction(
-                runtime.vel,
-                runtime.omega,
-                floorFriction
-              );
-              runtime.vel = d.vec3f(contact.velocity);
-              runtime.omega = d.vec3f(contact.angularVelocity);
-              runtime.floorBounceScale *= FLOOR_BOUNCE_DECAY;
-            }
-
-            if (runtime.floorBounceScale < 1) {
-              runtime.vel.z *= std.max(
-                0,
-                1 - FLOOR_DEPTH_DAMPING_PER_SECOND * localDt
-              );
-              const initialZ =
-                u.focalLength / std.max(particle.velocityAndDepth.z, 0.0001) -
-                u.focalLength;
-              runtime.pos.z = std.clamp(
-                runtime.pos.z,
-                initialZ - u.focalLength * FLOOR_MAX_NEAR_DEPTH_OFFSET,
-                initialZ + u.focalLength * FLOOR_MAX_FAR_DEPTH_OFFSET
-              );
-            }
-          }
-
-          let tumbleDrive = d.f32(1);
-          if (u.floor.x > 0.5 && runtime.floorBounceScale < 1) {
-            tumbleDrive = runtime.floorBounceScale;
-          }
-          let nextOmega = integrateAngularVelocity(
-            initialOmega,
-            runtime.omega,
-            runtime.quat,
-            relativeAirVelocity,
-            u.aerodynamics.z,
-            tumbleDrive,
-            localDt
-          );
-          if (u.floor.x > 0.5 && runtime.floorBounceScale < 1) {
-            nextOmega *= std.max(
-              0,
-              1 - FLOOR_ANGULAR_DAMPING_PER_SECOND * localDt
-            );
-            if (runtime.floorBounceScale <= FLOOR_SLEEP_BOUNCE_SCALE) {
-              runtime.floorSleepTime = updateFloorSleepTime(
-                runtime.floorSleepTime,
-                runtime.vel,
-                nextOmega,
-                localDt
-              );
-              if (runtime.floorSleepTime >= FLOOR_SLEEP_STABLE_SECONDS) {
-                runtime.vel = d.vec3f(0);
-                nextOmega = d.vec3f(0);
-              }
-            } else {
-              runtime.floorSleepTime = 0;
-            }
-          }
-          runtime.omega = d.vec3f(nextOmega);
-          runtime.quat = d.vec4f(
-            integrateQuaternion(runtime.quat, runtime.omega, localDt)
-          );
+    if (life >= 0) {
+      if (u.floor.x <= 0.5) floorSleepTime = 0;
+      const sleeping =
+        u.floor.x > 0.5 && floorSleepTime >= FLOOR_SLEEP_STABLE_SECONDS;
+      if (!sleeping) {
+        const drag = d.vec4f(
+          u.aerodynamics.x,
+          u.aerodynamics.y,
+          u.aerodynamics.z,
+          0
+        );
+        const relativeAirVelocity = computeRelativeAirVelocity(
+          position,
+          velocity,
+          u.aerodynamics.w,
+          u.time
+        );
+        const acceleration = computeAirborneAcceleration(
+          quaternion,
+          relativeAirVelocity,
+          angularVelocity,
+          drag,
+          d.vec3f(0, u.gravity, 0),
+          0
+        );
+        velocity += acceleration * localDt;
+        const maximumVelocity = std.max(u.gravity * 1.5, 1);
+        const velocityMagnitudeSquared = std.dot(velocity, velocity);
+        if (velocityMagnitudeSquared > maximumVelocity * maximumVelocity) {
+          velocity *=
+            maximumVelocity * std.inverseSqrt(velocityMagnitudeSquared);
         }
+        position += velocity * localDt;
+
+        if (u.floor.x > 0.5) {
+          const floorPerspectiveDistance = std.max(
+            position.z + u.focalLength,
+            getParticleNearPlaneDistance(
+              u.focalLength / std.max(particle.velocityAndDepth.z, 0.0001)
+            )
+          );
+          const perspectiveScale = u.focalLength / floorPerspectiveDistance;
+          const floorInset = std.length(size.dims.xy) * 0.5 * perspectiveScale;
+          const floorY = u.viewport.y - floorInset;
+          if (position.y > floorY && velocity.y > 0) {
+            const floorRandom = std.fract(
+              particle.velocityAndDepth.w * 17.17 + d.f32(sizeIdx) * 0.37
+            );
+            const variation = std.clamp(u.floor.w, 0, 1);
+            const restitution =
+              std.clamp(u.floor.y + (floorRandom * 2 - 1) * variation, 0, 1) *
+              floorBounceScale;
+            position.y = floorY;
+            velocity.y = -velocity.y * restitution;
+            if (
+              std.abs(velocity.y) <=
+              u.gravity * localDt * (1 + restitution)
+            ) {
+              velocity.y = 0;
+            }
+            const frictionRandom = std.fract(floorRandom * 17.17 + 0.37);
+            const floorFriction =
+              std.clamp(
+                u.floor.z + (frictionRandom * 2 - 1) * variation,
+                0,
+                1
+              ) *
+              FLOOR_TANGENTIAL_RETENTION *
+              std.sqrt(floorBounceScale);
+            const contact = applyFloorContactFriction(
+              velocity,
+              angularVelocity,
+              floorFriction
+            );
+            velocity = d.vec3f(contact.velocity);
+            angularVelocity = d.vec3f(contact.angularVelocity);
+            floorBounceScale *= FLOOR_BOUNCE_DECAY;
+          }
+
+          if (floorBounceScale < 1) {
+            velocity.z *= std.max(
+              0,
+              1 - FLOOR_DEPTH_DAMPING_PER_SECOND * localDt
+            );
+            const initialZ =
+              u.focalLength / std.max(particle.velocityAndDepth.z, 0.0001) -
+              u.focalLength;
+            position.z = std.clamp(
+              position.z,
+              initialZ - u.focalLength * FLOOR_MAX_NEAR_DEPTH_OFFSET,
+              initialZ + u.focalLength * FLOOR_MAX_FAR_DEPTH_OFFSET
+            );
+          }
+        }
+
+        let tumbleDrive = d.f32(1);
+        if (u.floor.x > 0.5 && floorBounceScale < 1) {
+          tumbleDrive = floorBounceScale;
+        }
+        let nextOmega = integrateAngularVelocity(
+          initialOmega,
+          angularVelocity,
+          quaternion,
+          relativeAirVelocity,
+          u.aerodynamics.z,
+          tumbleDrive,
+          localDt
+        );
+        if (u.floor.x > 0.5 && floorBounceScale < 1) {
+          nextOmega *= std.max(
+            0,
+            1 - FLOOR_ANGULAR_DAMPING_PER_SECOND * localDt
+          );
+          if (floorBounceScale <= FLOOR_SLEEP_BOUNCE_SCALE) {
+            floorSleepTime = updateFloorSleepTime(
+              floorSleepTime,
+              velocity,
+              nextOmega,
+              localDt
+            );
+            if (floorSleepTime >= FLOOR_SLEEP_STABLE_SECONDS) {
+              velocity = d.vec3f(0);
+              nextOmega = d.vec3f(0);
+            }
+          } else {
+            floorSleepTime = 0;
+          }
+        }
+        angularVelocity = d.vec3f(nextOmega);
+        quaternion = d.vec4f(
+          integrateQuaternion(quaternion, angularVelocity, localDt)
+        );
       }
     }
   }
 
   if (!isPreset) {
-    burstTransformLayout.$.runtime[idx] = ParticleRuntimeSchema(runtime);
+    burstTransformLayout.$.runtime[idx]!.pos = d.vec3f(position);
+    burstTransformLayout.$.runtime[idx]!.life = life;
+    burstTransformLayout.$.runtime[idx]!.prevPos = d.vec3f(previousPosition);
+    burstTransformLayout.$.runtime[idx]!.prevLife = previousLife;
+    burstTransformLayout.$.runtime[idx]!.vel = d.vec3f(velocity);
+    burstTransformLayout.$.runtime[idx]!.floorBounceScale = floorBounceScale;
+    burstTransformLayout.$.runtime[idx]!.quat = d.vec4f(quaternion);
+    burstTransformLayout.$.runtime[idx]!.prevQuat = d.vec4f(previousQuaternion);
+    burstTransformLayout.$.runtime[idx]!.omega = d.vec3f(angularVelocity);
+    burstTransformLayout.$.runtime[idx]!.floorSleepTime = floorSleepTime;
   }
 
   const interpolationAlpha = std.clamp(u.interpolationAlpha, 0, 1);
   const interpolatedLife = std.select(
-    std.mix(runtime.prevLife, runtime.life, interpolationAlpha),
+    std.mix(previousLife, life, interpolationAlpha),
     u.opacityCurve.w - particle.originAndTiming.z / 1000,
     isPreset
   );
@@ -881,26 +888,27 @@ export const burstConfettiTransform = tgpu.computeFn({
       normalizedCenter.x <= 1 + viewportPadding &&
       normalizedCenter.y <= 1 + viewportPadding;
 
-    burstTransformLayout.$.transforms[idx] = BurstTransformSchema({
-      centerAndAxisX: d.vec4f(
-        std.select(d.vec2f(-10000), centerScreen, visible),
-        cullProjectedAxis(axisXScreen, visible)
-      ),
-      axisY: d.vec2f(cullProjectedAxis(axisYScreen, visible)),
-      colorAndOpacity: packedColorAndOpacity,
-      flags: d.u32(size.dims.w),
-    });
+    burstTransformLayout.$.transforms[idx]!.centerAndAxisX = d.vec4f(
+      std.select(d.vec2f(-10000), centerScreen, visible),
+      cullProjectedAxis(axisXScreen, visible)
+    );
+    burstTransformLayout.$.transforms[idx]!.axisY = d.vec2f(
+      cullProjectedAxis(axisYScreen, visible)
+    );
+    burstTransformLayout.$.transforms[idx]!.colorAndOpacity =
+      packedColorAndOpacity;
+    burstTransformLayout.$.transforms[idx]!.flags = d.u32(size.dims.w);
     return;
   }
 
-  const centerWorld = std.mix(runtime.prevPos, runtime.pos, interpolationAlpha);
+  const centerWorld = std.mix(previousPosition, position, interpolationAlpha);
   const quaternionSign = std.select(
     d.f32(-1),
     d.f32(1),
-    std.dot(runtime.prevQuat, runtime.quat) >= 0
+    std.dot(previousQuaternion, quaternion) >= 0
   );
   const orientation = std.normalize(
-    std.mix(runtime.prevQuat, runtime.quat * quaternionSign, interpolationAlpha)
+    std.mix(previousQuaternion, quaternion * quaternionSign, interpolationAlpha)
   );
   const appearWindow = std.max(u.motionDuration * 0.05, 0.0001);
   const appearScale =
@@ -953,15 +961,16 @@ export const burstConfettiTransform = tgpu.computeFn({
     size.dims.y * 0.5 * appearScale * perspectiveScale * minimumScale
   );
 
-  burstTransformLayout.$.transforms[idx] = BurstTransformSchema({
-    centerAndAxisX: d.vec4f(
-      std.select(d.vec2f(-10000), centerWorld.xy, visible),
-      cullProjectedAxis(axisXScreen, visible)
-    ),
-    axisY: d.vec2f(cullProjectedAxis(axisYScreen, visible)),
-    colorAndOpacity: packedColorAndOpacity,
-    flags: d.u32(size.dims.w),
-  });
+  burstTransformLayout.$.transforms[idx]!.centerAndAxisX = d.vec4f(
+    std.select(d.vec2f(-10000), centerWorld.xy, visible),
+    cullProjectedAxis(axisXScreen, visible)
+  );
+  burstTransformLayout.$.transforms[idx]!.axisY = d.vec2f(
+    cullProjectedAxis(axisYScreen, visible)
+  );
+  burstTransformLayout.$.transforms[idx]!.colorAndOpacity =
+    packedColorAndOpacity;
+  burstTransformLayout.$.transforms[idx]!.flags = d.u32(size.dims.w);
 });
 
 const toClip = tgpu.fn(
@@ -1029,9 +1038,7 @@ export const burstConfettiVertex = tgpu.vertexFn({
     uv: d.vec2f(uv.x, 1 - uv.y),
     color: d.vec4f(
       burstRenderLayout.$.palette[colorIdx]!.rgb,
-      burstRenderLayout.$.palette[colorIdx]!.a *
-        u.visibility *
-        particleOpacity
+      burstRenderLayout.$.palette[colorIdx]!.a * u.visibility * particleOpacity
     ),
     flagsAndLayers: d.vec3f(flags, textureLayer, maskLayer),
   };

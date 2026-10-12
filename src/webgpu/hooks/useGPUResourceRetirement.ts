@@ -1,29 +1,29 @@
 import { useEffect } from 'react';
-import type { RefObject } from 'react';
+import { retireGPUResourceSet } from '../resourceCleanup';
 
-import {
-  retireGPUResourceSet,
-  type GPUFrameRetirement,
-} from '../resourceCleanup';
+const pendingRetirements = new WeakMap<object, ReturnType<typeof setTimeout>>();
 
-type RetirableResources = {
-  queue: GPUQueue;
-};
-
-export const useGPUResourceRetirement = <Resources extends RetirableResources>(
+export const useGPUResourceRetirement = <Resources extends object>(
   resources: Resources | null,
-  frameRetirementsRef: RefObject<WeakMap<Resources, GPUFrameRetirement>>,
-  destroy: (resources: Resources) => void
+  destroy: (resources: Resources) => void | Promise<void>
 ) => {
   useEffect(() => {
     if (!resources) return;
-    const frameRetirements = frameRetirementsRef.current;
+    const pendingRetirement = pendingRetirements.get(resources);
+    if (pendingRetirement !== undefined) {
+      clearTimeout(pendingRetirement);
+      pendingRetirements.delete(resources);
+    }
+
+    // Frame and surface layout cleanups run first. The owner barrier in
+    // retireGPUResourceSet acknowledges their queued work before recycling.
     return () => {
-      void retireGPUResourceSet(
-        resources.queue,
-        () => destroy(resources),
-        frameRetirements.get(resources)?.promise
-      );
+      const retirement = setTimeout(() => {
+        if (pendingRetirements.get(resources) !== retirement) return;
+        pendingRetirements.delete(resources);
+        void retireGPUResourceSet(() => destroy(resources));
+      }, 0);
+      pendingRetirements.set(resources, retirement);
     };
-  }, [destroy, frameRetirementsRef, resources]);
+  }, [destroy, resources]);
 };

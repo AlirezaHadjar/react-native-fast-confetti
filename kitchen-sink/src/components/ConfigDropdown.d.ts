@@ -7,4 +7,6 @@ type Props<T extends string | number> = {
   onChange: (value: T) => void;
 };
 
-export function ConfigDropdown<T extends string | number>(props: Props<T>): React.JSX.Element;
+export function ConfigDropdown<T extends string | number>(
+  props: Props<T>
+): React.JSX.Element;
