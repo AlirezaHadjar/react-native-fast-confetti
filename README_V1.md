@@ -1,6 +1,6 @@
 # react-native-fast-confetti 🎊
 
-🏎️ The fastest confetti animation library in react native written using Skia Atlas API
+Confetti animations for React Native using the Skia Atlas API.
 
 https://github.com/user-attachments/assets/968a376f-f20c-4a94-886b-65b1625891ae
 

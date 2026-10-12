@@ -2,7 +2,7 @@
 
 # react-native-fast-confetti 🎊
 
-The fastest confetti animation library for React Native, powered by Skia Atlas API.
+Confetti animations for React Native with Skia and an optional WebGPU renderer.
 
 > [!NOTE]
 > Still using v1? [Click here for the v1 documentation.](README_V1.md)
@@ -100,9 +100,15 @@ Read about [WebGPU specific features](#webgpu-features) and
 
 The tested native stack is Expo 57, React Native 0.86.3, Reanimated 4.7.1,
 and Worklets 0.13.0. Worklets includes the serialization race fix upstream
-and needs no local patch. This workspace still applies a native WebGPU patch
-through Bun, described in [the Android renderer notes](docs/ANDROID_RENDERER_FIX.md).
-Installing the JavaScript library does not patch an application's WebGPU peer dependency.
+and needs no local patch. The tested WebGPU 0.13.1 configuration uses
+[this native patch](patches/react-native-webgpu@0.13.1.patch). It corrects Apple
+surface transitions, releases the cached drawing-buffer reference on unconfigure,
+and delivers device errors to the owning JavaScript runtime.
+
+To reproduce that configuration, copy the patch into your app, register it with
+your package manager's patch mechanism, and rebuild the native app. This workspace
+registers it through Bun's `patchedDependencies`. Installing the JavaScript
+library does not apply the patch to an application's WebGPU peer dependency.
 
 ## Components
 

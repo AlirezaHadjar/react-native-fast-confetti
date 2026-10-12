@@ -16,8 +16,8 @@ See the [Skia migration guide](https://wcandillon.github.io/react-native-skia/do
 Use React Native 0.86+, Reanimated 4.7.1+, and Worklets 0.13.0+. The demos
 use Expo SDK 57. Worklets contains the upstream serialization race fix, so
 the former Worklets 0.11.4 patch is no longer needed.
-The WebGPU native patch remains separate; see
-[the dependency upgrade notes](docs/EXPO_57_UPGRADE.md).
+The tested WebGPU configuration still uses a native patch; see the
+[WebGPU setup instructions](README.md#optional-webgpu-renderer).
 
 ## Replace `fadeOutOnEnd` with `opacityAnimation`
 
