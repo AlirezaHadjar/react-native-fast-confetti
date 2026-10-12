@@ -1,24 +1,38 @@
 import { useRef } from 'react';
+import { useScreenEffectVisible } from '../hooks/useScreenEffectVisible';
 import { StyleSheet, View } from 'react-native';
 import type { ConfettiMethods } from 'react-native-fast-confetti';
-import { ContinuousConfetti } from 'react-native-fast-confetti';
+import { ContinuousConfetti as SkiaContinuousConfetti } from '../../../src';
+import { ContinuousConfetti as WebGPUContinuousConfetti } from '../../../src/gpu';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
-import { TEXTURE_SIZES, textureOptions } from '../constants/config';
+import {
+  PARTICLE_COUNTS,
+  rendererOptions,
+  TEXTURE_SIZES,
+  textureOptions,
+} from '../constants/config';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
 import { useScreenConfig } from '../hooks/useScreenConfig';
 import { getRotation, getTextureProps } from '../utils/confettiConfig';
 
 export default function ContinuousScreen() {
+  const isFocused = useScreenEffectVisible();
   const confettiRef = useRef<ConfettiMethods>(null);
   const { config, updateConfig } = useScreenConfig('continuous');
-  const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets();
+  const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets(
+    config.textureType
+  );
 
   if (isLoading) return null;
 
+  const ContinuousConfetti =
+    config.renderer === 'webgpu'
+      ? WebGPUContinuousConfetti
+      : SkiaContinuousConfetti;
   const rotation = getRotation(config.textureType, 'continuous');
-  const confettiKey = `continuous-${config.textureType}`;
+  const confettiKey = `continuous-${config.renderer}-${config.textureType}`;
 
   const textureProps = getTextureProps(
     config.textureType,
@@ -50,23 +64,18 @@ export default function ContinuousScreen() {
     <View style={styles.container}>
       <View style={styles.controls}>
         <ConfigDropdown
+          label="Renderer:"
+          data={rendererOptions}
+          value={config.renderer}
+          onChange={(renderer) => updateConfig({ renderer })}
+        />
+        <ConfigDropdown
           label="Texture:"
           data={textureOptions}
           value={config.textureType}
           onChange={(v) => updateConfig({ textureType: v })}
         />
       </View>
-
-      <ContinuousConfetti
-        key={confettiKey}
-        ref={confettiRef}
-        autoplay
-        rotation={rotation}
-        count={200}
-        flipIntensity={config.textureType === 'money' ? 0.1 : 0.85}
-      >
-        {renderFlakes()}
-      </ContinuousConfetti>
 
       <ConfettiControls
         actions={{
@@ -76,6 +85,19 @@ export default function ContinuousScreen() {
           reset: () => confettiRef.current?.reset(),
         }}
       />
+
+      {isFocused ? (
+        <ContinuousConfetti
+          key={confettiKey}
+          ref={confettiRef}
+          autoplay
+          rotation={rotation}
+          count={PARTICLE_COUNTS.continuous}
+          flipIntensity={config.textureType === 'money' ? 0.1 : 0.85}
+        >
+          {renderFlakes()}
+        </ContinuousConfetti>
+      ) : null}
     </View>
   );
 }

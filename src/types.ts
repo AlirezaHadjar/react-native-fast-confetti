@@ -1,4 +1,4 @@
-import type { SkImage, SkSVG } from '@shopify/react-native-skia';
+import type { SkImage, SkSVG } from 'react-native-skia';
 import type React from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import type {
@@ -30,6 +30,15 @@ export type Range = {
 };
 
 export type Drag = number | { horizontal: number; vertical: number };
+
+export type OpacityKeyframes = Readonly<Record<number, number>>;
+
+export type OpacityAnimation = {
+  /** Enables or disables the opacity animation. */
+  enabled: boolean;
+  /** Normalized animation timestamps mapped to opacity values. */
+  keyframes?: OpacityKeyframes;
+};
 
 export type Rotation = {
   x?: Range;
@@ -144,9 +153,10 @@ type ConfettiBaseProps = {
    */
   infinite?: boolean;
   /**
-   * @description Should the confetti flakes fade out as they reach the end.
+   * @description Animates opacity over normalized animation progress.
+   * Uses the default fade when `keyframes` is omitted.
    */
-  fadeOutOnEnd?: boolean;
+  opacityAnimation?: OpacityAnimation;
   /**
    * @description The delay in milliseconds before the confetti animation starts
    * automatically after mounting (only applies when `autoplay` is true).
@@ -307,9 +317,10 @@ type BurstConfettiBaseProps = {
    */
   infinite?: boolean;
   /**
-   * @description Should the confetti flakes fade out as they reach the end.
+   * @description Animates opacity over normalized animation progress.
+   * Uses the default fade when `keyframes` is omitted.
    */
-  fadeOutOnEnd?: boolean;
+  opacityAnimation?: OpacityAnimation;
   /**
    * @description The delay in milliseconds before the confetti animation starts
    * automatically after mounting (only applies when `autoplay` is true).
@@ -391,7 +402,7 @@ export type PIConfettiProps = PIConfettiBaseProps & FlakeTexture;
 
 export type ContinuousConfettiProps = StrictOmit<
   ConfettiProps,
-  'infinite' | 'onAnimationEnd' | 'fadeOutOnEnd'
+  'infinite' | 'onAnimationEnd' | 'opacityAnimation'
 >;
 
 export type PIConfettiRestartOptions = {
@@ -410,7 +421,7 @@ type BaseConfettiMethods = {
    */
   pause: () => void;
   /**
-   * @description reset the animation and not play it
+   * @description reset, clear, and stop the animation
    */
   reset: () => void;
   /**

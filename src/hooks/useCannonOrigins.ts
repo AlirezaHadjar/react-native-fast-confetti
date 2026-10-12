@@ -26,7 +26,12 @@ import {
   DEFAULT_CANNON_CONFETTI_ROTATION,
   DEFAULT_CANNON_ORIGIN_COUNT,
 } from '../constants';
-import { parseFlakeChildren, buildAtlasColors } from './useConfettiFlakes';
+import {
+  parseFlakeChildren,
+  buildAtlasColors,
+  getSizeVariationsSignature,
+  useSemanticValue,
+} from './useConfettiFlakes';
 import type {
   SizeVariation,
   ColorRange,
@@ -101,7 +106,7 @@ export const useCannonOrigins = ({
     }
   }
 
-  return useMemo(() => {
+  const computed = useMemo(() => {
     const origins = originChildren ?? [];
     const positions: Position[] = [];
     const configs: CannonConfig[] = [];
@@ -141,8 +146,7 @@ export const useCannonOrigins = ({
       const originColors = props.colors ?? rootColors ?? DEFAULT_COLORS;
       const fullMotionCount = props.count ?? DEFAULT_CANNON_ORIGIN_COUNT;
       const spread = props.spread ?? DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE;
-      const speed =
-        props.initialSpeed ?? DEFAULT_CANNON_CONFETTI_INITIAL_SPEED;
+      const speed = props.initialSpeed ?? DEFAULT_CANNON_CONFETTI_INITIAL_SPEED;
       const speedVariation =
         props.speedVariation ??
         rootSpeedVariation ??
@@ -247,4 +251,18 @@ export const useCannonOrigins = ({
     parentTexture,
     reduceMotionFactor,
   ]);
+
+  const signature = JSON.stringify([
+    computed.cannonsPositions,
+    computed.cannonConfigs,
+    computed.durationCannonConfigs,
+    computed.allColors,
+    getSizeVariationsSignature(computed.sizeVariations),
+    computed.colorOverrides,
+    computed.sizeIsTextured,
+    computed.parentColorCount,
+    computed.totalCount,
+    computed.visibleCount,
+  ]);
+  return useSemanticValue(signature, computed);
 };

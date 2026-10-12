@@ -1,0 +1,31 @@
+export type {
+  CannonParticle,
+  CannonParticleSystem,
+  CannonOriginProps,
+  Drag,
+  FlakeProps,
+  FlakeShape,
+  FlakeStyle,
+  NamedPosition,
+  OpacityAnimation,
+  OpacityKeyframes,
+  PIOriginProps,
+  Range,
+  Rotation,
+  ReduceMotionConfig,
+} from '../types';
+
+export type {
+  GPUCannonConfettiMethods as CannonConfettiMethods,
+  GPUCannonConfettiProps as CannonConfettiProps,
+  GPUConfettiExtraProps,
+  GPUConfettiMethods as ConfettiMethods,
+  GPUConfettiProps as ConfettiProps,
+  GPUContinuousConfettiProps as ContinuousConfettiProps,
+  GPUDeviceProps,
+  GPUFloorProps,
+  GPUPIConfettiMethods as PIConfettiMethods,
+  GPUPIConfettiProps as PIConfettiProps,
+  GPUTextureMode,
+  SettleOnFloorConfig,
+} from '../webgpu/types';

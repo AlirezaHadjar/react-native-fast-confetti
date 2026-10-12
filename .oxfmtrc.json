@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 80,
+  "quoteProps": "consistent",
+  "singleQuote": true,
+  "tabWidth": 2,
+  "trailingComma": "es5",
+  "useTabs": false,
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    ".context/**",
+    "lib/**",
+    "dist/**",
+    "coverage/**",
+    "**/ios/**",
+    "**/android/**",
+    ".vscode/**"
+  ]
+}

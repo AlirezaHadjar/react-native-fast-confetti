@@ -1,9 +1,7 @@
-import { useCallback, useLayoutEffect } from 'react';
+import { useCallback, useLayoutEffect, useMemo } from 'react';
 import {
   cancelAnimation,
   Easing,
-  Extrapolation,
-  interpolate,
   ReduceMotion,
   useDerivedValue,
   useSharedValue,
@@ -13,34 +11,41 @@ import {
   type EasingFunctionFactory,
 } from 'react-native-reanimated';
 import { useAnimationCallbacks } from './useAnimationCallbacks';
+import { interpolateOpacity, resolveOpacityAnimation } from '../fadeOut';
+import type { OpacityAnimation } from '../types';
 
 type UseAnimationLifecycleParams = {
   duration: number;
   infinite: boolean;
-  fadeOutOnEnd: boolean;
+  opacityAnimation?: OpacityAnimation;
   easing?: EasingFunction | EasingFunctionFactory;
   onAnimationStart?: () => void;
   onAnimationEnd?: () => void;
-  /** Opacity fade interpolation input range. @default [0.8, 1] */
-  fadeRange?: [number, number];
   /** Worklet called at the end of each animation cycle (before looping). */
   onCycleEnd?: () => void;
+  /** Wait for the caller to restart an infinite cycle after onCycleEnd. */
+  deferInfiniteRestart?: boolean;
   disabled?: boolean;
 };
 
 export const useAnimationLifecycle = ({
   duration,
   infinite,
-  fadeOutOnEnd,
+  opacityAnimation,
   easing: easingProp = Easing.linear,
   onAnimationStart,
   onAnimationEnd,
-  fadeRange = [0.8, 1],
   onCycleEnd,
+  deferInfiniteRestart = false,
   disabled = false,
 }: UseAnimationLifecycleParams) => {
   const progress = useSharedValue(0);
   const running = useSharedValue(false);
+  const visible = useSharedValue(false);
+  const resolvedOpacityAnimation = useMemo(
+    () => resolveOpacityAnimation(opacityAnimation),
+    [opacityAnimation]
+  );
 
   const { UIOnStart, UIOnEnd } = useAnimationCallbacks(
     onAnimationStart,
@@ -58,9 +63,14 @@ export const useAnimationLifecycle = ({
   }, [progress, running]);
 
   const opacity = useDerivedValue(() => {
-    if (!fadeOutOnEnd) return 1;
-    return interpolate(progress.get(), fadeRange, [1, 0], Extrapolation.CLAMP);
-  }, [fadeOutOnEnd, fadeRange]);
+    if (!visible.get()) return 0;
+    if (!resolvedOpacityAnimation) return 1;
+    return interpolateOpacity(
+      progress.get(),
+      resolvedOpacityAnimation.timestamps,
+      resolvedOpacityAnimation.opacities
+    );
+  }, [resolvedOpacityAnimation, visible]);
 
   const pause = useCallback(() => {
     'worklet';
@@ -71,24 +81,27 @@ export const useAnimationLifecycle = ({
   const reset = useCallback(() => {
     'worklet';
     running.set(false);
+    visible.set(false);
     cancelAnimation(progress);
     progress.set(0);
-  }, [running, progress]);
+  }, [progress, running, visible]);
 
   const runAnimation = useCallback(
-    (delay: number = 0) => {
+    (delay: number = 0, notifyStart = true) => {
       'worklet';
       if (disabled) {
         running.set(false);
+        visible.set(false);
         cancelAnimation(progress);
         progress.set(0);
-        UIOnStart();
+        if (notifyStart) UIOnStart();
         UIOnEnd();
         return;
       }
       progress.set(0);
+      visible.set(true);
       running.set(true);
-      UIOnStart();
+      if (notifyStart) UIOnStart();
 
       function repeatAnimation() {
         'worklet';
@@ -120,8 +133,15 @@ export const useAnimationLifecycle = ({
         { duration, easing: easingProp, reduceMotion: ReduceMotion.Never },
         (finished) => {
           'worklet';
-          if (!finished || !infinite) {
-            if (finished) UIOnEnd();
+          if (!finished) return;
+          if (!infinite) {
+            UIOnEnd();
+            return;
+          }
+          if (deferInfiniteRestart) {
+            running.set(false);
+            UIOnEnd();
+            onCycleEnd?.();
             return;
           }
           repeatAnimation();
@@ -135,12 +155,14 @@ export const useAnimationLifecycle = ({
     [
       progress,
       running,
+      visible,
       UIOnStart,
       UIOnEnd,
       onCycleEnd,
       infinite,
       duration,
       easingProp,
+      deferInfiniteRestart,
       disabled,
     ]
   );
@@ -149,6 +171,7 @@ export const useAnimationLifecycle = ({
     'worklet';
     if (disabled) return;
     if (running.get()) return;
+    visible.set(true);
     running.set(true);
 
     const remaining = duration * (1 - progress.get());
@@ -188,8 +211,15 @@ export const useAnimationLifecycle = ({
         },
         (finished) => {
           'worklet';
-          if (!finished || !infinite) {
-            if (finished) UIOnEnd();
+          if (!finished) return;
+          if (!infinite) {
+            UIOnEnd();
+            return;
+          }
+          if (deferInfiniteRestart) {
+            running.set(false);
+            UIOnEnd();
+            onCycleEnd?.();
             return;
           }
           repeatAnimation();
@@ -199,11 +229,13 @@ export const useAnimationLifecycle = ({
   }, [
     running,
     progress,
+    visible,
     duration,
     UIOnEnd,
     onCycleEnd,
     infinite,
     easingProp,
+    deferInfiniteRestart,
     disabled,
   ]);
 

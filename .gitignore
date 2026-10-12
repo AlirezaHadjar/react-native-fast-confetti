@@ -5,8 +5,9 @@
 # XDE
 .expo/
 
-# VSCode
-.vscode/
+# VS Code
+.vscode/*
+!.vscode/settings.json
 jsconfig.json
 
 # Xcode

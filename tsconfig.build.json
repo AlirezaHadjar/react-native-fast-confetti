@@ -1,4 +1,10 @@
 {
   "extends": "./tsconfig",
-  "exclude": ["example", "kitchen-sink", "lib"]
+  "exclude": [
+    "example",
+    "kitchen-sink",
+    "lib",
+    "src/__fixtures__",
+    "src/__tests__"
+  ]
 }

@@ -3,49 +3,63 @@
   "version": "1.0.0",
   "main": "index",
   "scripts": {
-    "start": "expo start",
+    "start": "expo start --dev-client",
     "postinstall": "npx setup-skia-web",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web"
   },
   "dependencies": {
-    "@expo/metro-runtime": "~56.0.14",
-    "@expo/ui": "~56.0.16",
-    "@radix-ui/react-select": "^2.2.6",
-    "@shopify/react-native-skia": "2.6.4",
+    "@expo/metro-runtime": "~57.0.16",
+    "@expo/ui": "~57.0.22",
+    "@radix-ui/react-select": "^2.3.8",
+    "react-native-skia": "3.4.0",
     "babel-plugin-react-compiler": "1.0.0",
-    "eslint-plugin-react-compiler": "^19.1.0-rc.2",
-    "expo": "^56.0.0",
-    "expo-blur": "~56.0.3",
-    "expo-dev-client": "~56.0.19",
-    "expo-linking": "~56.0.13",
-    "expo-router": "~56.2.9",
-    "expo-status-bar": "~56.0.4",
-    "expo-system-ui": "~56.0.5",
+    "expo": "^57.0.27",
+    "expo-blur": "~57.0.3",
+    "expo-build-properties": "~57.0.22",
+    "expo-dev-client": "~57.0.19",
+    "expo-linking": "~57.0.12",
+    "expo-router": "~57.0.25",
+    "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "react-native": "0.85.3",
+    "react-native": "0.86.3",
     "react-native-element-dropdown": "^2.12.4",
-    "react-native-mmkv": "^4.2.0",
-    "react-native-nitro-modules": "^0.35.1",
-    "react-native-reanimated": "4.3.1",
-    "react-native-safe-area-context": "~5.7.0",
-    "react-native-screens": "4.25.2",
-    "react-native-web": "^0.21.0",
-    "react-native-worklets": "0.8.3"
+    "react-native-mmkv": "^4.3.2",
+    "react-native-nitro-modules": "^0.37.1",
+    "react-native-reanimated": "4.7.1",
+    "react-native-webgpu": "0.13.1",
+    "react-native-safe-area-context": "~5.10.1",
+    "react-native-screens": "4.29.0",
+    "react-native-web": "^0.21.4",
+    "react-native-worklets": "0.13.0",
+    "typegpu": "0.11.8"
   },
   "devDependencies": {
-    "@babel/core": "^7.26.0",
-    "react-native-builder-bob": "^0.40.9"
+    "@babel/core": "^7.29.7",
+    "@babel/plugin-transform-class-static-block": "^7.29.7",
+    "react-native-builder-bob": "^0.40.9",
+    "unplugin-typegpu": "0.11.5"
   },
   "reanimated": {
     "staticFeatureFlags": {
       "USE_COMMIT_HOOK_ONLY_FOR_REACT_COMMITS": true,
       "IOS_SYNCHRONOUSLY_UPDATE_UI_PROPS": true,
-      "DISABLE_COMMIT_PAUSING_MECHANISM": true,
-      "USE_SYNCHRONIZABLE_FOR_MUTABLES": true
+      "DISABLE_COMMIT_PAUSING_MECHANISM": true
     }
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "install": {
+      "exclude": [
+        "react-native-reanimated",
+        "react-native-worklets",
+        "react-native-safe-area-context",
+        "react-native-screens",
+        "typescript"
+      ]
+    }
+  }
 }

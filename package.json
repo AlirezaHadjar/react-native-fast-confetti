@@ -1,7 +1,7 @@
 {
   "name": "react-native-fast-confetti",
-  "version": "2.0.2",
-  "description": "The fastest confetti animation library in react native",
+  "version": "3.0.0",
+  "description": "Confetti animations for React Native",
   "sideEffects": false,
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
@@ -10,6 +10,11 @@
       "source": "./src/index.tsx",
       "types": "./lib/typescript/src/index.d.ts",
       "default": "./lib/module/index.js"
+    },
+    "./gpu": {
+      "source": "./src/gpu/index.ts",
+      "types": "./lib/typescript/src/gpu/index.d.ts",
+      "default": "./lib/module/gpu/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -28,10 +33,12 @@
     "kitchen-sink": "bun --cwd kitchen-sink run",
     "test": "jest --passWithNoTests",
     "typecheck": "tsc",
-    "lint": "eslint \"**/*.{js,ts,tsx}\"",
+    "lint": "oxlint .",
     "clean": "del-cli lib",
     "prepare": "bob build",
-    "release": "release-it"
+    "release": "release-it",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check ."
   },
   "keywords": [
     "react-native",
@@ -53,53 +60,68 @@
   },
   "devDependencies": {
     "@commitlint/config-conventional": "^20.5.0",
-    "@eslint/compat": "^2.0.3",
-    "@eslint/eslintrc": "^3.3.5",
-    "@eslint/js": "^10.0.1",
+    "@babel/plugin-transform-class-static-block": "^7.29.7",
     "@evilmartians/lefthook": "^1.5.0",
-    "@react-native/babel-preset": "0.85.3",
-    "@react-native/jest-preset": "0.85.3",
+    "@react-native/babel-preset": "0.86.3",
+    "@react-native/jest-preset": "0.86.3",
     "@release-it/conventional-changelog": "^10.0.6",
-    "@shopify/react-native-skia": "^2.6.9",
+    "react-native-skia": "3.4.0",
     "@types/jest": "^30.0.0",
     "@types/react": "^19.2.0",
+    "@webgpu/types": "^0.1.69",
     "commitlint": "^20.5.0",
     "del-cli": "^7.0.0",
-    "eslint": "^9.0.0",
-    "eslint-config-expo": "^56.0.0",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-ft-flow": "^3.0.11",
-    "eslint-plugin-prettier": "^5.5.5",
-    "eslint-plugin-react-compiler": "^19.1.0-rc.2",
-    "hermes-eslint": "^0.34.0",
     "jest": "^30.3.0",
-    "prettier": "^3.8.1",
     "react": "19.2.3",
-    "react-native": "0.85.3",
+    "react-native": "0.86.3",
     "react-native-builder-bob": "^0.40.9",
-    "react-native-reanimated": "4.3.1",
-    "react-native-worklets": "0.8.3",
+    "react-native-reanimated": "4.7.1",
+    "react-native-webgpu": "0.13.1",
+    "react-native-worklets": "0.13.0",
     "release-it": "^19.2.4",
-    "typescript": "~6.0.3"
+    "typegpu": "0.11.8",
+    "typescript": "npm:tsover@6.0.2",
+    "unplugin-typegpu": "0.11.5",
+    "oxlint": "^1.87.0",
+    "oxfmt": "^0.72.0"
   },
   "peerDependencies": {
-    "@shopify/react-native-skia": ">=2.0.0 <3",
-    "react": "*",
-    "react-native": "*",
-    "react-native-reanimated": ">=4.1.0 <5",
-    "react-native-worklets": ">=0.7.0 <1"
+    "react-native-skia": ">=3.4.0 <4",
+    "react": ">=19.0.0",
+    "react-native": ">=0.86.0 <0.89",
+    "react-native-reanimated": ">=4.7.1 <5",
+    "react-native-webgpu": ">=0.13.1 <1",
+    "react-native-worklets": ">=0.13.0 <1",
+    "typegpu": ">=0.11.8 <0.13"
+  },
+  "peerDependenciesMeta": {
+    "react-native-webgpu": {
+      "optional": true
+    },
+    "typegpu": {
+      "optional": true
+    }
   },
   "workspaces": [
     "example",
     "kitchen-sink"
   ],
-  "packageManager": "bun@1.2.19",
+  "packageManager": "bun@1.3.14",
   "overrides": {
+    "typescript": "npm:tsover@6.0.2",
     "zod-validation-error": "4.0.2"
   },
   "jest": {
     "preset": "@react-native/jest-preset",
+    "moduleNameMapper": {
+      "^react-native-reanimated$": "<rootDir>/src/__fixtures__/mocks/reactNativeReanimated.ts",
+      "^tsover-runtime$": "<rootDir>/node_modules/tsover-runtime/dist/index.js"
+    },
+    "transformIgnorePatterns": [
+      "node_modules/(?!((jest-)?react-native|@react-native(-community)?|react-native-skia|react-native-reanimated|react-native-webgpu|react-native-worklets|typegpu|tsover-runtime)/)"
+    ],
     "modulePathIgnorePatterns": [
+      "<rootDir>/.context/",
       "<rootDir>/example/node_modules",
       "<rootDir>/kitchen-sink/node_modules",
       "<rootDir>/lib/"
@@ -129,13 +151,6 @@
       }
     }
   },
-  "prettier": {
-    "quoteProps": "consistent",
-    "singleQuote": true,
-    "tabWidth": 2,
-    "trailingComma": "es5",
-    "useTabs": false
-  },
   "react-native-builder-bob": {
     "source": "src",
     "output": "lib",
@@ -143,7 +158,8 @@
       [
         "module",
         {
-          "esm": true
+          "esm": true,
+          "configFile": true
         }
       ],
       [

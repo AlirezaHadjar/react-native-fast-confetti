@@ -1,10 +1,6 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it } from '@jest/globals';
 import { Flake } from '../FlakeComponent';
 import { parseFlakeChildren } from '../hooks/useConfettiFlakes';
-
-jest.mock('react-native-reanimated', () => ({
-  Easing: { bezier: jest.fn(() => jest.fn()) },
-}));
 
 describe('built-in flake shapes', () => {
   it('keeps rectangle as the default shape', () => {

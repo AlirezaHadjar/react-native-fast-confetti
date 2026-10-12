@@ -22,11 +22,7 @@ export function ConfettiControls({ actions }: Props) {
   return (
     <View style={styles.container}>
       {buttons.map((label) => (
-        <Pressable
-          key={label}
-          style={styles.button}
-          onPress={actionMap[label]}
-        >
+        <Pressable key={label} style={styles.button} onPress={actionMap[label]}>
           <Text style={styles.buttonText}>{label}</Text>
         </Pressable>
       ))}

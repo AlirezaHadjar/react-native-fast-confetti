@@ -23,8 +23,17 @@ jobs:
       - name: Lint files
         run: bun run lint
 
+      - name: Check formatting
+        run: bun run format:check
+
       - name: Typecheck files
         run: bun run typecheck
+
+      - name: Typecheck demos
+        run: bunx tsc --noEmit --project example/tsconfig.json && bunx tsc --noEmit --project kitchen-sink/tsconfig.json
+
+      - name: Check demo dependencies
+        run: bun --cwd example expo install --check && bun --cwd kitchen-sink expo install --check
 
   test:
     runs-on: ubuntu-latest

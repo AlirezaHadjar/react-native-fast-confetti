@@ -4,9 +4,10 @@ import { useReducedMotion } from 'react-native-reanimated';
 import { resolveReduceMotionFactor } from '../reduceMotion';
 import type { ReduceMotionConfig } from '../types';
 
-export function useReduceMotionFactor(
-  config: ReduceMotionConfig | undefined
-): { factor: number; ready: boolean } {
+export function useReduceMotionFactor(config: ReduceMotionConfig | undefined): {
+  factor: number;
+  ready: boolean;
+} {
   const hasObjectConfig = config != null && typeof config === 'object';
   const mode = hasObjectConfig ? config.mode : (config ?? 'system');
   const configFactor = hasObjectConfig ? config.factor : undefined;

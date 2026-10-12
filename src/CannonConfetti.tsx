@@ -1,20 +1,20 @@
-import { useRSXformBuffer } from '@shopify/react-native-skia';
+import { useRSXformBuffer } from 'react-native-skia';
 import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   forwardRef,
 } from 'react';
 import {
   Extrapolation,
   interpolate,
-  runOnUI,
   useDerivedValue,
   useSharedValue,
 } from 'react-native-reanimated';
+import { scheduleOnUI } from 'react-native-worklets';
 import {
-  generateCannonBoxesArray,
   generateCannonParticleSystemBoxesArray,
   resolveNamedPosition,
   estimateCannonDuration,
@@ -31,6 +31,9 @@ import {
   DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE,
   DEFAULT_CANNON_CONFETTI_SPEED_VARIATION,
   DEFAULT_CANNON_CONFETTI_LAUNCH_DELAY_MAX,
+  DEFAULT_FLAKE_STYLE,
+  DEFAULT_FLIP_INTENSITY,
+  DEFAULT_INITIAL_SCALE,
 } from './constants';
 import type {
   CannonConfettiMethods,
@@ -39,7 +42,7 @@ import type {
   NamedPosition,
   Position,
 } from './types';
-import { useConfettiLogic } from './hooks/useConfettiLogic';
+import { usePackedConfettiLogic } from './hooks/useConfettiLogic';
 import { useCannonOrigins } from './hooks/useCannonOrigins';
 import { useTextureProps } from './hooks/useTextureProps';
 import { useAnimationLifecycle } from './hooks/useAnimationLifecycle';
@@ -51,6 +54,23 @@ import {
 } from './reduceMotion';
 import { ConfettiCanvas } from './ConfettiCanvas';
 import { Origin, Flake } from './CannonConfettiComponents';
+import {
+  BURST_DEPTH_SCALE,
+  BURST_FLAGS,
+  BURST_FLAG_CLOCKWISE,
+  BURST_FLOAT_STRIDE,
+  BURST_INITIAL_ROTATION,
+  BURST_LAUNCH_DELAY,
+  BURST_META_STRIDE,
+  BURST_ORIGIN_INDEX,
+  BURST_ROTATION_X,
+  BURST_ROTATION_Z,
+  BURST_SIZE_INDEX,
+  BURST_VX,
+  BURST_VY,
+  generatePackedCannonBoxes,
+  type PackedBurstBoxes,
+} from './packedBurstBoxes';
 
 const CannonConfettiInner = forwardRef<
   CannonConfettiMethods,
@@ -63,7 +83,7 @@ const CannonConfettiInner = forwardRef<
       drag: dragProp = DEFAULT_CANNON_CONFETTI_DRAG,
       autoplay = true,
       infinite = false,
-      fadeOutOnEnd = false,
+      opacityAnimation,
       autoStartDelay = 0,
       onAnimationEnd,
       onAnimationStart,
@@ -75,9 +95,9 @@ const CannonConfettiInner = forwardRef<
       target: rootTarget,
       particleSystem,
       sprayDuration = 300,
-      initialScale = 0.3,
-      flipIntensity = 0.85,
-      flakeStyle = 'glossy',
+      initialScale = DEFAULT_INITIAL_SCALE,
+      flipIntensity = DEFAULT_FLIP_INTENSITY,
+      flakeStyle = DEFAULT_FLAKE_STYLE,
       easing,
       reduceMotion,
       ...textureRootProps
@@ -147,46 +167,58 @@ const CannonConfettiInner = forwardRef<
     const dynamicCannonsPositions = useSharedValue<Position[] | null>(null);
     const dynamicCannonConfigs = useSharedValue<CannonConfig[] | null>(null);
 
-    const createBoxes = useCallback(
-      (configs: CannonConfig[], positions: Position[]) => {
-        'worklet';
-        if (particleSystem) {
-          return generateCannonParticleSystemBoxesArray({
-            particleSystem,
-            cannonConfigs: configs,
-            sizeIsTextured,
-          });
-        }
-        return generateCannonBoxesArray({
-          cannonConfigs: configs,
-          cannonsPositions: positions,
-          containerHeight,
-          launchDelayMax,
-          sizeColorOverrides: colorOverrides,
-          parentColorCount,
-          sizeIsTextured,
-        });
-      },
-      [
-        particleSystem,
-        sizeIsTextured,
-        containerHeight,
-        launchDelayMax,
-        colorOverrides,
-        parentColorCount,
-      ]
-    );
+    // Generation belongs on the UI runtime in refreshBoxes. Passing the
+    // generated array to useSharedValue evaluates it again on every React
+    // render even though the hook only consumes its first value. At large
+    // counts that created and serialized several discarded object graphs.
+    const boxes = useSharedValue<PackedBurstBoxes | null>(null);
 
-    const boxes = useSharedValue(createBoxes(cannonConfigs, cannonsPositions));
+    useLayoutEffect(() => {
+      return () => {
+        boxes.set(null);
+        dynamicCannonsPositions.set(null);
+        dynamicCannonConfigs.set(null);
+      };
+    }, [boxes, dynamicCannonConfigs, dynamicCannonsPositions]);
+
+    const { texture, sprites } = usePackedConfettiLogic({
+      sizeVariations,
+      colors: allColors,
+      boxes,
+      sizeColorOverrides: colorOverrides,
+      count: particleSystem ? 0 : totalCount,
+    });
+
     const renderedCount = particleSystem?.particles.length ?? totalCount;
     const meshParticleCount = particleSystem?.particles.length ?? 0;
+    const particleBoxes = useMemo(
+      () =>
+        particleSystem
+          ? generateCannonParticleSystemBoxesArray({
+              particleSystem,
+              cannonConfigs,
+              sizeIsTextured,
+            })
+          : [],
+      [particleSystem, cannonConfigs, sizeIsTextured]
+    );
 
     const refreshBoxes = useCallback(() => {
       'worklet';
       const currentConfigs = dynamicCannonConfigs.get() || cannonConfigs;
       const currentPositions =
         dynamicCannonsPositions.get() || cannonsPositions;
-      const newBoxes = createBoxes(currentConfigs, currentPositions);
+      const newBoxes = particleSystem
+        ? null
+        : generatePackedCannonBoxes({
+            cannonConfigs: currentConfigs,
+            cannonsPositions: currentPositions,
+            containerHeight,
+            launchDelayMax,
+            sizeColorOverrides: colorOverrides,
+            parentColorCount,
+            sizeIsTextured,
+          });
       boxes.set(newBoxes);
     }, [
       cannonConfigs,
@@ -194,28 +226,25 @@ const CannonConfettiInner = forwardRef<
       dynamicCannonConfigs,
       dynamicCannonsPositions,
       cannonsPositions,
-      createBoxes,
+      particleSystem,
+      containerHeight,
+      launchDelayMax,
+      colorOverrides,
+      parentColorCount,
+      sizeIsTextured,
     ]);
 
     const { progress, running, opacity, pause, reset, resume, runAnimation } =
       useAnimationLifecycle({
         duration,
         infinite,
-        fadeOutOnEnd,
+        opacityAnimation,
         easing,
         onAnimationStart,
         onAnimationEnd,
         onCycleEnd: refreshBoxes,
         disabled: visibleCount === 0,
       });
-
-    const { texture, sprites } = useConfettiLogic({
-      sizeVariations,
-      colors: allColors,
-      boxes,
-      sizeColorOverrides: colorOverrides,
-      count: renderedCount,
-    });
 
     const maxAtlasWidth = Math.max(...sizeVariations.map((size) => size.width));
     const maxAtlasHeight = Math.max(
@@ -237,10 +266,9 @@ const CannonConfettiInner = forwardRef<
       [meshParticleCount]
     );
     const meshTextureCoordinates = useDerivedValue(() => {
-      const currentBoxes = boxes.get();
       const result = new Array(meshParticleCount * 4);
       for (let index = 0; index < meshParticleCount; index++) {
-        const piece = currentBoxes[index];
+        const piece = particleBoxes[index];
         const size = piece ? sizeVariations[piece.sizeIndex] : undefined;
         const offset = index * 4;
         if (!piece || !size) {
@@ -265,7 +293,6 @@ const CannonConfettiInner = forwardRef<
 
     const meshVertices = useDerivedValue(() => {
       if (!particleSystem) return [];
-      const currentBoxes = boxes.get();
       const systemTime = progress.get() * duration;
       const result = new Array(meshParticleCount * 4);
       const viewportPadding = particleSystem.viewportPadding ?? 0.08;
@@ -276,11 +303,12 @@ const CannonConfettiInner = forwardRef<
           visibleCount
         );
         const particle = particleSystem.particles[index];
-        const piece = currentBoxes[index];
+        const piece = particleBoxes[index];
         const size = piece ? sizeVariations[piece.sizeIndex] : undefined;
-        const state = isVisible && particle
-          ? evaluateCannonParticle(particle, systemTime)
-          : null;
+        const state =
+          isVisible && particle
+            ? evaluateCannonParticle(particle, systemTime)
+            : null;
         const offset = index * 4;
         if (
           !state ||
@@ -411,7 +439,7 @@ const CannonConfettiInner = forwardRef<
             };
           });
         }
-        runOnUI(workletRestart)(resolvedPositions, resolvedConfigs);
+        scheduleOnUI(workletRestart, resolvedPositions, resolvedConfigs);
       },
       [
         workletRestart,
@@ -426,15 +454,15 @@ const CannonConfettiInner = forwardRef<
     );
 
     useImperativeHandle(ref, () => ({
-      pause: runOnUI(pause),
-      reset: runOnUI(reset),
-      resume: runOnUI(resume),
+      pause: () => scheduleOnUI(pause),
+      reset: () => scheduleOnUI(reset),
+      resume: () => scheduleOnUI(resume),
       restart: jsRestart,
     }));
 
     useEffect(() => {
       if (!ready || !reduceMotionReady) return;
-      runOnUI(() => {
+      scheduleOnUI(() => {
         if (visibleCount === 0) {
           if (autoplay) {
             workletRestart(null, null, 0);
@@ -449,7 +477,7 @@ const CannonConfettiInner = forwardRef<
           return;
         }
         if (autoplay) workletRestart(null, null, autoStartDelay);
-      })();
+      });
     }, [
       autoplay,
       autoStartDelay,
@@ -475,14 +503,18 @@ const CannonConfettiInner = forwardRef<
         return;
       }
 
-      const piece = boxes.get()[i];
-      if (!piece) {
+      const packed = boxes.get();
+      if (!packed) {
         val.set(0, 0, -10000, -10000);
         return;
       }
 
+      const valueOffset = i * BURST_FLOAT_STRIDE;
+      const metaOffset = i * BURST_META_STRIDE;
+      const originIndex = packed.metadata[metaOffset + BURST_ORIGIN_INDEX] ?? 0;
+
       const currentCannons = dynamicCannonsPositions.get() || cannonsPositions;
-      const cannon = currentCannons[piece.cannonIndex % currentCannons.length];
+      const cannon = currentCannons[originIndex % currentCannons.length];
       if (!cannon) {
         val.set(0, 0, -10000, -10000);
         return;
@@ -490,13 +522,25 @@ const CannonConfettiInner = forwardRef<
       const cannonX = cannon.x;
       const cannonY = cannon.y;
 
-      const { vx, vy } = piece;
+      const vx = packed.values[valueOffset + BURST_VX] ?? 0;
+      const vy = packed.values[valueOffset + BURST_VY] ?? 0;
+      const launchDelay = packed.values[valueOffset + BURST_LAUNCH_DELAY] ?? 0;
+      const depthScale = packed.values[valueOffset + BURST_DEPTH_SCALE] ?? 1;
+      const rotationX = packed.values[valueOffset + BURST_ROTATION_X] ?? 0;
+      const rotationZ = packed.values[valueOffset + BURST_ROTATION_Z] ?? 0;
+      const initialRotation =
+        packed.values[valueOffset + BURST_INITIAL_ROTATION] ?? 0;
+      const clockwise =
+        ((packed.metadata[metaOffset + BURST_FLAGS] ?? 0) &
+          BURST_FLAG_CLOCKWISE) !==
+        0;
+      const sizeIndex = packed.metadata[metaOffset + BURST_SIZE_INDEX] ?? -1;
 
       const p = progress.get();
 
       const effectiveProgress = interpolate(
         p,
-        [piece.launchDelay, 1],
+        [launchDelay, 1],
         [0, 1],
         Extrapolation.CLAMP
       );
@@ -514,37 +558,40 @@ const CannonConfettiInner = forwardRef<
         (scaledGravity / safeVDrag) * t +
         ((vy - scaledGravity / safeVDrag) / safeVDrag) * vExpDecay;
 
-      const rotationDirection = piece.clockwise ? 1 : -1;
-      const rz =
-        piece.initialRotation + p * rotationDirection * piece.maxRotation.z;
-      const rx =
-        piece.initialRotation + p * rotationDirection * piece.maxRotation.x;
+      const rotationDirection = clockwise ? 1 : -1;
+      const rz = initialRotation + p * rotationDirection * rotationZ;
+      const rx = initialRotation + p * rotationDirection * rotationX;
 
       const minFlipScale = 1 - effectiveFlipIntensity;
       const oscillatingScale =
-        piece.maxRotation.x === 0
-          ? 1
-          : Math.max(Math.abs(Math.cos(rx)), minFlipScale);
+        rotationX === 0 ? 1 : Math.max(Math.abs(Math.cos(rx)), minFlipScale);
       const appearScale = interpolate(
         effectiveProgress,
         [0, 0.05],
         [initialScale, 1],
         Extrapolation.CLAMP
       );
-      const size = sizeVariations[piece.sizeIndex];
+      const scale = appearScale * oscillatingScale * depthScale;
+
+      const size = sizeVariations[sizeIndex];
       if (!size) {
         val.set(0, 0, -10000, -10000);
         return;
       }
       const px = size.width / 2;
       const py = size.height / 2;
-      const scale = appearScale * oscillatingScale * piece.depthScale;
-
       const s = Math.sin(rz) * scale;
       const c = Math.cos(rz) * scale;
 
       val.set(c, s, tx - c * px + s * py, ty - s * px - c * py);
     });
+
+    useLayoutEffect(() => {
+      return () => {
+        transforms.set([]);
+        sprites.set([]);
+      };
+    }, [sprites, transforms]);
 
     return (
       <ConfettiCanvas

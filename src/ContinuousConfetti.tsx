@@ -22,11 +22,12 @@ const ContinuousConfettiInner = forwardRef<
 
 ContinuousConfettiInner.displayName = 'ContinuousConfetti';
 
-const ContinuousConfetti = ContinuousConfettiInner as React.ForwardRefExoticComponent<
-  ContinuousConfettiProps & React.RefAttributes<ConfettiMethods>
-> & {
-  Flake: typeof Flake;
-};
+const ContinuousConfetti =
+  ContinuousConfettiInner as React.ForwardRefExoticComponent<
+    ContinuousConfettiProps & React.RefAttributes<ConfettiMethods>
+  > & {
+    Flake: typeof Flake;
+  };
 
 ContinuousConfetti.Flake = Flake;
 

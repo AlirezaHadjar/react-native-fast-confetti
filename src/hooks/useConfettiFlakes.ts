@@ -1,9 +1,23 @@
-import { useMemo } from 'react';
-import type { SkImage, SkSVG } from '@shopify/react-native-skia';
+import { useMemo, useState } from 'react';
+import type { SkImage, SkSVG } from 'react-native-skia';
 import type { FlakeProps, FlakeShape, FlakeStyle } from '../types';
 import { pickChildren } from '../children';
 import { Flake } from '../FlakeComponent';
 import { DEFAULT_COLORS, DEFAULT_FLAKE_SIZE } from '../constants';
+
+let nextTextureIdentity = 1;
+const textureIdentities = new WeakMap<object, number>();
+
+const getTextureIdentity = (texture?: TextureInfo) => {
+  if (!texture) return null;
+  const content = texture.content as object;
+  let identity = textureIdentities.get(content);
+  if (identity === undefined) {
+    identity = nextTextureIdentity++;
+    textureIdentities.set(content, identity);
+  }
+  return [texture.type, identity] as const;
+};
 
 export type TextureInfo =
   | { type: 'image'; content: SkImage }
@@ -19,6 +33,29 @@ export type SizeVariation = {
   flakeStyle: FlakeStyle;
   texture?: TextureInfo;
   colors?: string[];
+};
+
+/** A semantic cache key for immutable atlas inputs, including texture identity. */
+export const getSizeVariationsSignature = (sizes: SizeVariation[]) =>
+  JSON.stringify(
+    sizes.map((size) => [
+      size.width,
+      size.height,
+      size.radius,
+      size.shape,
+      size.flakeStyle,
+      getTextureIdentity(size.texture),
+      size.colors ?? null,
+    ])
+  );
+
+export const useSemanticValue = <T>(signature: string, value: T): T => {
+  const [cache, setCache] = useState(() => ({ signature, value }));
+  if (cache.signature !== signature) {
+    setCache({ signature, value });
+    return value;
+  }
+  return cache.value;
 };
 
 export function parseFlakeChildren(
@@ -77,9 +114,7 @@ export function buildAtlasColors(
   const colorOverrides: (ColorRange | null)[] = new Array(sizes.length);
   const sizeIsTextured: boolean[] = new Array(sizes.length);
 
-  const needsParentColors = sizes.some(
-    (s) => !s.texture && !s.colors
-  );
+  const needsParentColors = sizes.some((s) => !s.texture && !s.colors);
   const allColors: string[] = needsParentColors ? [...parentColors] : [];
   const parentColorCount = needsParentColors ? parentColors.length : 0;
 
@@ -91,7 +126,10 @@ export function buildAtlasColors(
       allColors.push('#000');
     } else if (size?.colors && size.colors.length > 0) {
       sizeIsTextured[i] = false;
-      colorOverrides[i] = { start: allColors.length, count: size.colors.length };
+      colorOverrides[i] = {
+        start: allColors.length,
+        count: size.colors.length,
+      };
       allColors.push(...size.colors);
     } else {
       sizeIsTextured[i] = false;
@@ -127,24 +165,37 @@ export const useConfettiFlakes = ({
   rootFlakeStyle,
   parentTexture,
 }: UseConfettiFlakesParams): UseConfettiFlakesResult => {
-  const { targetChildren: flakeChildren } = pickChildren<FlakeProps>(
+  const flakeChildren = pickChildren<FlakeProps>(
     children,
     Flake
+  ).targetChildren;
+  const parsedSizes = parseFlakeChildren(
+    flakeChildren,
+    rootFlakeStyle ?? 'glossy',
+    parentTexture
+  );
+  const sizesSignature = getSizeVariationsSignature(parsedSizes);
+  // Deliberately key by semantic content. JSX elements and their cloned arrays
+  // often receive new identities on harmless parent renders; retaining the old
+  // value prevents texture rasterization and GPU atlas recreation.
+  const stableSizes = useSemanticValue(sizesSignature, parsedSizes);
+
+  const colorsSignature = JSON.stringify(rootColors ?? DEFAULT_COLORS);
+  const stableRootColors = useSemanticValue(
+    colorsSignature,
+    rootColors ?? DEFAULT_COLORS
   );
 
   return useMemo(() => {
-    const flakeStyle = rootFlakeStyle ?? 'glossy';
-    const userColors = rootColors ?? DEFAULT_COLORS;
-    const sizes = parseFlakeChildren(flakeChildren, flakeStyle, parentTexture);
     const { allColors, colorOverrides, sizeIsTextured, parentColorCount } =
-      buildAtlasColors(sizes, userColors);
+      buildAtlasColors(stableSizes, stableRootColors);
 
     return {
       allColors,
-      sizeVariations: sizes,
+      sizeVariations: stableSizes,
       colorOverrides,
       sizeIsTextured,
       parentColorCount,
     };
-  }, [flakeChildren, rootColors, rootFlakeStyle, parentTexture]);
+  }, [stableSizes, stableRootColors]);
 };

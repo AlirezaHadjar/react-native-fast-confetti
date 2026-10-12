@@ -15,6 +15,8 @@ export type {
   CannonParticle,
   CannonParticleSystem,
   Drag,
+  OpacityAnimation,
+  OpacityKeyframes,
   ReduceMotionConfig,
 } from './types';
 
