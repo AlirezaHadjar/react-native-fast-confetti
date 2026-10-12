@@ -1,11 +1,14 @@
 # Migrating from v2 to v3
 
-## Upgrade Skia and WebGPU
+## Upgrade Skia
 
-This branch targets `react-native-skia` 3.4+ and `react-native-webgpu` 0.13.1+.
+v3 requires `react-native-skia >=3.4 <4`. WebGPU remains optional: install
+`react-native-webgpu >=0.13.1 <1` and `typegpu >=0.11.8 <0.13` only when using
+the `/gpu` entry point.
 Replace `@shopify/react-native-skia` with `react-native-skia` in dependencies
 and imports. Do not install both names: they provide the same native module.
-Upgrade Skia and WebGPU together so their Dawn versions match.
+If your app also uses WebGPU, upgrade Skia and WebGPU together so their Dawn
+versions match. The README lists the tested versions.
 
 Skia v3 uses Graphite and requires Android API 26 with Vulkan, or iOS 15.1+.
 Expo Go does not include this native backend; rebuild your development client.
@@ -13,11 +16,15 @@ See the [Skia migration guide](https://wcandillon.github.io/react-native-skia/do
 
 ## Upgrade React Native and Worklets
 
-Use React Native 0.86+, Reanimated 4.7.1+, and Worklets 0.13.0+. The demos
-use Expo SDK 57. Worklets contains the upstream serialization race fix, so
+Use React Native `>=0.86 <0.89`, React `>=19`, Reanimated `>=4.7.1 <5`,
+and Worklets `>=0.13 <1`. The demos use Expo SDK 57.
+Worklets contains the upstream serialization race fix, so
 the former Worklets 0.11.4 patch is no longer needed.
-The tested WebGPU configuration still uses a native patch; see the
+The repository uses unpatched WebGPU dependencies; see the
 [WebGPU setup instructions](README.md#optional-webgpu-renderer).
+
+Neither renderer requires a React provider. The WebGPU renderer automatically
+shares one internal device when the `device` prop is omitted.
 
 ## Replace `fadeOutOnEnd` with `opacityAnimation`
 
@@ -67,8 +74,7 @@ does not end.
 ## Cannon gravity
 
 The default `CannonConfetti` gravity is now `2.5`, down from `3`, to preserve
-the previous fall timing with the corrected aerodynamic drag model. Pass
-`gravity={3}` to retain the v2 value.
+the previous fall timing with the corrected aerodynamic drag model.
 
 ## WebGPU renderer
 

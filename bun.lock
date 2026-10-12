@@ -32,7 +32,7 @@
         "unplugin-typegpu": "0.11.5",
       },
       "peerDependencies": {
-        "react": "*",
+        "react": ">=19.0.0",
         "react-native": ">=0.86.0 <0.89",
         "react-native-reanimated": ">=4.7.1 <5",
         "react-native-skia": ">=3.4.0 <4",
@@ -107,9 +107,6 @@
         "unplugin-typegpu": "0.11.5",
       },
     },
-  },
-  "patchedDependencies": {
-    "react-native-webgpu@0.13.1": "patches/react-native-webgpu@0.13.1.patch",
   },
   "overrides": {
     "typescript": "npm:tsover@6.0.2",

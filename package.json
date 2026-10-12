@@ -1,6 +1,6 @@
 {
   "name": "react-native-fast-confetti",
-  "version": "2.0.2",
+  "version": "3.0.0",
   "description": "Confetti animations for React Native",
   "sideEffects": false,
   "main": "./lib/module/index.js",
@@ -87,7 +87,7 @@
   },
   "peerDependencies": {
     "react-native-skia": ">=3.4.0 <4",
-    "react": "*",
+    "react": ">=19.0.0",
     "react-native": ">=0.86.0 <0.89",
     "react-native-reanimated": ">=4.7.1 <5",
     "react-native-webgpu": ">=0.13.1 <1",
@@ -174,8 +174,5 @@
     "languages": "js",
     "type": "library",
     "version": "0.50.2"
-  },
-  "patchedDependencies": {
-    "react-native-webgpu@0.13.1": "patches/react-native-webgpu@0.13.1.patch"
   }
 }

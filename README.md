@@ -5,7 +5,8 @@
 Confetti animations for React Native with Skia and an optional WebGPU renderer.
 
 > [!NOTE]
-> Still using v1? [Click here for the v1 documentation.](README_V1.md)
+> Using v2? See [the v2 documentation](README_V2.md) and [migration guide](MIGRATION_V2_V3.md).
+> For v1, see [the v1 documentation](README_V1.md).
 
 <table>
   <tr>
@@ -23,12 +24,26 @@ Confetti animations for React Native with Skia and an optional WebGPU renderer.
   </tr>
 </table>
 
+## New in v3
+
+- An optional [WebGPU renderer](#optional-webgpu-renderer) performs particle physics
+  and rendering on the GPU. Android frame submission runs on a dedicated worker.
+- Skia 3 support brings the default renderer to the Graphite backend.
+- `opacityAnimation` replaces `fadeOutOnEnd` with configurable opacity keyframes
+  for finite animations.
+- Flake shapes include hearts, stars, flowers, and streamers alongside rectangles.
+- `ConfettiPresets.TwinBloom` provides a deterministic cannon particle system.
+
 ## Installation
 
 > [!IMPORTANT]
 > This library depends on [react-native-reanimated](https://docs.swmansion.com/react-native-reanimated/docs/guides/compatibility/), [react-native-skia](https://github.com/wcandillon/react-native-skia), and [react-native-worklets](https://docs.swmansion.com/react-native-worklets/docs/guides/compatibility/). Make sure to install those first.
 
-This branch targets `react-native-skia` 3.4+ and `react-native-webgpu` 0.13.1+.
+v3 requires React Native `>=0.86 <0.89`, React `>=19`, Skia `>=3.4 <4`,
+Reanimated `>=4.7.1 <5`, and Worklets `>=0.13 <1`.
+WebGPU and TypeGPU are optional dependencies. You do not need to install either
+for the default Skia renderer. Install them only to use the `/gpu` entry point;
+Skia remains required for texture and shape preparation in both renderers.
 Skia v3 uses Graphite on native platforms and requires Android API 26 with
 Vulkan, or iOS 15.1+. Use a development build with Expo. Replace
 `@shopify/react-native-skia` with `react-native-skia`; installing both creates
@@ -36,8 +51,45 @@ conflicting native modules. When using both Skia and WebGPU, keep their Dawn
 versions matched. See the [Skia v3 migration guide](https://wcandillon.github.io/react-native-skia/docs/getting-started/migration/).
 
 ```sh
-yarn add react-native-fast-confetti
+yarn add react-native-fast-confetti@^3 react-native-skia@3.4.0 react-native-reanimated@4.7.1 react-native-worklets@0.13.0
 ```
+
+Neither renderer requires a React provider. The WebGPU renderer lazily shares
+one internal device across mounted confetti components.
+
+For Expo, install `expo-build-properties` and configure Android API 26 or newer
+for the default Skia renderer as well:
+
+```sh
+npx expo install expo-build-properties
+```
+
+```json
+{
+  "expo": {
+    "plugins": [
+      ["expo-build-properties", { "android": { "minSdkVersion": 26 } }]
+    ]
+  }
+}
+```
+
+In bare React Native apps, set Android `minSdkVersion` to at least 26 and the
+iOS deployment target to at least 15.1, then run `pod install` after upgrading.
+For either renderer, configure `react-native-worklets/plugin` last in Babel
+and rebuild the native app. For an Expo app using the default Skia renderer:
+
+```js
+module.exports = function (api) {
+  api.cache(true);
+  return {
+    presets: [['babel-preset-expo', { worklets: false }]],
+    plugins: ['react-native-worklets/plugin'],
+  };
+};
+```
+
+The optional renderer needs the extra plugins below.
 
 ### Optional WebGPU renderer
 
@@ -45,8 +97,8 @@ For GPU-resident physics and rendering, install the optional peers and use the
 separate entry point:
 
 ```sh
-yarn add react-native-webgpu typegpu
-yarn add --dev unplugin-typegpu @babel/plugin-transform-class-static-block
+yarn add react-native-webgpu@0.13.1 typegpu@0.11.8
+yarn add --dev unplugin-typegpu@0.11.5 @babel/plugin-transform-class-static-block
 ```
 
 ```tsx
@@ -57,7 +109,8 @@ import { Confetti } from 'react-native-fast-confetti/gpu';
 </Confetti>;
 ```
 
-Native Expo apps must add `react-native-webgpu` to `plugins`. Android requires
+When using the WebGPU renderer, native Expo apps must also add
+`react-native-webgpu` to `plugins`. Android requires
 API 26 or newer:
 
 ```json
@@ -99,16 +152,11 @@ Read about [WebGPU specific features](#webgpu-features) and
 [WebGPU caveats](#webgpu-caveats).
 
 The tested native stack is Expo 57, React Native 0.86.3, Reanimated 4.7.1,
-and Worklets 0.13.0. Worklets includes the serialization race fix upstream
-and needs no local patch. The tested WebGPU 0.13.1 configuration uses
-[this native patch](patches/react-native-webgpu@0.13.1.patch). It corrects Apple
-surface transitions, releases the cached drawing-buffer reference on unconfigure,
-and delivers device errors to the owning JavaScript runtime.
+Worklets 0.13.0, and WebGPU 0.13.1. This repository uses unpatched dependencies.
 
-To reproduce that configuration, copy the patch into your app, register it with
-your package manager's patch mechanism, and rebuild the native app. This workspace
-registers it through Bun's `patchedDependencies`. Installing the JavaScript
-library does not apply the patch to an application's WebGPU peer dependency.
+On native platforms, app-owned devices shared across runtimes with
+`uncapturederror` listeners can encounter an upstream error-callback runtime
+race. The default confetti renderer does not register those listeners.
 
 ## Components
 
@@ -544,16 +592,22 @@ Define flake sizes as children of any confetti component (or origin).
 ## Compatibility
 
 > [!IMPORTANT]
-> The unreleased v3 branch requires React Native `>=0.86 <0.89`, Reanimated `>=4.7.1 <5`, and Worklets `>=0.13.0 <1`. Both example apps use Expo SDK 57 and native builds. Historical release compatibility depends on [React Native Reanimated](https://docs.swmansion.com/react-native-reanimated/docs/guides/compatibility/), [React Native Worklets](https://docs.swmansion.com/react-native-worklets/docs/guides/compatibility/), and [React Native Skia](https://github.com/wcandillon/react-native-skia). Skia does not publish a Reanimated-style compatibility matrix, so use its [installation requirements](https://wcandillon.github.io/react-native-skia/docs/getting-started/installation/) as the source of truth.
+> v3 requires React Native `>=0.86 <0.89`, Reanimated `>=4.7.1 <5`, and Worklets `>=0.13.0 <1`. Both example apps use Expo SDK 57 and native builds. Historical release compatibility depends on [React Native Reanimated](https://docs.swmansion.com/react-native-reanimated/docs/guides/compatibility/), [React Native Worklets](https://docs.swmansion.com/react-native-worklets/docs/guides/compatibility/), and [React Native Skia](https://github.com/wcandillon/react-native-skia). Skia does not publish a Reanimated-style compatibility matrix, so use its [installation requirements](https://wcandillon.github.io/react-native-skia/docs/getting-started/installation/) as the source of truth.
 
-| Package version   | Tested with React Native | Tested with Skia | Tested with Reanimated | Worklets                  | Minimum inferred from API usage                                                                      |
-| ----------------- | ------------------------ | ---------------- | ---------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Unreleased v3     | `0.86.3`                 | `3.4.0`          | `4.7.1`                | `0.13.0`                  | React Native `>=0.86 <0.89`, React `>=19`, Skia `>=3.4.0`, Reanimated `>=4.7.1`, Worklets `>=0.13.0` |
-| `2.0.0`           | `0.83.2`                 | `2.5.1`          | `4.2.2`                | Required via Reanimated 4 | React Native `>=0.79`, React `>=19`, Skia `>=2.0.0`, Reanimated `>=4.0.0`, Worklets `>=0.7.0`        |
-| `1.0.0` - `1.1.2` | `0.79.2`                 | `2.0.0-next.4`   | `3.18.0`               | Not required directly     | React Native `>=0.79`, React `>=19`, Skia `2.0.0-next.x` / `>=2.0.0`, Reanimated `>=3.18.0`          |
-| `0.8.3`           | `0.79.2`                 | `2.0.0-next.4`   | `3.17.5`               | Not required directly     | React Native `>=0.79`, React `>=19`, Skia `2.0.0-next.x` / `>=2.0.0`, Reanimated `>=3.17.5`          |
-| `0.8.1` - `0.8.2` | `0.76.6`                 | `1.4.2`          | `3.16.1`               | Not required directly     | React Native `>=0.76`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.16.1`                           |
-| `0.2.0` - `0.7.0` | `0.74.5`                 | `1.4.2`          | `3.15.5`               | Not required directly     | React Native `>=0.74`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.15.5`                           |
+| Package version   | Tested with React Native | Tested with Skia | Tested with Reanimated | Worklets                  | Tested with WebGPU  | Minimum inferred from API usage                                                                      |
+| ----------------- | ------------------------ | ---------------- | ---------------------- | ------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------- |
+| `3.0.0`           | `0.86.3`                 | `3.4.0`          | `4.7.1`                | `0.13.0`                  | `0.13.1` (optional) | React Native `>=0.86 <0.89`, React `>=19`, Skia `>=3.4.0`, Reanimated `>=4.7.1`, Worklets `>=0.13.0` |
+| `2.0.0`           | `0.83.2`                 | `2.5.1`          | `4.2.2`                | Required via Reanimated 4 | Not supported       | React Native `>=0.79`, React `>=19`, Skia `>=2.0.0`, Reanimated `>=4.0.0`, Worklets `>=0.7.0`        |
+| `1.0.0` - `1.1.2` | `0.79.2`                 | `2.0.0-next.4`   | `3.18.0`               | Not required directly     | Not supported       | React Native `>=0.79`, React `>=19`, Skia `2.0.0-next.x` / `>=2.0.0`, Reanimated `>=3.18.0`          |
+| `0.8.3`           | `0.79.2`                 | `2.0.0-next.4`   | `3.17.5`               | Not required directly     | Not supported       | React Native `>=0.79`, React `>=19`, Skia `2.0.0-next.x` / `>=2.0.0`, Reanimated `>=3.17.5`          |
+| `0.8.1` - `0.8.2` | `0.76.6`                 | `1.4.2`          | `3.16.1`               | Not required directly     | Not supported       | React Native `>=0.76`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.16.1`                           |
+| `0.2.0` - `0.7.0` | `0.74.5`                 | `1.4.2`          | `3.15.5`               | Not required directly     | Not supported       | React Native `>=0.74`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.15.5`                           |
+
+WebGPU is optional in v3 and was not available in earlier confetti releases.
+The tested `/gpu` stack uses `react-native-webgpu 0.13.1` with `typegpu 0.11.8`.
+Its peer ranges are WebGPU `>=0.13.1 <1` and TypeGPU `>=0.11.8 <0.13`.
+Skia-only apps do not need either dependency or the TypeGPU Babel plugins.
+When enabling WebGPU, keep its Dawn version matched with Skia's.
 
 For exact app support, check the compatibility pages for the installed versions of Reanimated and Worklets. For Skia, follow the official installation requirements: current Skia versions require React Native `>=0.79` and React `>=19`; React Native `<=0.78` / React `<=18` projects should use Skia `1.12.4` or below.
 

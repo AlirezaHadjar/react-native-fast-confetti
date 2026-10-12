@@ -1,3 +1,27 @@
+# Apple surface transitions on the main thread
+
+This is an inactive record of a former local change to `react-native-webgpu`
+`0.13.1`. The repository does not apply it during installation. These notes
+live outside `src` and `lib` and are excluded from the published package.
+
+The change dispatches configuration, resize, recovery, and pending surface
+attachment to the Apple main queue. It dispatches before taking the surface
+mutex and removes the off-main `CATransaction` flush.
+
+The current confetti renderer already configures, renders, and retires iOS
+canvases on the UI/main runtime. The unpatched simulator passed 100 navigation
+cycles; a further static, paused, and active probe recorded 96 configurations,
+all on main. This does not establish behavior on every physical iOS device or
+for other renderers that perform surface operations off main.
+
+Upstream: [PR #459](https://github.com/wcandillon/react-native-webgpu/pull/459),
+open when checked on 2026-10-12.
+
+## Recorded diff
+
+The base is the unmodified npm `0.13.1` source.
+
+```diff
 diff --git a/apple/MetalLayerColorSpace.mm b/apple/MetalLayerColorSpace.mm
 --- a/apple/MetalLayerColorSpace.mm
 +++ b/apple/MetalLayerColorSpace.mm
@@ -6,9 +30,9 @@ diff --git a/apple/MetalLayerColorSpace.mm b/apple/MetalLayerColorSpace.mm
  #import <Foundation/Foundation.h>
  #import <QuartzCore/CAMetalLayer.h>
 -#import <QuartzCore/CATransaction.h>
- 
+
  #include "webgpu/webgpu_cpp.h"
- 
+
 @@ -31,14 +30,6 @@
      // 8-bit format.
      metalLayer.colorspace = nil;
@@ -22,13 +46,13 @@ diff --git a/apple/MetalLayerColorSpace.mm b/apple/MetalLayerColorSpace.mm
 -    [CATransaction flush];
 -  }
  }
- 
+
  } // namespace rnwgpu
 diff --git a/cpp/rnwgpu/RNWebGPUManager.cpp b/cpp/rnwgpu/RNWebGPUManager.cpp
 --- a/cpp/rnwgpu/RNWebGPUManager.cpp
 +++ b/cpp/rnwgpu/RNWebGPUManager.cpp
 @@ -240,11 +240,19 @@
- 
+
  void RNWebGPUManager::flushPendingSurfaceTransition(
      std::shared_ptr<SurfaceInfo> info) {
 -  if (info == nullptr || _jsCallInvoker == nullptr) {
@@ -46,13 +70,13 @@ diff --git a/cpp/rnwgpu/RNWebGPUManager.cpp b/cpp/rnwgpu/RNWebGPUManager.cpp
        [info = std::move(info)] { info->applyPendingAttach(); });
 +#endif
  }
- 
+
  RNWebGPUManager::~RNWebGPUManager() {
 diff --git a/cpp/rnwgpu/RNWebGPUManager.h b/cpp/rnwgpu/RNWebGPUManager.h
 --- a/cpp/rnwgpu/RNWebGPUManager.h
 +++ b/cpp/rnwgpu/RNWebGPUManager.h
 @@ -36,10 +36,9 @@
- 
+
    /**
     * Applies a surface attach latched by the platform UI thread (see
 -   * SurfaceInfo::applyPendingAttach) from the JS thread. Surface attaches are
@@ -64,13 +88,13 @@ diff --git a/cpp/rnwgpu/RNWebGPUManager.h b/cpp/rnwgpu/RNWebGPUManager.h
 +   * actively rendering, so the last offscreen frame still reaches the screen.
     */
    void flushPendingSurfaceTransition(std::shared_ptr<SurfaceInfo> info);
- 
+
 diff --git a/cpp/rnwgpu/SurfaceRegistry.h b/cpp/rnwgpu/SurfaceRegistry.h
 --- a/cpp/rnwgpu/SurfaceRegistry.h
 +++ b/cpp/rnwgpu/SurfaceRegistry.h
 @@ -1,6 +1,7 @@
  #pragma once
- 
+
  #include <algorithm>
 +#include <exception>
  #include <atomic>
@@ -78,7 +102,7 @@ diff --git a/cpp/rnwgpu/SurfaceRegistry.h b/cpp/rnwgpu/SurfaceRegistry.h
  #include <chrono>
 @@ -27,6 +28,8 @@
  #endif
- 
+
  #ifdef __APPLE__
 +#include <dispatch/dispatch.h>
 +#include <pthread.h>
@@ -87,7 +111,7 @@ diff --git a/cpp/rnwgpu/SurfaceRegistry.h b/cpp/rnwgpu/SurfaceRegistry.h
  } // namespace dawn::native::metal
 @@ -35,6 +38,53 @@
  namespace rnwgpu {
- 
+
  #ifdef __APPLE__
 +namespace detail {
 +inline void InvokeMainThreadFunction(void *context) {
@@ -139,7 +163,7 @@ diff --git a/cpp/rnwgpu/SurfaceRegistry.h b/cpp/rnwgpu/SurfaceRegistry.h
  // Tags the CAMetalLayer with the colorspace matching the configured texture
  // format. Implemented in apple/MetalLayerColorSpace.mm.
  void applyCAMetalLayerColorSpace(void *nativeSurface,
-@@ -130,21 +180,20 @@
+@@ -130,13 +180,11 @@
  //   destruction alone (backgrounding, TextureView teardown) never removes an
  //   entry; it only detaches the surface.
  // - Attaching a surface is LATCHED: the UI thread stores it as pending
@@ -150,49 +174,15 @@ diff --git a/cpp/rnwgpu/SurfaceRegistry.h b/cpp/rnwgpu/SurfaceRegistry.h
 -//   middle of a frame. For contexts that are not actively rendering,
 -//   RNWebGPUManager::flushPendingSurfaceTransition applies the attach from the
 -//   JS thread instead.
--// - Detaching (switchToOffscreen) is IMMEDIATE, because the platform destroys
--//   the surface as soon as its callback returns. A configured context falls
--//   back to rendering into an offscreen texture, so a running render loop
--//   keeps working; the in-flight frame, if any, is dropped at present(). When
--//   a new surface attaches, the latest offscreen frame is blitted onto it so
--//   content appears without waiting for the next render — the same mechanism
--//   that gives a fast time-to-first-frame when rendering starts before the
--//   native surface exists.
 +//   (attachSurface) and it is adopted at a frame boundary, never in the middle
 +//   of a frame. Apple adopts and configures on the main thread because Dawn
 +//   mutates CAMetalLayer there. Other platforms adopt on the rendering
 +//   runtime. RNWebGPUManager::flushPendingSurfaceTransition also covers
 +//   contexts that are not actively rendering.
-+// - Detaching (switchToOffscreen) is IMMEDIATE from the context's perspective.
-+//   A configured context falls back to an offscreen texture, so a running
-+//   render loop keeps working. If a frame already owns a surface texture, the
-+//   old surface and native window stay retained until present() or the next
-+//   frame boundary; destroying the swapchain earlier invalidates the texture
-+//   before queue.submit(). When a new surface attaches, the latest offscreen
-+//   frame is blitted onto it so content appears without waiting for the next
-+//   render — the same mechanism that gives a fast time-to-first-frame when
-+//   rendering starts before the native surface exists.
- class SurfaceInfo {
- public:
-   SurfaceInfo(wgpu::Instance gpu, int width, int height)
-@@ -168,12 +217,16 @@
-     _surfaceDevice = nullptr;
- #endif
-     _pendingSurface = nullptr;
-+    _retiredSurface = nullptr;
-     _texture = nullptr;
-     if (_pendingReleaser && _pendingNativeSurface) {
-       _pendingReleaser(_pendingNativeSurface);
-     }
-     if (_releaser && _nativeSurface) {
-       _releaser(_nativeSurface);
-+    }
-+    if (_retiredReleaser && _retiredNativeSurface) {
-+      _retiredReleaser(_retiredNativeSurface);
-     }
-   }
- 
-@@ -236,6 +289,22 @@
+ // - Detaching (switchToOffscreen) is IMMEDIATE, because the platform destroys
+ //   the surface as soon as its callback returns. A configured context falls
+ //   back to rendering into an offscreen texture, so a running render loop
+@@ -236,6 +284,22 @@
    // block adoption. The flush path (other threads) leaves it false so it never
    // swaps the surface under a frame that is genuinely in flight.
    void applyPendingAttach(bool supersedeInFlightFrame = false) {
@@ -215,11 +205,10 @@ diff --git a/cpp/rnwgpu/SurfaceRegistry.h b/cpp/rnwgpu/SurfaceRegistry.h
      bool presentBlit = false;
      uint64_t blitEpoch = 0;
      wgpu::Device device = nullptr;
-@@ -317,6 +386,17 @@
- 
+@@ -317,6 +381,16 @@
+
    void configure(wgpu::SurfaceConfiguration &newConfig,
                   std::vector<wgpu::TextureFormat> viewFormats) {
-+    releaseRetiredSurface();
 +#ifdef __APPLE__
 +    if (pthread_main_np() == 0) {
 +      auto config = newConfig;
@@ -233,8 +222,8 @@ diff --git a/cpp/rnwgpu/SurfaceRegistry.h b/cpp/rnwgpu/SurfaceRegistry.h
      applyPendingAttach(/* supersedeInFlightFrame = */ true);
      std::unique_lock<std::shared_mutex> lock(_mutex);
      _viewFormats = std::move(viewFormats);
-@@ -351,6 +431,13 @@
- 
+@@ -351,6 +425,13 @@
+
    // Resize the drawing buffer (canvas.width/height changed).
    void reconfigure(int newWidth, int newHeight) {
 +#ifdef __APPLE__
@@ -247,11 +236,10 @@ diff --git a/cpp/rnwgpu/SurfaceRegistry.h b/cpp/rnwgpu/SurfaceRegistry.h
      std::unique_lock<std::shared_mutex> lock(_mutex);
      if (_config.device == nullptr) {
        return;
-@@ -363,6 +450,13 @@
+@@ -363,6 +444,12 @@
    }
- 
+
    void unconfigure() {
-+    releaseRetiredSurface();
 +#ifdef __APPLE__
 +    if (pthread_main_np() == 0) {
 +      RunOnMainThreadSync([this]() { unconfigure(); });
@@ -261,25 +249,7 @@ diff --git a/cpp/rnwgpu/SurfaceRegistry.h b/cpp/rnwgpu/SurfaceRegistry.h
      std::unique_lock<std::shared_mutex> lock(_mutex);
      if (_surface) {
        _surface.Unconfigure();
-@@ -441,7 +535,8 @@
-       return true;
-     }
- #endif
--    return _nativeSurface != nullptr || _hasPendingAttach;
-+    return _nativeSurface != nullptr || _hasPendingAttach ||
-+           _retiredNativeSurface != nullptr;
-   }
- 
-   // Returns the texture for the current frame: the surface's swapchain texture
-@@ -452,6 +547,7 @@
-   wgpu::Texture getCurrentTexture(uint64_t *frameEpoch = nullptr) {
-     // Start-of-frame boundary; a new acquire supersedes any previous frame
-     // that never presented.
-+    releaseRetiredSurface();
-     applyPendingAttach(/* supersedeInFlightFrame = */ true);
- #if defined(__ANDROID__)
-     if (_poolMode.load()) {
-@@ -484,32 +580,57 @@
+@@ -484,32 +571,57 @@
        // not shown.
      }
  #endif
@@ -361,31 +331,11 @@ diff --git a/cpp/rnwgpu/SurfaceRegistry.h b/cpp/rnwgpu/SurfaceRegistry.h
 +    }
 +    throw std::runtime_error("[WebGPU] surface recovery failed");
    }
- 
+
    // True while the frame started by the getCurrentTexture() call that
-@@ -549,6 +670,8 @@
-       dawn::native::metal::WaitForCommandsToBeScheduled(device.Get());
-     }
+@@ -694,6 +806,21 @@
  #endif
-+    void *retiredNativeSurface = nullptr;
-+    NativeSurfaceReleaser retiredReleaser;
-     {
-       std::unique_lock<std::shared_mutex> lock(_mutex);
-       if (_surface && _acquiredFromSurface) {
-@@ -557,6 +680,10 @@
-       _acquiredFromSurface = false;
-       _frameInFlight = false;
-       _frameEpoch++;
-+      takeRetiredSurfaceLocked(retiredNativeSurface, retiredReleaser);
-+    }
-+    if (retiredReleaser && retiredNativeSurface) {
-+      retiredReleaser(retiredNativeSurface);
-     }
-     applyPendingAttach();
-   }
-@@ -694,9 +821,48 @@
- #endif
- 
+
  private:
 +#ifdef __APPLE__
 +  void reconfigureAfterAcquireFailure(uint64_t expectedEpoch) {
@@ -402,83 +352,11 @@ diff --git a/cpp/rnwgpu/SurfaceRegistry.h b/cpp/rnwgpu/SurfaceRegistry.h
 +  }
 +#endif
 +
-+  // A native detach can race the synchronous JS frame sequence between
-+  // getCurrentTexture() and queue.submit(). Keep that frame's Dawn surface and
-+  // native window alive until submit has completed and present() reaches the
-+  // next frame boundary. A second acquire also supersedes and releases it.
-+  void releaseRetiredSurface() {
-+    void *retiredNativeSurface = nullptr;
-+    NativeSurfaceReleaser retiredReleaser;
-+    {
-+      std::unique_lock<std::shared_mutex> lock(_mutex);
-+      takeRetiredSurfaceLocked(retiredNativeSurface, retiredReleaser);
-+    }
-+    if (retiredReleaser && retiredNativeSurface) {
-+      retiredReleaser(retiredNativeSurface);
-+    }
-+  }
-+
-+  void takeRetiredSurfaceLocked(void *&nativeSurface,
-+                                NativeSurfaceReleaser &releaser) {
-+    _retiredSurface = nullptr;
-+    nativeSurface = _retiredNativeSurface;
-+    releaser = std::move(_retiredReleaser);
-+    _retiredNativeSurface = nullptr;
-+  }
-+
    void detach(bool createFallbackTexture) {
--    void *releasedSurfaces[2] = {nullptr, nullptr};
--    NativeSurfaceReleaser releasers[2];
-+    void *releasedSurfaces[3] = {nullptr, nullptr, nullptr};
-+    NativeSurfaceReleaser releasers[3];
- #if defined(__ANDROID__)
-     // Destroyed outside the lock: it releases a JNI reference.
-     std::function<void()> releasedFrameReady;
-@@ -742,11 +908,23 @@
-         releasers[0] = std::move(_pendingReleaser);
-         _pendingNativeSurface = nullptr;
-       }
-+      takeRetiredSurfaceLocked(releasedSurfaces[1], releasers[1]);
-       if (_surface) {
-         if (createFallbackTexture && _config.device != nullptr) {
-           _texture = createOffscreenTextureLocked();
-         }
--        _surface = nullptr;
-+#ifdef __APPLE__
-+        if (_frameInFlight && _acquiredFromSurface) {
-+          _retiredSurface = std::move(_surface);
-+          _retiredNativeSurface = _nativeSurface;
-+          _retiredReleaser = std::move(_releaser);
-+        } else
-+#endif
-+        {
-+          _surface = nullptr;
-+          releasedSurfaces[2] = _nativeSurface;
-+          releasers[2] = std::move(_releaser);
-+        }
- #if defined(__ANDROID__)
-         // DAWN_WORKAROUND_DEVICE_DESTROY_BEFORE_SURFACE_RELEASE
-         _surfaceDevice = nullptr;
-@@ -758,12 +936,14 @@
-       _frameEpoch++;
-       // Window ownership is independent of the Dawn surface handle (which can
-       // be null if surface creation failed): always return the window.
--      releasedSurfaces[1] = _nativeSurface;
--      releasers[1] = std::move(_releaser);
-+      if (_nativeSurface && !_retiredNativeSurface && !releasedSurfaces[2]) {
-+        releasedSurfaces[2] = _nativeSurface;
-+        releasers[2] = std::move(_releaser);
-+      }
-       _nativeSurface = nullptr;
-     }
-     // Release outside the lock: the platform may do real work here.
--    for (int i = 0; i < 2; i++) {
-+    for (int i = 0; i < 3; i++) {
-       if (releasers[i] && releasedSurfaces[i]) {
-         releasers[i](releasedSurfaces[i]);
-       }
-@@ -791,26 +971,28 @@
- 
+     void *releasedSurfaces[2] = {nullptr, nullptr};
+     NativeSurfaceReleaser releasers[2];
+@@ -791,26 +918,28 @@
+
    // Acquire the surface's current texture, reconfiguring once when the surface
    // reports it is stale (rotation, resize, coming back from background).
 -  wgpu::Texture acquireSurfaceTextureLocked() {
@@ -519,55 +397,6 @@ diff --git a/cpp/rnwgpu/SurfaceRegistry.h b/cpp/rnwgpu/SurfaceRegistry.h
 +    }
 +    return {.texture = surfaceTexture.texture, .needsReconfigure = false};
    }
- 
+
    static bool isAcquireSuccess(const wgpu::SurfaceTexture &surfaceTexture) {
-@@ -1201,6 +1383,11 @@
-   void *_nativeSurface = nullptr;
-   wgpu::Surface _surface = nullptr;
-   NativeSurfaceReleaser _releaser;
-+  // A detached surface retained until the frame that acquired from it has
-+  // submitted, or until a new frame supersedes that unfinished frame.
-+  void *_retiredNativeSurface = nullptr;
-+  wgpu::Surface _retiredSurface = nullptr;
-+  NativeSurfaceReleaser _retiredReleaser;
-   // Offscreen fallback drawing buffer.
-   wgpu::Texture _texture = nullptr;
-   // Surface attached by the UI thread, awaiting adoption at a frame boundary.
-diff --git a/cpp/rnwgpu/api/GPUCanvasContext.cpp b/cpp/rnwgpu/api/GPUCanvasContext.cpp
---- a/cpp/rnwgpu/api/GPUCanvasContext.cpp
-+++ b/cpp/rnwgpu/api/GPUCanvasContext.cpp
-@@ -32,7 +32,15 @@
-   _surfaceInfo->configure(surfaceConfiguration, std::move(viewFormats));
- }
- 
--void GPUCanvasContext::unconfigure() { _surfaceInfo->unconfigure(); }
-+void GPUCanvasContext::unconfigure() {
-+  _surfaceInfo->unconfigure();
-+  // Retiring the drawing buffer must also retire the wrapper cached by this
-+  // context. Otherwise an unmounted JS context pins its last native image
-+  // until both JS runtimes collect their wrappers.
-+  std::lock_guard<std::mutex> lock(_currentTextureMutex);
-+  _currentTexture.reset();
-+  _currentTextureEpoch = 0;
-+}
- 
- std::shared_ptr<GPUTexture> GPUCanvasContext::getCurrentTexture() {
-   if (!_surfaceInfo->isConfigured()) {
-diff --git a/cpp/rnwgpu/api/GPUDevice.cpp b/cpp/rnwgpu/api/GPUDevice.cpp
---- a/cpp/rnwgpu/api/GPUDevice.cpp
-+++ b/cpp/rnwgpu/api/GPUDevice.cpp
-@@ -694,10 +694,10 @@
-     return;
-   }
- 
--  auto runtime = getCreationRuntime();
--  if (runtime == nullptr) {
--    return;
--  }
-+  // The device's event callbacks belong to its original RuntimeContext.
-+  // Unboxing temporarily changes NativeObject's runtime pointer before
-+  // restoring it. Error delivery can race that window; the context is stable.
-+  auto runtime = &_async->runtime();
- 
-   // Create the appropriate error object based on type
-   GPUErrorVariant error;
+```
