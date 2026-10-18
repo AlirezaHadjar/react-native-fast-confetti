@@ -22,8 +22,14 @@ import {
   UNIFORM_FLOAT_OFFSETS,
   UNIFORMS_BYTES,
   VERTS_PER_FLAKE,
-  createConfettiPipelines,
-} from './shaders/confetti';
+  confettiLayouts,
+  confettiProgram,
+} from './compiledShaders';
+import {
+  getComputePipeline,
+  getRenderPipeline,
+  packStruct,
+} from './gpuProgram';
 import {
   CYCLE_COMPLETIONS,
   CYCLE_ELAPSED,
@@ -192,7 +198,7 @@ const initializeParticles = (
     initialization.seed
   );
 
-  resources.initUniforms.write({
+  const initUniforms = packStruct(confettiLayouts.initUniforms, {
     viewportAndLayout: [
       state.viewportWidth,
       state.viewportHeight,
@@ -245,6 +251,7 @@ const initializeParticles = (
     ],
     phasePermutation: [phasePermutation.stride, phasePermutation.offset, 0, 0],
   });
+  state.queue.writeBuffer(resources.initUniforms, 0, initUniforms);
 
   const encoder = state.device.createCommandEncoder();
   recordFallingInitialization(encoder, state);
@@ -380,7 +387,7 @@ const GPUConfettiRenderer = ({
       currentFrame &&
       frameRegistration?.rawFrameState === currentFrame &&
       frameRegistration.config === frameConfig &&
-      currentFrame.uniformBuffer === resources.uniforms.buffer.buffer
+      currentFrame.uniformBuffer === resources.uniforms
     ) {
       return;
     }
@@ -394,32 +401,43 @@ const GPUConfettiRenderer = ({
     scheduleOnGPUFrameRuntime(resetClock);
     let cancelled = false;
     void withExclusiveGPUAccess<RawFrameState>(() => {
-      const {
-        initPipeline,
-        runtimeInitPipeline,
-        computePipeline,
-        renderPipeline,
-        textureRenderPipeline,
-      } = createConfettiPipelines(
-        resources.root,
-        presentationFormat,
-        resources.canUseTextureOnlyPipeline
-      );
       const nextState: RawFrameState = {
         device,
         queue: resources.queue,
         context,
-        uniformBuffer: resources.uniforms.buffer.buffer,
-        initPipeline: resources.root.unwrap(initPipeline),
-        runtimeInitPipeline: resources.root.unwrap(runtimeInitPipeline),
-        computePipeline: resources.root.unwrap(computePipeline),
-        renderPipeline: resources.root.unwrap(renderPipeline),
-        textureRenderPipeline: textureRenderPipeline
-          ? resources.root.unwrap(textureRenderPipeline)
+        uniformBuffer: resources.uniforms,
+        initPipeline: getComputePipeline(
+          device,
+          confettiProgram,
+          'initPipeline'
+        ),
+        runtimeInitPipeline: getComputePipeline(
+          device,
+          confettiProgram,
+          'runtimeInitPipeline'
+        ),
+        computePipeline: getComputePipeline(
+          device,
+          confettiProgram,
+          'computePipeline'
+        ),
+        renderPipeline: getRenderPipeline(
+          device,
+          confettiProgram,
+          'renderPipeline',
+          presentationFormat
+        ),
+        textureRenderPipeline: resources.canUseTextureOnlyPipeline
+          ? getRenderPipeline(
+              device,
+              confettiProgram,
+              'textureRenderPipeline',
+              presentationFormat
+            )
           : null,
-        computeBindGroup: resources.root.unwrap(resources.computeBindGroup),
-        initBindGroup: resources.root.unwrap(resources.initBindGroup),
-        renderBindGroup: resources.root.unwrap(resources.renderBindGroup),
+        computeBindGroup: resources.computeBindGroup,
+        initBindGroup: resources.initBindGroup,
+        renderBindGroup: resources.renderBindGroup,
         workgroupCount: Math.ceil(count / 64),
         count,
         focalLength: Math.max(100, viewportHeight * DEFAULT_FOCAL_LENGTH_RATIO),
@@ -491,7 +509,7 @@ const GPUConfettiRenderer = ({
     rawFrameState &&
     resources.config === resourceConfig &&
     frameRegistration?.config === frameConfig &&
-    rawFrameState.uniformBuffer === resources.uniforms.buffer.buffer
+    rawFrameState.uniformBuffer === resources.uniforms
       ? rawFrameState
       : null;
 

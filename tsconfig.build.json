@@ -5,6 +5,8 @@
     "kitchen-sink",
     "lib",
     "src/__fixtures__",
-    "src/__tests__"
+    "src/__tests__",
+    "scripts",
+    "shaders"
   ]
 }

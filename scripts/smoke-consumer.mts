@@ -17,6 +17,26 @@ type Manifest = {
   peerDependenciesMeta?: Record<string, { optional?: boolean }>;
 };
 
+const SCENARIOS = {
+  'skia-only': {
+    entry: 'react-native-fast-confetti',
+    extraDependencies: [] as string[],
+  },
+  'gpu': {
+    entry: 'react-native-fast-confetti/gpu',
+    extraDependencies: ['react-native-webgpu'],
+  },
+};
+const BUILD_TIME_ONLY = ['typegpu', 'unplugin-typegpu'];
+
+const scenarioName = process.argv[2] as keyof typeof SCENARIOS;
+const scenario = SCENARIOS[scenarioName];
+if (!scenario) {
+  throw new Error(
+    `Usage: smoke-consumer.mts <${Object.keys(SCENARIOS).join('|')}>`
+  );
+}
+
 const root = resolve(import.meta.dirname, '..');
 const readManifest = (path: string): Manifest =>
   JSON.parse(readFileSync(join(root, path), 'utf8'));
@@ -33,7 +53,7 @@ if (!expoVersion) throw new Error('expo is missing from example/package.json');
 const expoMajor = expoVersion.replace(/^\D*/, '').split('.')[0];
 
 // Outside the repository, so nothing resolves from the monorepo's node_modules.
-const appDir = mkdtempSync(join(tmpdir(), 'skia-only-consumer-'));
+const appDir = mkdtempSync(join(tmpdir(), `${scenarioName}-consumer-`));
 const run = (command: string, args: string[], cwd = appDir) =>
   execFileSync(command, args, { cwd, stdio: 'inherit' });
 
@@ -46,7 +66,7 @@ try {
     join(appDir, 'package.json'),
     JSON.stringify(
       {
-        name: 'skia-only-consumer',
+        name: `${scenarioName}-consumer`,
         private: true,
         main: 'index.js',
         dependencies: {
@@ -58,6 +78,9 @@ try {
           'react-native-reanimated': devVersion('react-native-reanimated'),
           'react-native-skia': devVersion('react-native-skia'),
           'react-native-worklets': devVersion('react-native-worklets'),
+          ...Object.fromEntries(
+            scenario.extraDependencies.map((name) => [name, devVersion(name)])
+          ),
         },
       },
       null,
@@ -67,7 +90,10 @@ try {
   writeFileSync(
     join(appDir, 'app.json'),
     JSON.stringify({
-      expo: { name: 'skia-only-consumer', slug: 'skia-only-consumer' },
+      expo: {
+        name: `${scenarioName}-consumer`,
+        slug: `${scenarioName}-consumer`,
+      },
     })
   );
   writeFileSync(
@@ -84,7 +110,7 @@ try {
   writeFileSync(
     join(appDir, 'index.js'),
     `import { registerRootComponent } from 'expo';
-import { Confetti } from 'react-native-fast-confetti';
+import { Confetti } from '${scenario.entry}';
 
 registerRootComponent(() => <Confetti autoplay />);
 `
@@ -92,14 +118,16 @@ registerRootComponent(() => <Confetti autoplay />);
 
   run('npm', ['install', '--no-audit', '--no-fund']);
 
-  const optionalPeers = Object.entries(library.peerDependenciesMeta ?? {})
+  const absent = Object.entries(library.peerDependenciesMeta ?? {})
     .filter(([, meta]) => meta.optional)
-    .map(([name]) => name);
-  const installed = optionalPeers.filter((name) =>
+    .map(([name]) => name)
+    .filter((name) => !scenario.extraDependencies.includes(name))
+    .concat(BUILD_TIME_ONLY);
+  const installed = absent.filter((name) =>
     existsSync(join(appDir, 'node_modules', name))
   );
   if (installed.length > 0) {
-    throw new Error(`Optional peers were installed: ${installed.join(', ')}`);
+    throw new Error(`Unexpectedly installed: ${installed.join(', ')}`);
   }
 
   for (const platform of ['ios', 'android']) {
@@ -119,7 +147,7 @@ registerRootComponent(() => <Confetti autoplay />);
     ]);
   }
   console.log(
-    `Skia-only smoke test passed: the default entry bundles for iOS and Android without ${optionalPeers.join(', ')}.`
+    `${scenarioName} smoke test passed: ${scenario.entry} bundles for iOS and Android without ${absent.join(', ')}.`
   );
 } finally {
   rmSync(appDir, { recursive: true, force: true });

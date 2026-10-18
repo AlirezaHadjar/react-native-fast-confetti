@@ -41,9 +41,9 @@ Confetti animations for React Native with Skia and an optional WebGPU renderer.
 
 v3 requires React Native `>=0.86 <0.89`, React `>=19`, Skia `>=3.4 <4`,
 Reanimated `>=4.7.1 <5`, and Worklets `>=0.13 <1`.
-WebGPU and TypeGPU are optional dependencies. You do not need to install either
-for the default Skia renderer. Install them only to use the `/gpu` entry point;
-Skia remains required for texture and shape preparation in both renderers.
+WebGPU is an optional dependency. You do not need to install it for the default
+Skia renderer. Install it only to use the `/gpu` entry point; Skia remains
+required for texture and shape preparation in both renderers.
 Skia v3 uses Graphite on native platforms and requires Android API 26 with
 Vulkan, or iOS 15.1+. Use a development build with Expo. Replace
 `@shopify/react-native-skia` with `react-native-skia`; installing both creates
@@ -78,7 +78,7 @@ npx expo install expo-build-properties babel-preset-expo
 In bare React Native apps, set Android `minSdkVersion` to at least 26 and the
 iOS deployment target to at least 15.1, then run `pod install` after upgrading.
 For either renderer, configure `react-native-worklets/plugin` last in Babel
-and rebuild the native app. For an Expo app using the default Skia renderer:
+and rebuild the native app. Both renderers use the same configuration in Expo:
 
 ```js
 module.exports = function (api) {
@@ -90,16 +90,14 @@ module.exports = function (api) {
 };
 ```
 
-The optional renderer needs the extra plugins below.
-
 ### Optional WebGPU renderer
 
-For GPU-resident physics and rendering, install the optional peers and use the
-separate entry point:
+For GPU-resident physics and rendering, install the optional WebGPU peer and
+use the separate entry point. The shaders ship precompiled, so no other GPU
+dependency or Babel plugin is needed:
 
 ```sh
-yarn add react-native-webgpu@0.16.1 typegpu@0.11.8
-yarn add --dev unplugin-typegpu@0.11.5 @babel/plugin-transform-class-static-block
+yarn add react-native-webgpu@0.16.1
 ```
 
 ```tsx
@@ -123,17 +121,6 @@ API 26 or newer:
     ]
   }
 }
-```
-
-The app Babel configuration must include the TypeGPU transform before the
-Worklets plugin:
-
-```js
-plugins: [
-  'unplugin-typegpu/babel',
-  '@babel/plugin-transform-class-static-block',
-  'react-native-worklets/plugin',
-];
 ```
 
 The WebGPU entry exports `Confetti`, `ContinuousConfetti`, `PIConfetti`, and
@@ -605,9 +592,8 @@ Define flake sizes as children of any confetti component (or origin).
 | `0.2.0` - `0.7.0` | `0.74.5`                 | `1.4.2`          | `3.15.5`               | Not required directly     | Not supported       | React Native `>=0.74`, React `18.x`, Skia `>=1.4.2`, Reanimated `>=3.15.5`                           |
 
 WebGPU is optional in v3 and was not available in earlier confetti releases.
-The tested `/gpu` stack uses `react-native-webgpu 0.16.1` with `typegpu 0.11.8`.
-Its peer ranges are WebGPU `>=0.16.1 <1` and TypeGPU `>=0.11.8 <0.13`.
-Skia-only apps do not need either dependency or the TypeGPU Babel plugins.
+The tested `/gpu` stack uses `react-native-webgpu 0.16.1`, with the peer range
+`>=0.16.1 <1`. Skia-only apps do not need it.
 When enabling WebGPU, keep its Dawn version matched with Skia's.
 
 For exact app support, check the compatibility pages for the installed versions of Reanimated and Worklets. For Skia, follow the official installation requirements: current Skia versions require React Native `>=0.79` and React `>=19`; React Native `<=0.78` / React `<=18` projects should use Skia `1.12.4` or below.

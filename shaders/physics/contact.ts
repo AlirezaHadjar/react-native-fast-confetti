@@ -6,7 +6,7 @@ import {
   FLOOR_SLEEP_ANGULAR_SPEED,
   FLOOR_SLEEP_LINEAR_SPEED,
   FLOOR_SLEEP_STABLE_SECONDS,
-} from '../../constants';
+} from '../../src/webgpu/constants';
 
 const FloorContactResultSchema = d.struct({
   velocity: d.vec3f,

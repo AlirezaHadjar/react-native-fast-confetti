@@ -31,8 +31,15 @@ import {
   BURST_UNIFORMS_BYTES,
   BURST_VERTS_PER_FLAKE,
   BURST_INIT_GENERATION_BYTE_OFFSET,
-  createBurstConfettiPipelines,
-} from './shaders/burstConfetti';
+  burstLayouts,
+  burstProgram,
+} from './compiledShaders';
+import {
+  getComputePipeline,
+  getRenderPipeline,
+  packArray,
+  packStruct,
+} from './gpuProgram';
 import {
   useDedicatedGPUFrame,
   type DedicatedGPUFrameState,
@@ -161,9 +168,13 @@ const initializeParticles = (
   initialization: GPUBurstInitialization
 ) => {
   if (initialization.origins.length > 0) {
-    resources.originsBuffer.write(initialization.origins);
+    state.queue.writeBuffer(
+      resources.originsBuffer,
+      0,
+      packArray(burstLayouts.origins, initialization.origins)
+    );
   }
-  resources.initUniforms.write({
+  const initUniforms = packStruct(burstLayouts.initUniforms, {
     counts: [
       initialization.seed >>> 0,
       initialization.layoutCount,
@@ -177,6 +188,7 @@ const initializeParticles = (
       initialization.flightDurationSeconds,
     ],
   });
+  state.queue.writeBuffer(resources.initUniforms, 0, initUniforms);
 
   const encoder = state.device.createCommandEncoder();
   const pass = encoder.beginComputePass();
@@ -332,7 +344,7 @@ const GPUBurstConfettiRenderer = ({
       currentFrame &&
       frameRegistration?.rawFrameState === currentFrame &&
       frameRegistration.config === frameConfig &&
-      currentFrame.uniformBuffer === resources.uniforms.buffer.buffer
+      currentFrame.uniformBuffer === resources.uniforms
     ) {
       return;
     }
@@ -345,24 +357,29 @@ const GPUBurstConfettiRenderer = ({
     const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
     let cancelled = false;
     void withExclusiveGPUAccess<RawFrameState>(() => {
-      const { initPipeline, transformPipeline, renderPipeline } =
-        createBurstConfettiPipelines(
-          resources.root,
-          presentationFormat,
-          resources.canUseTextureOnlyPipeline
-        );
       const nextState: RawFrameState = {
         device,
         queue: resources.queue,
         context,
-        uniformBuffer: resources.uniforms.buffer.buffer,
-        initUniformBuffer: resources.initUniforms.buffer.buffer,
-        initPipeline: resources.root.unwrap(initPipeline),
-        transformPipeline: resources.root.unwrap(transformPipeline),
-        renderPipeline: resources.root.unwrap(renderPipeline),
-        initBindGroup: resources.root.unwrap(resources.initBindGroup),
-        transformBindGroup: resources.root.unwrap(resources.transformBindGroup),
-        renderBindGroup: resources.root.unwrap(resources.renderBindGroup),
+        uniformBuffer: resources.uniforms,
+        initUniformBuffer: resources.initUniforms,
+        initPipeline: getComputePipeline(device, burstProgram, 'initPipeline'),
+        transformPipeline: getComputePipeline(
+          device,
+          burstProgram,
+          'transformPipeline'
+        ),
+        renderPipeline: getRenderPipeline(
+          device,
+          burstProgram,
+          resources.canUseTextureOnlyPipeline
+            ? 'textureRenderPipeline'
+            : 'renderPipeline',
+          presentationFormat
+        ),
+        initBindGroup: resources.initBindGroup,
+        transformBindGroup: resources.transformBindGroup,
+        renderBindGroup: resources.renderBindGroup,
         workgroupCount: Math.ceil(count / 64),
         count,
         viewportWidth,
@@ -432,7 +449,7 @@ const GPUBurstConfettiRenderer = ({
     rawFrameState &&
     resources.config === resourceConfig &&
     frameRegistration?.config === frameConfig &&
-    rawFrameState.uniformBuffer === resources.uniforms.buffer.buffer
+    rawFrameState.uniformBuffer === resources.uniforms
       ? rawFrameState
       : null;
 

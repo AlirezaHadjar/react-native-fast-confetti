@@ -35,14 +35,11 @@
     "react-native-skia": "3.4.0",
     "react-native-web": "^0.21.4",
     "react-native-webgpu": "0.16.1",
-    "react-native-worklets": "0.13.0",
-    "typegpu": "0.11.8"
+    "react-native-worklets": "0.13.0"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
-    "@babel/plugin-transform-class-static-block": "^7.29.7",
-    "react-native-builder-bob": "^0.40.9",
-    "unplugin-typegpu": "0.11.5"
+    "react-native-builder-bob": "^0.40.9"
   },
   "reanimated": {
     "staticFeatureFlags": {

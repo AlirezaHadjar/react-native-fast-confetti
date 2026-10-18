@@ -24,7 +24,7 @@ import {
   BurstParticleSchema,
   BurstSizeSchema,
   BurstUniformsSchema,
-} from '../webgpu/shaders/burstConfetti';
+} from '../../shaders/burstConfetti';
 import {
   estimateCannonDuration,
   estimatePIDuration,

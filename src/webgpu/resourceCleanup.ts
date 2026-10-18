@@ -7,7 +7,6 @@ type Destroyable = {
 type GPUResourceSet = {
   buffers: readonly Destroyable[];
   textures: readonly Destroyable[];
-  root?: Destroyable;
 };
 
 export type GPUFrameRetirement = {
@@ -28,16 +27,9 @@ const destroyAll = (resources: readonly Destroyable[]) => {
 export const destroyGPUResourceSet = ({
   buffers,
   textures,
-  root,
 }: GPUResourceSet) => {
   destroyAll(buffers);
   destroyAll(textures);
-  if (!root) return;
-  try {
-    root.destroy();
-  } catch {
-    // TypeGPU can observe the device becoming lost during native teardown.
-  }
 };
 
 export const createGPUFrameRetirement = (): GPUFrameRetirement => {

@@ -11,19 +11,11 @@ import {
   toSizeInputs,
 } from '../resourcePacking';
 import {
-  InitSizeArraySchema,
-  InitUniformsSchema,
-  PaletteArraySchema,
-  SizeArraySchema,
-  UniformsSchema,
-  computeLayout,
-  initLayout,
-  renderLayout,
-} from '../shaders/confetti';
-import {
-  ParticleRuntimeArraySchema,
-  ParticleSpawnArraySchema,
-} from '../shaders/physics/state';
+  BUFFER_USAGE,
+  confettiLayouts,
+  confettiProgram,
+} from '../compiledShaders';
+import { createBindGroup, createGPUBuffer, packArray } from '../gpuProgram';
 import { destroyGPUResourceSet } from '../resourceCleanup';
 import {
   createFlakeTexturesArray,
@@ -33,7 +25,6 @@ import {
   prepareShapeMasksArray,
 } from '../textureResources';
 import { toPaletteInputs } from './palette';
-import { getSharedTypeGPURoot } from '../sharedTypeGPURoot';
 import { withExclusiveGPUAccess } from '../gpuRuntimeOwnership';
 
 export type ConfettiResourceConfig = {
@@ -68,41 +59,58 @@ const allocateConfettiResources = async (
   // The transaction below owns every allocation until the complete resource
   // set is returned, so a failed upload cannot leak a partial atlas.
   return withExclusiveGPUAccess(() => {
-    const root = getSharedTypeGPURoot(device);
     const queue = device.queue;
-    const rawBuffers: { destroy: () => void }[] = [];
+    const rawBuffers: GPUBuffer[] = [];
     const rawTextures: GPUTexture[] = [];
+    const buffer = (usage: number, size: number, data?: ArrayBuffer) => {
+      const created = createGPUBuffer(device, usage, size, data);
+      rawBuffers.push(created);
+      return created;
+    };
     try {
-      const uniforms = root.createUniform(UniformsSchema);
-      rawBuffers.push(uniforms.buffer);
-      const initUniforms = root.createUniform(InitUniformsSchema);
-      rawBuffers.push(initUniforms.buffer);
-      const spawnsBuffer = root.createMutable(ParticleSpawnArraySchema(count));
-      rawBuffers.push(spawnsBuffer.buffer);
-      const runtimeBuffer = root.createMutable(
-        ParticleRuntimeArraySchema(count)
+      const uniforms = buffer(
+        BUFFER_USAGE.uniform,
+        confettiLayouts.uniforms.size
       );
-      rawBuffers.push(runtimeBuffer.buffer);
-      const sizesBuffer = root.createReadonly(
-        SizeArraySchema(sizeVariations.length),
-        toSizeInputs(sizeVariations, sizeFlags)
+      const initUniforms = buffer(
+        BUFFER_USAGE.uniform,
+        confettiLayouts.initUniforms.size
       );
-      rawBuffers.push(sizesBuffer.buffer);
-      const initSizesBuffer = root.createReadonly(
-        InitSizeArraySchema(sizeVariations.length),
-        toInitSizeInputs(
-          sizeVariations,
-          sizeFlags,
-          colorOverrides,
-          parentColorCount
+      const spawnsBuffer = buffer(
+        BUFFER_USAGE.storage,
+        confettiLayouts.spawns.stride * count
+      );
+      const runtimeBuffer = buffer(
+        BUFFER_USAGE.storage,
+        confettiLayouts.runtime.stride * count
+      );
+      const sizesBuffer = buffer(
+        BUFFER_USAGE.storage,
+        confettiLayouts.sizes.stride * sizeVariations.length,
+        packArray(
+          confettiLayouts.sizes,
+          toSizeInputs(sizeVariations, sizeFlags)
         )
       );
-      rawBuffers.push(initSizesBuffer.buffer);
-      const paletteBuffer = root.createReadonly(
-        PaletteArraySchema(Math.max(1, allColors.length)),
-        toPaletteInputs(allColors)
+      const initSizesBuffer = buffer(
+        BUFFER_USAGE.storage,
+        confettiLayouts.initSizes.stride * sizeVariations.length,
+        packArray(
+          confettiLayouts.initSizes,
+          toInitSizeInputs(
+            sizeVariations,
+            sizeFlags,
+            colorOverrides,
+            parentColorCount
+          )
+        )
       );
-      rawBuffers.push(paletteBuffer.buffer);
+      const paletteColors = toPaletteInputs(allColors);
+      const paletteBuffer = buffer(
+        BUFFER_USAGE.storage,
+        confettiLayouts.palette.stride * paletteColors.length,
+        packArray(confettiLayouts.palette, paletteColors)
+      );
       const shapeMasksArray = createShapeMasksArray(
         device,
         queue,
@@ -117,33 +125,46 @@ const allocateConfettiResources = async (
       rawTextures.push(texturesArray);
       const sampler = getLinearClampSampler(device);
 
-      const initBindGroup = root.createBindGroup(initLayout, {
-        uniforms: initUniforms.buffer,
-        spawns: spawnsBuffer.buffer,
-        runtime: runtimeBuffer.buffer,
-        sizes: initSizesBuffer.buffer,
-      });
-
-      const computeBindGroup = root.createBindGroup(computeLayout, {
-        uniforms: uniforms.buffer,
-        spawns: spawnsBuffer.buffer,
-        runtime: runtimeBuffer.buffer,
-        sizes: sizesBuffer.buffer,
-      });
-      const renderBindGroup = root.createBindGroup(renderLayout, {
-        uniforms: uniforms.buffer,
-        spawns: spawnsBuffer.buffer,
-        runtime: runtimeBuffer.buffer,
-        sizes: sizesBuffer.buffer,
-        palette: paletteBuffer.buffer,
-        sampler,
-        textures: texturesArray.createView({ dimension: '2d-array' }),
-        shapeMasks: shapeMasksArray.createView({ dimension: '2d-array' }),
-      });
+      const initBindGroup = createBindGroup(
+        device,
+        confettiProgram,
+        'initLayout',
+        {
+          uniforms: initUniforms,
+          spawns: spawnsBuffer,
+          runtime: runtimeBuffer,
+          sizes: initSizesBuffer,
+        }
+      );
+      const computeBindGroup = createBindGroup(
+        device,
+        confettiProgram,
+        'computeLayout',
+        {
+          uniforms,
+          spawns: spawnsBuffer,
+          runtime: runtimeBuffer,
+          sizes: sizesBuffer,
+        }
+      );
+      const renderBindGroup = createBindGroup(
+        device,
+        confettiProgram,
+        'renderLayout',
+        {
+          uniforms,
+          spawns: spawnsBuffer,
+          runtime: runtimeBuffer,
+          sizes: sizesBuffer,
+          palette: paletteBuffer,
+          sampler,
+          textures: texturesArray.createView({ dimension: '2d-array' }),
+          shapeMasks: shapeMasksArray.createView({ dimension: '2d-array' }),
+        }
+      );
 
       return {
         config,
-        root,
         device,
         queue,
         uniforms,
@@ -180,13 +201,13 @@ export const destroyConfettiResources = (
   return withExclusiveGPUAccess(() => {
     destroyGPUResourceSet({
       buffers: [
-        resources.uniforms.buffer,
-        resources.initUniforms.buffer,
-        resources.spawnsBuffer.buffer,
-        resources.runtimeBuffer.buffer,
-        resources.sizesBuffer.buffer,
-        resources.initSizesBuffer.buffer,
-        resources.paletteBuffer.buffer,
+        resources.uniforms,
+        resources.initUniforms,
+        resources.spawnsBuffer,
+        resources.runtimeBuffer,
+        resources.sizesBuffer,
+        resources.initSizesBuffer,
+        resources.paletteBuffer,
       ],
       textures: [resources.texturesArray, resources.shapeMasksArray],
     });
@@ -219,13 +240,13 @@ export const createConfettiResources = async (
 
 export const recycleConfettiResources = (resources: ConfettiResources) => {
   const buffers = [
-    resources.uniforms.buffer.buffer,
-    resources.initUniforms.buffer.buffer,
-    resources.spawnsBuffer.buffer.buffer,
-    resources.runtimeBuffer.buffer.buffer,
-    resources.sizesBuffer.buffer.buffer,
-    resources.initSizesBuffer.buffer.buffer,
-    resources.paletteBuffer.buffer.buffer,
+    resources.uniforms,
+    resources.initUniforms,
+    resources.spawnsBuffer,
+    resources.runtimeBuffer,
+    resources.sizesBuffer,
+    resources.initSizesBuffer,
+    resources.paletteBuffer,
   ];
   const textures = [resources.texturesArray, resources.shapeMasksArray];
   const { config, ...gpuResources } = resources;

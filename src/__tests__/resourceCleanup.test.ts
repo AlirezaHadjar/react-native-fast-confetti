@@ -28,10 +28,9 @@ describe('GPU resource cleanup', () => {
     destroyGPUResourceSet({
       buffers: [destroyable('buffer-a', true), destroyable('buffer-b')],
       textures: [destroyable('texture')],
-      root: destroyable('root'),
     });
 
-    expect(calls).toEqual(['buffer-a', 'buffer-b', 'texture', 'root']);
+    expect(calls).toEqual(['buffer-a', 'buffer-b', 'texture']);
   });
 
   it('waits for explicit frame retirement before releasing a lease', async () => {

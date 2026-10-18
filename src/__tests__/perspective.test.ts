@@ -3,7 +3,7 @@ import { describe, expect, it } from '@jest/globals';
 import {
   getParticleNearPlaneDistance,
   isParticleInFrontOfNearPlane,
-} from '../webgpu/perspective';
+} from '../../shaders/perspective';
 
 describe('WebGPU particle near-plane clipping', () => {
   it('derives the near plane from each particle configured depth', () => {

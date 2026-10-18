@@ -7,6 +7,9 @@ pre-commit:
     format:
       glob: '*.{js,ts,jsx,tsx,json,jsonc,yml,yaml,md}'
       run: bunx oxfmt --check {staged_files}
+    shaders:
+      glob: 'shaders/**/*.ts'
+      run: bun scripts/compile-shaders.ts --check
     types:
       glob: '*.{js,ts,jsx,tsx}'
       run: bunx tsc && bunx tsc --project kitchen-sink/tsconfig.json

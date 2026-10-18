@@ -103,9 +103,23 @@ To publish new versions, run the following:
 bun run release
 ```
 
-Publishing first runs `bun run check:optional-peers` and stops if the default
-entry can reach `react-native-webgpu` or `typegpu`. Only `/gpu` may import them;
-Oxlint enforces the same boundary in `src`.
+Publishing stops unless `src/webgpu/compiledShaders.ts` matches `shaders/`,
+every compiled pipeline validates and runs on Dawn, and the packed library
+passes `bun run check:optional-peers`. That check fails if the default entry can
+reach `react-native-webgpu`, if any entry can reach TypeGPU, if TypeGPU appears
+in a dependency field, or if any shipped code file mentions it. Only `/gpu` may
+import `react-native-webgpu`; Oxlint enforces the same boundaries in `src`.
+
+### WebGPU shaders
+
+The WebGPU shaders are written in TypeGPU under `shaders/`. TypeGPU is a
+development dependency only: `bun run compile:shaders` compiles them to WGSL
+and records their bind group layouts, pipelines and buffer layouts in
+`src/webgpu/compiledShaders.ts`, which is the only form the runtime imports.
+Commit the regenerated file with every shader change: the pre-commit hook and
+CI fail when it is out of date. `bun run validate:shaders` compiles, validates
+and runs every pipeline on Dawn, the WebGPU implementation React Native WebGPU
+uses; CI runs it on a software Vulkan driver.
 
 ### Scripts
 
@@ -117,8 +131,11 @@ The `package.json` file contains various scripts for common tasks:
 - `bun run format`: format files with Oxfmt.
 - `bun run format:check`: check formatting.
 - `bun run test`: run unit tests with Jest.
-- `bun run check:optional-peers`: pack the library and fail if the default entry reaches an optional peer.
+- `bun run compile:shaders`: compile `shaders/` to `src/webgpu/compiledShaders.ts` (`--check` verifies it is current).
+- `bun run validate:shaders`: compile, validate and run every compiled pipeline on Dawn.
+- `bun run check:optional-peers`: pack the library and fail if the default entry reaches an optional peer or any shipped file reaches or mentions TypeGPU.
 - `bun run smoke:skia-only`: bundle the packed library in a Skia-only Expo app without WebGPU.
+- `bun run smoke:gpu`: bundle the `/gpu` entry in an Expo app with WebGPU but without TypeGPU.
 - `bun run example start`: start the Metro server for the example app.
 - `bun run example android`: run the example app on Android.
 - `bun run example ios`: run the example app on iOS.

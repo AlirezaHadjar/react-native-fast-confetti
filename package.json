@@ -35,13 +35,16 @@
     "typecheck": "tsc",
     "lint": "oxlint .",
     "clean": "del-cli lib",
-    "prepare": "bob build",
+    "prepare": "bun run compile:shaders && bob build",
+    "compile:shaders": "bun scripts/compile-shaders.ts",
+    "validate:shaders": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/validate-shaders.mts",
     "release": "release-it",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "check:optional-peers": "node scripts/check-optional-peers.mts",
-    "smoke:skia-only": "node scripts/smoke-skia-only.mts",
-    "prepublishOnly": "bun run check:optional-peers"
+    "smoke:skia-only": "node scripts/smoke-consumer.mts skia-only",
+    "smoke:gpu": "node scripts/smoke-consumer.mts gpu",
+    "prepublishOnly": "bun run compile:shaders --check && bun run validate:shaders && bun run check:optional-peers"
   },
   "keywords": [
     "react-native",
@@ -68,6 +71,7 @@
     "@react-native/babel-preset": "0.88.0",
     "@react-native/jest-preset": "0.88.0",
     "@release-it/conventional-changelog": "^10.0.6",
+    "@types/bun": "1.3.14",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
     "@types/react": "~19.3.0",
@@ -87,7 +91,8 @@
     "release-it": "^19.2.4",
     "typegpu": "0.11.8",
     "typescript": "npm:tsover@6.0.2",
-    "unplugin-typegpu": "0.11.5"
+    "unplugin-typegpu": "0.11.5",
+    "webgpu": "0.6.2"
   },
   "peerDependencies": {
     "react-native-skia": ">=3.4.0 <4",
@@ -95,14 +100,10 @@
     "react-native": ">=0.86.0 <0.89",
     "react-native-reanimated": ">=4.7.1 <5",
     "react-native-webgpu": ">=0.16.1 <1",
-    "react-native-worklets": ">=0.13.0 <1",
-    "typegpu": ">=0.11.8 <0.13"
+    "react-native-worklets": ">=0.13.0 <1"
   },
   "peerDependenciesMeta": {
     "react-native-webgpu": {
-      "optional": true
-    },
-    "typegpu": {
       "optional": true
     }
   },

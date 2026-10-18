@@ -27,6 +27,9 @@ jobs:
       - name: Typecheck files
         run: bun run typecheck
 
+      - name: Check compiled shaders are committed
+        run: bun run compile:shaders && git diff --exit-code -- src/webgpu/compiledShaders.ts
+
       - name: Typecheck demos
         run: bunx tsc --noEmit --project example/tsconfig.json && bunx tsc --noEmit --project kitchen-sink/tsconfig.json
 
@@ -60,6 +63,21 @@ jobs:
       - name: Check the default entry never imports optional peers
         run: bun run check:optional-peers
 
+  validate-shaders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Install a software Vulkan driver
+        run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
+
+      - name: Compile, validate and run every shader pipeline on Dawn
+        run: bun run validate:shaders
+
   smoke-skia-only:
     runs-on: ubuntu-latest
     steps:
@@ -71,6 +89,18 @@ jobs:
 
       - name: Bundle a Skia-only app without WebGPU
         run: bun run smoke:skia-only
+
+  smoke-gpu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Bundle the /gpu entry without TypeGPU
+        run: bun run smoke:gpu
 
   build-web:
     runs-on: ubuntu-latest

@@ -3,8 +3,8 @@
 ## Upgrade Skia
 
 v3 requires `react-native-skia >=3.4 <4`. WebGPU remains optional: install
-`react-native-webgpu >=0.16.1 <1` and `typegpu >=0.11.8 <0.13` only when using
-the `/gpu` entry point.
+`react-native-webgpu >=0.16.1 <1` only when using the `/gpu` entry point. The
+shaders ship precompiled, so TypeGPU and its Babel plugins are not needed.
 Replace `@shopify/react-native-skia` with `react-native-skia` in dependencies
 and imports. Do not install both names: they provide the same native module.
 If your app also uses WebGPU, upgrade Skia and WebGPU together so their Dawn

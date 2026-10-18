@@ -17,9 +17,18 @@ type ExportConditions = string | { [condition: string]: ExportConditions };
 type PackageJson = {
   exports: Record<string, ExportConditions>;
   peerDependenciesMeta?: Record<string, { optional?: boolean }>;
-};
+} & Partial<Record<(typeof DEPENDENCY_FIELDS)[number], Record<string, string>>>;
+
+const DEPENDENCY_FIELDS = [
+  'dependencies',
+  'peerDependencies',
+  'optionalDependencies',
+] as const;
+const CODE_FILE = /\.(?:[cm]?js|tsx?|map|json)$/;
+const BUILD_TIME_TEXT = /typegpu|__TYPEGPU_|['"]use gpu['"]/i;
 
 const GPU_EXPORTS = new Set(['./gpu']);
+const BUILD_TIME_ONLY = ['typegpu', 'unplugin-typegpu'];
 const RESOLVE_SUFFIXES = [
   '',
   '.js',
@@ -57,10 +66,37 @@ try {
   }
 
   const failures: string[] = [];
+  for (const field of DEPENDENCY_FIELDS) {
+    for (const name of BUILD_TIME_ONLY) {
+      if (pkg[field]?.[name]) {
+        failures.push(`package.json lists build-time-only ${name} in ${field}`);
+      }
+    }
+  }
+  // The manifest is checked field by field above; its devDependencies never install.
+  const manifest = join(pkgDir, 'package.json');
+  const shippedCode = listFiles(pkgDir).filter(
+    (path) => path !== manifest && CODE_FILE.test(path)
+  );
+  for (const file of shippedCode) {
+    const match = readFileSync(file, 'utf8').match(BUILD_TIME_TEXT);
+    if (match) {
+      failures.push(
+        `${relative(pkgDir, file)} ships "${match[0]}": TypeGPU code must be compiled, never published`
+      );
+    }
+  }
   for (const [subpath, conditions] of Object.entries(pkg.exports)) {
     if (subpath === './package.json') continue;
     const reached = runtimeTargets(conditions).flatMap((target) =>
       findOptionalPeerImports(join(pkgDir, target), optionalPeers, pkgDir)
+    );
+    failures.push(
+      ...runtimeTargets(conditions)
+        .flatMap((target) =>
+          findOptionalPeerImports(join(pkgDir, target), BUILD_TIME_ONLY, pkgDir)
+        )
+        .map((hit) => `"${subpath}" reaches build-time-only ${hit}`)
     );
     if (GPU_EXPORTS.has(subpath)) {
       if (reached.length === 0) {
@@ -82,11 +118,18 @@ try {
     process.exitCode = 1;
   } else {
     console.log(
-      `Optional peer check passed for ${filename}: only ${[...GPU_EXPORTS].join(', ')} reach ${optionalPeers.join(', ')}.`
+      `Optional peer check passed for ${filename}: only ${[...GPU_EXPORTS].join(', ')} reach ${optionalPeers.join(', ')}, no entry reaches ${BUILD_TIME_ONLY.join(', ')}, and no shipped file contains TypeGPU code.`
     );
   }
 } finally {
   rmSync(workDir, { recursive: true, force: true });
+}
+
+function listFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    return entry.isDirectory() ? listFiles(path) : [path];
+  });
 }
 
 function runtimeTargets(conditions: ExportConditions): string[] {

@@ -22,13 +22,13 @@ import {
   SizeSchema,
   UNIFORMS_BYTES,
   UniformsSchema,
-} from '../webgpu/shaders/confetti';
+} from '../../shaders/confetti';
 import {
   PARTICLE_RUNTIME_BYTES,
   PARTICLE_SPAWN_BYTES,
   ParticleRuntimeSchema,
   ParticleSpawnSchema,
-} from '../webgpu/shaders/physics/state';
+} from '../../shaders/physics/state';
 import {
   computeSpawnGrid as computeGpuSpawnGrid,
   estimateFallingDuration as estimateGpuFallingDuration,

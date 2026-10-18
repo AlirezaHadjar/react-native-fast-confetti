@@ -22,38 +22,35 @@ import {
   burstConfettiInit,
   burstConfettiTransform,
   burstTextureFragment,
-  createBurstConfettiPipelines,
-} from '../webgpu/shaders/burstConfetti';
+} from '../../shaders/burstConfetti';
 import {
-  createConfettiPipelines,
   confettiInit,
   confettiTextureFragment,
   confettiVertex,
-} from '../webgpu/shaders/confetti';
+} from '../../shaders/confetti';
 import {
   computeAerodynamicTorque,
   computeAirborneAcceleration,
   computeBodyFrameDrag,
   computeRelativeAirVelocity,
   integrateAngularVelocity,
-} from '../webgpu/shaders/physics/aerodynamics';
+} from '../../shaders/physics/aerodynamics';
 import {
   applyFloorContactFriction,
   updateFloorSleepTime,
-} from '../webgpu/shaders/physics/contact';
+} from '../../shaders/physics/contact';
 import {
   sampleCenteredUnit,
   sampleCenterWeightedRadius,
-} from '../webgpu/shaders/physics/launch';
-import { cullProjectedAxis } from '../webgpu/shaders/physics/projection';
+} from '../../shaders/physics/launch';
+import { cullProjectedAxis } from '../../shaders/physics/projection';
 import {
   PARTICLE_RUNTIME_BYTES,
   PARTICLE_SPAWN_BYTES,
   ParticleRuntimeSchema,
   ParticleSpawnSchema,
-} from '../webgpu/shaders/physics/state';
-import { computeWindField } from '../webgpu/shaders/physics/turbulence';
-import { getSharedTypeGPURoot } from '../webgpu/sharedTypeGPURoot';
+} from '../../shaders/physics/state';
+import { computeWindField } from '../../shaders/physics/turbulence';
 
 const sizes: SizeVariation[] = [
   {
@@ -73,24 +70,6 @@ const sizes: SizeVariation[] = [
 ];
 
 describe('GPU-native particle initialization', () => {
-  it('reuses TypeGPU roots and pipeline variants per device', () => {
-    const firstDevice = {} as GPUDevice;
-    const secondDevice = {} as GPUDevice;
-    const firstRoot = getSharedTypeGPURoot(firstDevice);
-
-    expect(getSharedTypeGPURoot(firstDevice)).toBe(firstRoot);
-    expect(getSharedTypeGPURoot(secondDevice)).not.toBe(firstRoot);
-    expect(createBurstConfettiPipelines(firstRoot, 'bgra8unorm', false)).toBe(
-      createBurstConfettiPipelines(firstRoot, 'bgra8unorm', false)
-    );
-    expect(createConfettiPipelines(firstRoot, 'bgra8unorm', false)).toBe(
-      createConfettiPipelines(firstRoot, 'bgra8unorm', false)
-    );
-    expect(
-      createBurstConfettiPipelines(firstRoot, 'bgra8unorm', true)
-    ).not.toBe(createBurstConfettiPipelines(firstRoot, 'bgra8unorm', false));
-  });
-
   it('keeps the shared state layout explicit and inside the profiled budget', () => {
     expect(PARTICLE_SPAWN_BYTES).toBe(96);
     expect(PARTICLE_RUNTIME_BYTES).toBe(96);

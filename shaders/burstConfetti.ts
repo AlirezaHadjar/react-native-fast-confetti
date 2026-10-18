@@ -15,11 +15,11 @@ import {
   FLOOR_SLEEP_BOUNCE_SCALE,
   FLOOR_SLEEP_STABLE_SECONDS,
   FLOOR_TANGENTIAL_RETENTION,
-} from '../constants';
+} from '../src/webgpu/constants';
 import {
   getParticleNearPlaneDistance,
   isParticleInFrontOfNearPlane,
-} from '../perspective';
+} from './perspective';
 import {
   integrateQuaternion,
   random01,
@@ -34,7 +34,7 @@ import {
   SIZE_FLAG_SHAPE_MASK,
   SIZE_FLAG_TEXTURED,
   SIZE_FLAG_TEXTURE_LAYER_SHIFT,
-} from '../resourcePacking';
+} from '../src/webgpu/resourcePacking';
 import { createAlphaBlendTarget } from './blendTarget';
 import {
   computeAirborneAcceleration,

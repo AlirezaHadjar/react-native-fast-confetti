@@ -12,21 +12,8 @@ import {
   computeSizeFlags,
   toInitSizeInputs,
 } from '../resourcePacking';
-import {
-  BurstInitSizeArraySchema,
-  BurstInitUniformsSchema,
-  BurstOriginArraySchema,
-  BurstOpacityKeyframeArraySchema,
-  BurstPaletteArraySchema,
-  BurstParticleArraySchema,
-  BurstRuntimeArraySchema,
-  BurstSizeArraySchema,
-  BurstTransformArraySchema,
-  BurstUniformsSchema,
-  burstInitLayout,
-  burstRenderLayout,
-  burstTransformLayout,
-} from '../shaders/burstConfetti';
+import { BUFFER_USAGE, burstLayouts, burstProgram } from '../compiledShaders';
+import { createBindGroup, createGPUBuffer, packArray } from '../gpuProgram';
 import { destroyGPUResourceSet } from '../resourceCleanup';
 import {
   createFlakeTexturesArray,
@@ -35,7 +22,6 @@ import {
   prepareFlakeTexturesArray,
   prepareShapeMasksArray,
 } from '../textureResources';
-import { getSharedTypeGPURoot } from '../sharedTypeGPURoot';
 import { withExclusiveGPUAccess } from '../gpuRuntimeOwnership';
 
 export type BurstConfettiResourceConfig = {
@@ -73,61 +59,74 @@ const allocateBurstConfettiResources = async (
   if (isCancelled?.()) throw new Error('GPU resource creation cancelled');
 
   return withExclusiveGPUAccess(() => {
-    const root = getSharedTypeGPURoot(device);
     const queue = device.queue;
-    const rawBuffers: { destroy: () => void }[] = [];
+    const rawBuffers: GPUBuffer[] = [];
     const rawTextures: GPUTexture[] = [];
+    const buffer = (usage: number, size: number, data?: ArrayBuffer) => {
+      const created = createGPUBuffer(device, usage, size, data);
+      rawBuffers.push(created);
+      return created;
+    };
     try {
-      const uniforms = root.createUniform(BurstUniformsSchema);
-      rawBuffers.push(uniforms.buffer);
-      const initUniforms = root.createUniform(BurstInitUniformsSchema);
-      rawBuffers.push(initUniforms.buffer);
-      const particlesBuffer = root.createMutable(
-        BurstParticleArraySchema(count)
+      const uniforms = buffer(BUFFER_USAGE.uniform, burstLayouts.uniforms.size);
+      const initUniforms = buffer(
+        BUFFER_USAGE.uniform,
+        burstLayouts.initUniforms.size
       );
-      rawBuffers.push(particlesBuffer.buffer);
-      if (presetParticles) particlesBuffer.write(presetParticles);
-      const runtimeBuffer = root.createMutable(BurstRuntimeArraySchema(count));
-      rawBuffers.push(runtimeBuffer.buffer);
-      const transformsBuffer = root.createMutable(
-        BurstTransformArraySchema(count)
+      const particlesBuffer = buffer(
+        BUFFER_USAGE.storage,
+        burstLayouts.particles.stride * count,
+        presetParticles
+          ? packArray(burstLayouts.particles, presetParticles, count)
+          : undefined
       );
-      rawBuffers.push(transformsBuffer.buffer);
-      const originsBuffer = root.createReadonly(
-        BurstOriginArraySchema(originCount)
+      const runtimeBuffer = buffer(
+        BUFFER_USAGE.storage,
+        burstLayouts.runtime.stride * count
       );
-      rawBuffers.push(originsBuffer.buffer);
-      const initSizesBuffer = root.createReadonly(
-        BurstInitSizeArraySchema(sizeVariations.length),
-        toInitSizeInputs(
-          sizeVariations,
-          sizeFlags,
-          colorOverrides,
-          parentColorCount
+      const transformsBuffer = buffer(
+        BUFFER_USAGE.storage,
+        burstLayouts.transforms.stride * count
+      );
+      const originsBuffer = buffer(
+        BUFFER_USAGE.storage,
+        burstLayouts.origins.stride * originCount
+      );
+      const initSizesBuffer = buffer(
+        BUFFER_USAGE.storage,
+        burstLayouts.initSizes.stride * sizeVariations.length,
+        packArray(
+          burstLayouts.initSizes,
+          toInitSizeInputs(
+            sizeVariations,
+            sizeFlags,
+            colorOverrides,
+            parentColorCount
+          )
         )
       );
-      rawBuffers.push(initSizesBuffer.buffer);
-      const sizesBuffer = root.createReadonly(
-        BurstSizeArraySchema(sizeVariations.length),
-        toBurstSizeInputs(sizeVariations)
+      const sizesBuffer = buffer(
+        BUFFER_USAGE.storage,
+        burstLayouts.sizes.stride * sizeVariations.length,
+        packArray(burstLayouts.sizes, toBurstSizeInputs(sizeVariations))
       );
-      rawBuffers.push(sizesBuffer.buffer);
-      const paletteBuffer = root.createReadonly(
-        BurstPaletteArraySchema(Math.max(1, allColors.length)),
-        toPaletteInputs(allColors)
+      const paletteColors = toPaletteInputs(allColors);
+      const paletteBuffer = buffer(
+        BUFFER_USAGE.storage,
+        burstLayouts.palette.stride * paletteColors.length,
+        packArray(burstLayouts.palette, paletteColors)
       );
-      rawBuffers.push(paletteBuffer.buffer);
       const opacityKeyframes = opacityAnimation
         ? opacityAnimation.timestamps.map(
             (timestamp, index) =>
               [timestamp, opacityAnimation.opacities[index]!] as const
           )
         : ([[0, 1]] as const);
-      const opacityKeyframesBuffer = root.createReadonly(
-        BurstOpacityKeyframeArraySchema(opacityKeyframes.length),
-        opacityKeyframes
+      const opacityKeyframesBuffer = buffer(
+        BUFFER_USAGE.storage,
+        burstLayouts.opacityKeyframes.stride * opacityKeyframes.length,
+        packArray(burstLayouts.opacityKeyframes, opacityKeyframes)
       );
-      rawBuffers.push(opacityKeyframesBuffer.buffer);
       const shapeMasksArray = createShapeMasksArray(
         device,
         queue,
@@ -142,34 +141,47 @@ const allocateBurstConfettiResources = async (
       rawTextures.push(texturesArray);
       const sampler = getLinearClampSampler(device);
 
-      const initBindGroup = root.createBindGroup(burstInitLayout, {
-        uniforms: initUniforms.buffer,
-        particles: particlesBuffer.buffer,
-        runtime: runtimeBuffer.buffer,
-        origins: originsBuffer.buffer,
-        sizes: initSizesBuffer.buffer,
-      });
-
-      const renderBindGroup = root.createBindGroup(burstRenderLayout, {
-        uniforms: uniforms.buffer,
-        transforms: transformsBuffer.buffer,
-        palette: paletteBuffer.buffer,
-        sampler,
-        textures: texturesArray.createView({ dimension: '2d-array' }),
-        shapeMasks: shapeMasksArray.createView({ dimension: '2d-array' }),
-      });
-      const transformBindGroup = root.createBindGroup(burstTransformLayout, {
-        uniforms: uniforms.buffer,
-        particles: particlesBuffer.buffer,
-        runtime: runtimeBuffer.buffer,
-        transforms: transformsBuffer.buffer,
-        sizes: sizesBuffer.buffer,
-        opacityKeyframes: opacityKeyframesBuffer.buffer,
-      });
+      const initBindGroup = createBindGroup(
+        device,
+        burstProgram,
+        'burstInitLayout',
+        {
+          uniforms: initUniforms,
+          particles: particlesBuffer,
+          runtime: runtimeBuffer,
+          origins: originsBuffer,
+          sizes: initSizesBuffer,
+        }
+      );
+      const renderBindGroup = createBindGroup(
+        device,
+        burstProgram,
+        'burstRenderLayout',
+        {
+          uniforms,
+          transforms: transformsBuffer,
+          palette: paletteBuffer,
+          sampler,
+          textures: texturesArray.createView({ dimension: '2d-array' }),
+          shapeMasks: shapeMasksArray.createView({ dimension: '2d-array' }),
+        }
+      );
+      const transformBindGroup = createBindGroup(
+        device,
+        burstProgram,
+        'burstTransformLayout',
+        {
+          uniforms,
+          particles: particlesBuffer,
+          runtime: runtimeBuffer,
+          transforms: transformsBuffer,
+          sizes: sizesBuffer,
+          opacityKeyframes: opacityKeyframesBuffer,
+        }
+      );
 
       return {
         config,
-        root,
         device,
         queue,
         uniforms,
@@ -209,16 +221,16 @@ export const destroyBurstConfettiResources = (
   return withExclusiveGPUAccess(() => {
     destroyGPUResourceSet({
       buffers: [
-        resources.uniforms.buffer,
-        resources.initUniforms.buffer,
-        resources.particlesBuffer.buffer,
-        resources.runtimeBuffer.buffer,
-        resources.transformsBuffer.buffer,
-        resources.originsBuffer.buffer,
-        resources.initSizesBuffer.buffer,
-        resources.sizesBuffer.buffer,
-        resources.paletteBuffer.buffer,
-        resources.opacityKeyframesBuffer.buffer,
+        resources.uniforms,
+        resources.initUniforms,
+        resources.particlesBuffer,
+        resources.runtimeBuffer,
+        resources.transformsBuffer,
+        resources.originsBuffer,
+        resources.initSizesBuffer,
+        resources.sizesBuffer,
+        resources.paletteBuffer,
+        resources.opacityKeyframesBuffer,
       ],
       textures: [resources.texturesArray, resources.shapeMasksArray],
     });
@@ -247,8 +259,13 @@ export const createBurstConfettiResources = async (
     Omit<BurstConfettiResources, 'config'>
   >(config.device, resourceKey(config));
   if (cached) {
-    if (config.presetParticles)
-      cached.particlesBuffer.write(config.presetParticles);
+    if (config.presetParticles) {
+      cached.queue.writeBuffer(
+        cached.particlesBuffer,
+        0,
+        packArray(burstLayouts.particles, config.presetParticles, config.count)
+      );
+    }
     return { ...cached, config };
   }
   return allocateBurstConfettiResources(config, isCancelled);
@@ -258,16 +275,16 @@ export const recycleBurstConfettiResources = (
   resources: BurstConfettiResources
 ) => {
   const buffers = [
-    resources.uniforms.buffer.buffer,
-    resources.initUniforms.buffer.buffer,
-    resources.particlesBuffer.buffer.buffer,
-    resources.runtimeBuffer.buffer.buffer,
-    resources.transformsBuffer.buffer.buffer,
-    resources.originsBuffer.buffer.buffer,
-    resources.initSizesBuffer.buffer.buffer,
-    resources.sizesBuffer.buffer.buffer,
-    resources.paletteBuffer.buffer.buffer,
-    resources.opacityKeyframesBuffer.buffer.buffer,
+    resources.uniforms,
+    resources.initUniforms,
+    resources.particlesBuffer,
+    resources.runtimeBuffer,
+    resources.transformsBuffer,
+    resources.originsBuffer,
+    resources.initSizesBuffer,
+    resources.sizesBuffer,
+    resources.paletteBuffer,
+    resources.opacityKeyframesBuffer,
   ];
   const textures = [resources.texturesArray, resources.shapeMasksArray];
   const { config, ...gpuResources } = resources;
