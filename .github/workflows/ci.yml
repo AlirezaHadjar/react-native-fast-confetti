@@ -4,8 +4,6 @@ on:
     branches:
       - main
   pull_request:
-    branches:
-      - main
   merge_group:
     types:
       - checks_requested
@@ -58,6 +56,21 @@ jobs:
 
       - name: Build package
         run: bun run prepare
+
+      - name: Check the default entry never imports optional peers
+        run: bun run check:optional-peers
+
+  smoke-skia-only:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Bundle a Skia-only app without WebGPU
+        run: bun run smoke:skia-only
 
   build-web:
     runs-on: ubuntu-latest

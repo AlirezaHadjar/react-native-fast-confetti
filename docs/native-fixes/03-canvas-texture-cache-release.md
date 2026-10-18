@@ -17,7 +17,8 @@ single-run comparison shows no observed regression; it does not prove a memory
 improvement or absence of retention. Stock WebGPU rendered 30,000 particles at
 118.73 FPS versus 118.89 FPS in the earlier patched run.
 
-Upstream: no PR from this project as of 2026-10-12.
+Upstream: no PR from this project as of 2026-10-18. `react-native-webgpu` 0.16.1
+does not include this change.
 
 ## Recorded diff
 

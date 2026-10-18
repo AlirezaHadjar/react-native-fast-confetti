@@ -15,7 +15,7 @@ all on main. This does not establish behavior on every physical iOS device or
 for other renderers that perform surface operations off main.
 
 Upstream: [PR #459](https://github.com/wcandillon/react-native-webgpu/pull/459),
-open when checked on 2026-10-12.
+still open on 2026-10-18. `react-native-webgpu` 0.16.1 does not include this change.
 
 ## Recorded diff
 

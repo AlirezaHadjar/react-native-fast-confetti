@@ -20,7 +20,7 @@ bun install
 
 > Since the project relies on Bun workspaces, you cannot use [`npm`](https://github.com/npm/cli) for development.
 
-Both apps use Expo SDK 57 and this checkout. Skia v3 and WebGPU require native builds; these demos do not run in Expo Go.
+Both apps use Expo SDK 58 and this checkout. Skia v3 and WebGPU require native builds; these demos do not run in Expo Go.
 
 The [example app](/example/) demonstrates basic usage of the library. The [kitchen-sink app](/kitchen-sink/) is a full-featured showcase. You need to run one of them to test any changes you make.
 
@@ -103,6 +103,10 @@ To publish new versions, run the following:
 bun run release
 ```
 
+Publishing first runs `bun run check:optional-peers` and stops if the default
+entry can reach `react-native-webgpu` or `typegpu`. Only `/gpu` may import them;
+Oxlint enforces the same boundary in `src`.
+
 ### Scripts
 
 The `package.json` file contains various scripts for common tasks:
@@ -113,6 +117,8 @@ The `package.json` file contains various scripts for common tasks:
 - `bun run format`: format files with Oxfmt.
 - `bun run format:check`: check formatting.
 - `bun run test`: run unit tests with Jest.
+- `bun run check:optional-peers`: pack the library and fail if the default entry reaches an optional peer.
+- `bun run smoke:skia-only`: bundle the packed library in a Skia-only Expo app without WebGPU.
 - `bun run example start`: start the Metro server for the example app.
 - `bun run example android`: run the example app on Android.
 - `bun run example ios`: run the example app on iOS.

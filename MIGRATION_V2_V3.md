@@ -3,7 +3,7 @@
 ## Upgrade Skia
 
 v3 requires `react-native-skia >=3.4 <4`. WebGPU remains optional: install
-`react-native-webgpu >=0.13.1 <1` and `typegpu >=0.11.8 <0.13` only when using
+`react-native-webgpu >=0.16.1 <1` and `typegpu >=0.11.8 <0.13` only when using
 the `/gpu` entry point.
 Replace `@shopify/react-native-skia` with `react-native-skia` in dependencies
 and imports. Do not install both names: they provide the same native module.
@@ -17,7 +17,7 @@ See the [Skia migration guide](https://wcandillon.github.io/react-native-skia/do
 ## Upgrade React Native and Worklets
 
 Use React Native `>=0.86 <0.89`, React `>=19`, Reanimated `>=4.7.1 <5`,
-and Worklets `>=0.13 <1`. The demos use Expo SDK 57.
+and Worklets `>=0.13 <1`. The demos use Expo SDK 58.
 Worklets contains the upstream serialization race fix, so
 the former Worklets 0.11.4 patch is no longer needed.
 The repository uses unpatched WebGPU dependencies; see the

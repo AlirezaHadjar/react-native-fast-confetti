@@ -15,7 +15,7 @@ In the unpatched simulator probe, all 45 detaches had `inFlight=0` and
 Concurrent render/teardown paths can still need it. Physical iOS was not retested.
 
 Upstream: [PR #459](https://github.com/wcandillon/react-native-webgpu/pull/459),
-open when checked on 2026-10-12.
+still open on 2026-10-18. `react-native-webgpu` 0.16.1 does not include this change.
 
 ## Recorded diff
 

@@ -33,5 +33,52 @@
     "coverage/**",
     "**/ios/**",
     "**/android/**"
+  ],
+  "overrides": [
+    {
+      "files": ["src/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "react-native-webgpu",
+                "message": "The default entry must work without the optional WebGPU peers. Only src/webgpu and src/gpu may import them; use `import type` for types.",
+                "allowTypeImports": true
+              },
+              {
+                "name": "typegpu",
+                "message": "The default entry must work without the optional WebGPU peers. Only src/webgpu and src/gpu may import them; use `import type` for types.",
+                "allowTypeImports": true
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["react-native-webgpu/*", "typegpu/*"],
+                "message": "The default entry must work without the optional WebGPU peers. Only src/webgpu and src/gpu may import them; use `import type` for types.",
+                "allowTypeImports": true
+              },
+              {
+                "regex": "(^|/)webgpu(/|$)",
+                "message": "The default entry must work without the optional WebGPU peers. Only src/webgpu and src/gpu may import them; use `import type` for types.",
+                "allowTypeImports": true
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/webgpu/**",
+        "src/gpu/**",
+        "src/__tests__/**",
+        "src/__fixtures__/**"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
   ]
 }

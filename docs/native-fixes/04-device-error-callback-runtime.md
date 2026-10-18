@@ -20,7 +20,8 @@ validation errors. The original code crashed; the fix delivered 48 errors
 without that crash. The fault injection establishes the race and its fix,
 not the natural failure rate on the current stack.
 
-Upstream: no PR from this project as of 2026-10-12.
+Upstream: no PR from this project as of 2026-10-18. `react-native-webgpu` 0.16.1
+does not include this change.
 
 ## Recorded diff
 
