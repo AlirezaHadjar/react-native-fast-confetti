@@ -1,20 +1,25 @@
-import { useRSXformBuffer } from '@shopify/react-native-skia';
-import { useCallback, useEffect, useImperativeHandle, forwardRef } from 'react';
+import { useRSXformBuffer } from 'react-native-skia';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  forwardRef,
+} from 'react';
 import {
   Extrapolation,
   interpolate,
-  runOnUI,
   useSharedValue,
 } from 'react-native-reanimated';
-import {
-  generatePIBoxesArray,
-  resolveNamedPosition,
-  estimatePIDuration,
-} from './utils';
+import { scheduleOnUI } from 'react-native-worklets';
+import { resolveNamedPosition, estimatePIDuration } from './utils';
 import {
   DEFAULT_PI_CONFETTI_GRAVITY,
   DEFAULT_PI_CONFETTI_DRAG,
   DEFAULT_PI_CONFETTI_LAUNCH_DELAY_MAX,
+  DEFAULT_FLAKE_STYLE,
+  DEFAULT_FLIP_INTENSITY,
+  DEFAULT_INITIAL_SCALE,
 } from './constants';
 import type {
   PIConfettiMethods,
@@ -22,7 +27,7 @@ import type {
   PIConfettiRestartOptions,
   Position,
 } from './types';
-import { useConfettiLogic } from './hooks/useConfettiLogic';
+import { usePackedConfettiLogic } from './hooks/useConfettiLogic';
 import { usePIOrigins } from './hooks/usePIOrigins';
 import { useTextureProps } from './hooks/useTextureProps';
 import { useAnimationLifecycle } from './hooks/useAnimationLifecycle';
@@ -34,6 +39,24 @@ import {
 } from './reduceMotion';
 import { ConfettiCanvas } from './ConfettiCanvas';
 import { Origin, Flake } from './PIConfettiComponents';
+import {
+  BURST_DEPTH_SCALE,
+  BURST_FLAGS,
+  BURST_FLAG_CLOCKWISE,
+  BURST_FLOAT_STRIDE,
+  BURST_INITIAL_ROTATION,
+  BURST_LAUNCH_DELAY,
+  BURST_META_STRIDE,
+  BURST_ORIGIN_DELAY,
+  BURST_ORIGIN_INDEX,
+  BURST_ROTATION_X,
+  BURST_ROTATION_Z,
+  BURST_SIZE_INDEX,
+  BURST_VX,
+  BURST_VY,
+  generatePackedPIBoxes,
+  type PackedBurstBoxes,
+} from './packedBurstBoxes';
 
 const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
   (
@@ -44,14 +67,14 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       drag: dragProp = DEFAULT_PI_CONFETTI_DRAG,
       autoplay = true,
       infinite = false,
-      fadeOutOnEnd = false,
+      opacityAnimation,
       autoStartDelay = 0,
       rotation: rootRotation,
       depth: rootDepth,
       speedVariation: rootSpeedVariation,
-      flakeStyle = 'glossy',
-      initialScale = 0.3,
-      flipIntensity = 0.85,
+      flakeStyle = DEFAULT_FLAKE_STYLE,
+      initialScale = DEFAULT_INITIAL_SCALE,
+      flipIntensity = DEFAULT_FLIP_INTENSITY,
       easing,
       sprayDuration,
       reduceMotion,
@@ -124,19 +147,20 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
     const dynamicBlastPositions = useSharedValue<Position[] | null>(null);
     const dynamicOriginDelays = useSharedValue<number[] | null>(null);
 
-    const boxes = useSharedValue(
-      generatePIBoxesArray({
-        piConfigs,
-        originDelays,
-        containerHeight,
-        launchDelayMax,
-        sizeColorOverrides: colorOverrides,
-        parentColorCount,
-        sizeIsTextured,
-      })
-    );
+    // Populate only from refreshBoxes on the UI runtime. Eager generation in
+    // a hook argument reran for every React render and copied the full particle
+    // graph across runtimes before immediately replacing it.
+    const boxes = useSharedValue<PackedBurstBoxes | null>(null);
 
-    const { texture, sprites } = useConfettiLogic({
+    useLayoutEffect(() => {
+      return () => {
+        boxes.set(null);
+        dynamicBlastPositions.set(null);
+        dynamicOriginDelays.set(null);
+      };
+    }, [boxes, dynamicBlastPositions, dynamicOriginDelays]);
+
+    const { texture, sprites } = usePackedConfettiLogic({
       sizeVariations,
       colors: allColors,
       boxes,
@@ -146,7 +170,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
 
     const refreshBoxes = useCallback(() => {
       'worklet';
-      const newBoxes = generatePIBoxesArray({
+      const newBoxes = generatePackedPIBoxes({
         piConfigs,
         originDelays: dynamicOriginDelays.get() || originDelays,
         containerHeight,
@@ -172,11 +196,10 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       useAnimationLifecycle({
         duration,
         infinite,
-        fadeOutOnEnd,
+        opacityAnimation,
         easing,
         onAnimationStart,
         onAnimationEnd,
-        fadeRange: [0.5, 0.9],
         onCycleEnd: refreshBoxes,
         disabled: visibleCount === 0,
       });
@@ -202,25 +225,29 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         let resolvedDelays: number[] | null = null;
         if (options.origins) {
           resolvedPositions = options.origins.map((o) =>
-            resolveNamedPosition(o.blastPosition, containerWidth, containerHeight)
+            resolveNamedPosition(
+              o.blastPosition,
+              containerWidth,
+              containerHeight
+            )
           );
           resolvedDelays = options.origins.map((o) => o.delay ?? 0);
         }
-        runOnUI(workletRestart)(resolvedPositions, resolvedDelays);
+        scheduleOnUI(workletRestart, resolvedPositions, resolvedDelays);
       },
       [workletRestart, containerWidth, containerHeight]
     );
 
     useImperativeHandle(ref, () => ({
-      pause: runOnUI(pause),
-      reset: runOnUI(reset),
-      resume: runOnUI(resume),
+      pause: () => scheduleOnUI(pause),
+      reset: () => scheduleOnUI(reset),
+      resume: () => scheduleOnUI(resume),
       restart: jsRestart,
     }));
 
     useEffect(() => {
       if (!ready || !reduceMotionReady) return;
-      runOnUI(() => {
+      scheduleOnUI(() => {
         if (visibleCount === 0) {
           if (autoplay) {
             workletRestart(null, null, 0);
@@ -234,9 +261,8 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
           refreshBoxes();
           return;
         }
-        if (autoplay)
-          workletRestart(null, null, autoStartDelay);
-      })();
+        if (autoplay) workletRestart(null, null, autoStartDelay);
+      });
     }, [
       autoplay,
       autoStartDelay,
@@ -259,16 +285,18 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         return;
       }
 
-      const piece = boxes.get()[i];
-      if (!piece) {
+      const packed = boxes.get();
+      if (!packed) {
         val.set(0, 0, -10000, -10000);
         return;
       }
 
-      const currentPositions =
-        dynamicBlastPositions.get() || blastPositions;
-      const blast =
-        currentPositions[piece.originIndex % currentPositions.length];
+      const valueOffset = i * BURST_FLOAT_STRIDE;
+      const metaOffset = i * BURST_META_STRIDE;
+      const originIndex = packed.metadata[metaOffset + BURST_ORIGIN_INDEX] ?? 0;
+
+      const currentPositions = dynamicBlastPositions.get() || blastPositions;
+      const blast = currentPositions[originIndex % currentPositions.length];
       if (!blast) {
         val.set(0, 0, -10000, -10000);
         return;
@@ -276,7 +304,20 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       const blastX = blast.x;
       const blastY = blast.y;
 
-      const { vx, vy } = piece;
+      const vx = packed.values[valueOffset + BURST_VX] ?? 0;
+      const vy = packed.values[valueOffset + BURST_VY] ?? 0;
+      const launchDelay = packed.values[valueOffset + BURST_LAUNCH_DELAY] ?? 0;
+      const depthScale = packed.values[valueOffset + BURST_DEPTH_SCALE] ?? 1;
+      const rotationX = packed.values[valueOffset + BURST_ROTATION_X] ?? 0;
+      const rotationZ = packed.values[valueOffset + BURST_ROTATION_Z] ?? 0;
+      const initialRotation =
+        packed.values[valueOffset + BURST_INITIAL_ROTATION] ?? 0;
+      const originDelay = packed.values[valueOffset + BURST_ORIGIN_DELAY] ?? 0;
+      const clockwise =
+        ((packed.metadata[metaOffset + BURST_FLAGS] ?? 0) &
+          BURST_FLAG_CLOCKWISE) !==
+        0;
+      const sizeIndex = packed.metadata[metaOffset + BURST_SIZE_INDEX] ?? -1;
 
       const p = progress.get();
 
@@ -286,7 +327,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       // 3. Map to [0, 1] over the flight duration (not total duration)
       // This ensures all origins have identical physics regardless of delay.
       const elapsedMs = p * duration;
-      const localMs = elapsedMs - piece.originDelay;
+      const localMs = elapsedMs - originDelay;
       if (localMs <= 0) {
         val.set(0, 0, -10000, -10000);
         return;
@@ -296,7 +337,7 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
       // Apply spray stagger within the local flight progress
       const effectiveProgress = interpolate(
         localProgress,
-        [piece.launchDelay, 1],
+        [launchDelay, 1],
         [0, 1],
         Extrapolation.CLAMP
       );
@@ -314,29 +355,25 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
         ((vy - scaledGravity / safeVDrag) / safeVDrag) * vExpDecay;
 
       // Rotation
-      const rotationDirection = piece.clockwise ? 1 : -1;
+      const rotationDirection = clockwise ? 1 : -1;
       const rz =
-        piece.initialRotation +
-        localProgress * rotationDirection * piece.maxRotation.z;
+        initialRotation + localProgress * rotationDirection * rotationZ;
       const rx =
-        piece.initialRotation +
-        localProgress * rotationDirection * piece.maxRotation.x;
+        initialRotation + localProgress * rotationDirection * rotationX;
 
       // Scale: appearance animation at launch + oscillation
       const minFlipScale = 1 - effectiveFlipIntensity;
       const oscillatingScale =
-        piece.maxRotation.x === 0
-          ? 1
-          : Math.max(Math.abs(Math.cos(rx)), minFlipScale);
+        rotationX === 0 ? 1 : Math.max(Math.abs(Math.cos(rx)), minFlipScale);
       const appearScale = interpolate(
         effectiveProgress,
         [0, 0.05],
         [initialScale, 1],
         Extrapolation.CLAMP
       );
-      const scale = appearScale * oscillatingScale * piece.depthScale;
+      const scale = appearScale * oscillatingScale * depthScale;
 
-      const size = sizeVariations[piece.sizeIndex];
+      const size = sizeVariations[sizeIndex];
       if (!size) {
         val.set(0, 0, -10000, -10000);
         return;
@@ -349,6 +386,13 @@ const PIConfettiInner = forwardRef<PIConfettiMethods, PIConfettiProps>(
 
       val.set(c, s, tx - c * px + s * py, ty - s * px - c * py);
     });
+
+    useLayoutEffect(() => {
+      return () => {
+        transforms.set([]);
+        sprites.set([]);
+      };
+    }, [sprites, transforms]);
 
     return (
       <ConfettiCanvas

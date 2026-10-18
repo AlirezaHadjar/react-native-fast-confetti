@@ -1,0 +1,112 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["oxc", "typescript", "unicorn", "react", "jest"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "unicorn/no-new-array": "off",
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "warn",
+    "jest/expect-expect": [
+      "error",
+      {
+        "assertFunctionNames": [
+          "expect",
+          "expectInRange",
+          "expectPhaseOffsetsAreStratified"
+        ]
+      }
+    ]
+  },
+  "env": {
+    "browser": true,
+    "node": true
+  },
+  "globals": {
+    "__DEV__": "readonly"
+  },
+  "ignorePatterns": [
+    ".context/**",
+    "lib/**",
+    "dist/**",
+    "coverage/**",
+    "**/ios/**",
+    "**/android/**"
+  ],
+  "overrides": [
+    {
+      "files": ["src/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "react-native-webgpu",
+                "message": "The default entry must work without the optional react-native-webgpu peer. Only src/webgpu and src/gpu may import it; use `import type` for types.",
+                "allowTypeImports": true
+              },
+              {
+                "name": "typegpu",
+                "message": "TypeGPU is build-time only: write shaders in shaders/ and run `bun run compile:shaders`; runtime code uses src/webgpu/compiledShaders.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["react-native-webgpu/*"],
+                "message": "The default entry must work without the optional react-native-webgpu peer. Only src/webgpu and src/gpu may import it; use `import type` for types.",
+                "allowTypeImports": true
+              },
+              {
+                "regex": "(^|/)webgpu(/|$)",
+                "message": "The default entry must work without the optional react-native-webgpu peer. Only src/webgpu and src/gpu may import it; use `import type` for types.",
+                "allowTypeImports": true
+              },
+              {
+                "group": [
+                  "typegpu/*",
+                  "unplugin-typegpu",
+                  "unplugin-typegpu/*"
+                ],
+                "message": "TypeGPU is build-time only: write shaders in shaders/ and run `bun run compile:shaders`; runtime code uses src/webgpu/compiledShaders.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/webgpu/**", "src/gpu/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "typegpu",
+                "message": "TypeGPU is build-time only: write shaders in shaders/ and run `bun run compile:shaders`; runtime code uses src/webgpu/compiledShaders.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": [
+                  "typegpu/*",
+                  "unplugin-typegpu",
+                  "unplugin-typegpu/*"
+                ],
+                "message": "TypeGPU is build-time only: write shaders in shaders/ and run `bun run compile:shaders`; runtime code uses src/webgpu/compiledShaders.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/__tests__/**", "src/__fixtures__/**"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
+}

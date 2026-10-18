@@ -25,7 +25,12 @@ import {
   DEFAULT_PI_CONFETTI_ROTATION,
   DEFAULT_PI_ORIGIN_COUNT,
 } from '../constants';
-import { parseFlakeChildren, buildAtlasColors } from './useConfettiFlakes';
+import {
+  parseFlakeChildren,
+  buildAtlasColors,
+  getSizeVariationsSignature,
+  useSemanticValue,
+} from './useConfettiFlakes';
 import type {
   SizeVariation,
   ColorRange,
@@ -99,7 +104,7 @@ export const usePIOrigins = ({
     }
   }
 
-  return useMemo(() => {
+  const computed = useMemo(() => {
     const origins = originChildren ?? [];
     const positions: Position[] = [];
     const delays: number[] = [];
@@ -243,4 +248,19 @@ export const usePIOrigins = ({
     parentTexture,
     reduceMotionFactor,
   ]);
+
+  const signature = JSON.stringify([
+    computed.blastPositions,
+    computed.originDelays,
+    computed.piConfigs,
+    computed.durationPiConfigs,
+    computed.allColors,
+    getSizeVariationsSignature(computed.sizeVariations),
+    computed.colorOverrides,
+    computed.sizeIsTextured,
+    computed.parentColorCount,
+    computed.totalCount,
+    computed.visibleCount,
+  ]);
+  return useSemanticValue(signature, computed);
 };

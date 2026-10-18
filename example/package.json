@@ -4,26 +4,40 @@
   "private": true,
   "main": "index.ts",
   "scripts": {
-    "start": "expo start",
-    "ios": "expo start --ios",
-    "android": "expo start --android"
+    "start": "expo start --dev-client",
+    "ios": "expo run:ios",
+    "android": "expo run:android"
   },
   "dependencies": {
     "@react-navigation/native": "^7.1.0",
     "@react-navigation/native-stack": "^7.3.0",
-    "@shopify/react-native-skia": "2.6.2",
-    "expo": "^56.0.0",
-    "expo-status-bar": "~56.0.4",
-    "react": "19.2.3",
-    "react-native": "0.85.3",
-    "react-native-fast-confetti": "2.0.2",
-    "react-native-reanimated": "4.3.1",
-    "react-native-safe-area-context": "~5.7.0",
-    "react-native-screens": "4.25.2",
-    "react-native-worklets": "0.8.3"
+    "react-native-skia": "3.4.0",
+    "expo": "^58.0.14",
+    "expo-status-bar": "~58.0.3",
+    "react": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-fast-confetti": "file:..",
+    "react-native-reanimated": "4.7.1",
+    "react-native-safe-area-context": "~5.10.1",
+    "react-native-screens": "4.30.0",
+    "react-native-webgpu": "0.16.1",
+    "react-native-worklets": "0.13.0",
+    "expo-build-properties": "~58.0.11",
+    "expo-dev-client": "~58.0.14"
   },
   "devDependencies": {
-    "@types/react": "^19.2.0",
-    "typescript": "~6.0.3"
+    "@types/react": "~19.3.0",
+    "typescript": "npm:tsover@6.0.2"
+  },
+  "expo": {
+    "install": {
+      "exclude": [
+        "react-native-reanimated",
+        "react-native-worklets",
+        "react-native-safe-area-context",
+        "react-native-screens",
+        "typescript"
+      ]
+    }
   }
 }

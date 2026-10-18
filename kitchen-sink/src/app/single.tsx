@@ -1,11 +1,15 @@
+import { useScreenEffectVisible } from '../hooks/useScreenEffectVisible';
 import { useRef } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import type { ConfettiMethods } from 'react-native-fast-confetti';
-import { Confetti } from 'react-native-fast-confetti';
+import { Confetti as SkiaConfetti } from '../../../src';
+import { Confetti as WebGPUConfetti } from '../../../src/gpu';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
 import {
+  PARTICLE_COUNTS,
+  rendererOptions,
   TEXTURE_SIZES,
   textureOptions,
   verticalSpacingOptions,
@@ -15,14 +19,18 @@ import { useScreenConfig } from '../hooks/useScreenConfig';
 import { getRotation, getTextureProps } from '../utils/confettiConfig';
 
 export default function SingleScreen() {
+  const isFocused = useScreenEffectVisible();
   const confettiRef = useRef<ConfettiMethods>(null);
   const { config, updateConfig } = useScreenConfig('single');
-  const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets();
+  const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets(
+    config.textureType
+  );
 
   if (isLoading) return null;
 
+  const Confetti = config.renderer === 'webgpu' ? WebGPUConfetti : SkiaConfetti;
   const rotation = getRotation(config.textureType, 'single');
-  const confettiKey = `single-${config.textureType}-${config.verticalSpacing}`;
+  const confettiKey = `single-${config.renderer}-${config.textureType}-${config.verticalSpacing}`;
 
   const textureProps = getTextureProps(
     config.textureType,
@@ -53,6 +61,12 @@ export default function SingleScreen() {
     <View style={styles.container}>
       <View style={styles.controls}>
         <ConfigDropdown
+          label="Renderer:"
+          data={rendererOptions}
+          value={config.renderer}
+          onChange={(renderer) => updateConfig({ renderer })}
+        />
+        <ConfigDropdown
           label="Texture:"
           data={textureOptions}
           value={config.textureType}
@@ -66,21 +80,6 @@ export default function SingleScreen() {
         />
       </View>
 
-      <Confetti
-        key={confettiKey}
-        ref={confettiRef}
-        rotation={rotation}
-        verticalSpacing={config.verticalSpacing}
-        autoplay
-        count={Platform.OS === 'web' ? 2000 : 400}
-        infinite
-        flakeStyle="glossy"
-        gravity={1}
-        flipIntensity={config.textureType === 'money' ? 0.1 : 0.85}
-      >
-        {renderFlakes()}
-      </Confetti>
-
       <ConfettiControls
         actions={{
           resume: () => confettiRef.current?.resume(),
@@ -89,6 +88,23 @@ export default function SingleScreen() {
           reset: () => confettiRef.current?.reset(),
         }}
       />
+
+      {isFocused ? (
+        <Confetti
+          key={confettiKey}
+          ref={confettiRef}
+          rotation={rotation}
+          verticalSpacing={config.verticalSpacing}
+          autoplay
+          count={PARTICLE_COUNTS.single}
+          infinite
+          flakeStyle="glossy"
+          gravity={1}
+          flipIntensity={config.textureType === 'money' ? 0.1 : 0.85}
+        >
+          {renderFlakes()}
+        </Confetti>
+      ) : null}
     </View>
   );
 }

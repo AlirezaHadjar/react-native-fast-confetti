@@ -2,8 +2,14 @@ pre-commit:
   parallel: true
   commands:
     lint:
-      glob: "*.{js,ts,jsx,tsx}"
-      run: npx eslint {staged_files}
+      glob: '*.{js,ts,jsx,tsx}'
+      run: bunx oxlint {staged_files}
+    format:
+      glob: '*.{js,ts,jsx,tsx,json,jsonc,yml,yaml,md}'
+      run: bunx oxfmt --check {staged_files}
+    shaders:
+      glob: 'shaders/**/*.ts'
+      run: bun scripts/compile-shaders.ts --check
     types:
-      glob: "*.{js,ts, jsx, tsx}"
-      run: npx tsc && npx tsc --project kitchen-sink/tsconfig.json
+      glob: '*.{js,ts,jsx,tsx}'
+      run: bunx tsc && bunx tsc --project kitchen-sink/tsconfig.json

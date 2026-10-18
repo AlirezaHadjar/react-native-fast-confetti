@@ -1,11 +1,20 @@
+import { useScreenEffectVisible } from '../hooks/useScreenEffectVisible';
 import { useMemo, useRef } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import type { CannonConfettiMethods } from 'react-native-fast-confetti';
-import { CannonConfetti, ConfettiPresets } from 'react-native-fast-confetti';
+import {
+  CannonConfetti as SkiaCannonConfetti,
+  ConfettiPresets,
+} from '../../../src';
+import { CannonConfetti as WebGPUCannonConfetti } from '../../../src/gpu';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
-import { TEXTURE_SIZES, textureOptions } from '../constants/config';
+import {
+  rendererOptions,
+  TEXTURE_SIZES,
+  textureOptions,
+} from '../constants/config';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
 import { useScreenConfig } from '../hooks/useScreenConfig';
 import { getTextureProps } from '../utils/confettiConfig';
@@ -13,12 +22,17 @@ import { getTextureProps } from '../utils/confettiConfig';
 const twinBloomColors = ['#F6D61B', '#EE6A10', '#6F1EE8', '#B21FBA', '#DC1F5D'];
 
 export default function TwinBloomScreen() {
+  const isFocused = useScreenEffectVisible();
   const cannonConfettiRef = useRef<CannonConfettiMethods>(null);
   const { width } = useWindowDimensions();
   const { config, updateConfig } = useScreenConfig('cannon');
-  const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets();
+  const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets(
+    config.textureType
+  );
 
-  const confettiKey = `twin-bloom-${config.textureType}`;
+  const CannonConfetti =
+    config.renderer === 'webgpu' ? WebGPUCannonConfetti : SkiaCannonConfetti;
+  const confettiKey = `twin-bloom-${config.renderer}-${config.textureType}`;
   const twinBloomParticleSystem = useMemo(() => {
     if (config.textureType === 'default') {
       return ConfettiPresets.TwinBloom;
@@ -74,29 +88,18 @@ export default function TwinBloomScreen() {
     <View style={styles.container}>
       <View style={styles.controls}>
         <ConfigDropdown
+          label="Renderer:"
+          data={rendererOptions}
+          value={config.renderer}
+          onChange={(renderer) => updateConfig({ renderer })}
+        />
+        <ConfigDropdown
           label="Texture:"
           data={textureOptions}
           value={config.textureType}
           onChange={(v) => updateConfig({ textureType: v })}
         />
       </View>
-
-      <CannonConfetti
-        key={confettiKey}
-        ref={cannonConfettiRef}
-        autoplay
-        colors={twinBloomColors}
-        particleSystem={twinBloomParticleSystem}
-        reduceMotion="never"
-        flakeStyle="solid"
-      >
-        <CannonConfetti.Origin position="center-left" count={20}>
-          {renderFlakes()}
-        </CannonConfetti.Origin>
-        <CannonConfetti.Origin position="center-right" count={16}>
-          {renderFlakes()}
-        </CannonConfetti.Origin>
-      </CannonConfetti>
 
       <ConfettiControls
         actions={{
@@ -106,6 +109,25 @@ export default function TwinBloomScreen() {
           reset: () => cannonConfettiRef.current?.reset(),
         }}
       />
+
+      {isFocused ? (
+        <CannonConfetti
+          key={confettiKey}
+          ref={cannonConfettiRef}
+          autoplay
+          colors={twinBloomColors}
+          particleSystem={twinBloomParticleSystem}
+          reduceMotion="never"
+          flakeStyle="solid"
+        >
+          <CannonConfetti.Origin position="center-left" count={20}>
+            {renderFlakes()}
+          </CannonConfetti.Origin>
+          <CannonConfetti.Origin position="center-right" count={16}>
+            {renderFlakes()}
+          </CannonConfetti.Origin>
+        </CannonConfetti>
+      ) : null}
     </View>
   );
 }

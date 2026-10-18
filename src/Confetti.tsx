@@ -1,17 +1,18 @@
-import { useRSXformBuffer } from '@shopify/react-native-skia';
+import { useRSXformBuffer } from 'react-native-skia';
 import {
   forwardRef,
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
 } from 'react';
 import {
   Easing,
   Extrapolation,
   interpolate,
-  runOnUI,
   useSharedValue,
 } from 'react-native-reanimated';
+import { scheduleOnUI } from 'react-native-worklets';
 import { ConfettiCanvas } from './ConfettiCanvas';
 import {
   DEFAULT_BOXES_COUNT,
@@ -19,6 +20,9 @@ import {
   DEFAULT_CONFETTI_FALL_EASING,
   DEFAULT_CONFETTI_GRAVITY,
   DEFAULT_CONFETTI_WOBBLE,
+  DEFAULT_FLAKE_STYLE,
+  DEFAULT_FLIP_INTENSITY,
+  DEFAULT_INITIAL_SCALE,
   DEFAULT_VERTICAL_SPACING,
   TRAJECTORY_SAMPLE_COUNT,
 } from './constants';
@@ -59,7 +63,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       autoplay = true,
       infinite = false,
       continuous = false,
-      fadeOutOnEnd = false,
+      opacityAnimation,
       autoStartDelay = 0,
       onAnimationEnd,
       onAnimationStart,
@@ -67,9 +71,9 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       rotation,
       depth,
       verticalSpacing = DEFAULT_VERTICAL_SPACING,
-      flakeStyle = 'glossy',
-      initialScale = 0.3,
-      flipIntensity = 0.85,
+      flakeStyle = DEFAULT_FLAKE_STYLE,
+      initialScale = DEFAULT_INITIAL_SCALE,
+      flipIntensity = DEFAULT_FLIP_INTENSITY,
       easing = DEFAULT_CONFETTI_FALL_EASING,
       reduceMotion,
       ...textureRootProps
@@ -138,7 +142,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       useAnimationLifecycle({
         duration,
         infinite,
-        fadeOutOnEnd,
+        opacityAnimation,
         easing: continuous ? Easing.linear : easing,
         onAnimationStart,
         onAnimationEnd,
@@ -149,7 +153,14 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
     const totalTime = duration / 1000;
 
     const boxes = useSharedValue<FallingBox[]>([]);
-    const trajectories = useSharedValue<number[]>([]);
+    const trajectories = useSharedValue(new Float32Array(0));
+
+    useLayoutEffect(() => {
+      return () => {
+        boxes.set([]);
+        trajectories.set(new Float32Array(0));
+      };
+    }, [boxes, trajectories]);
 
     const { texture, sprites } = useConfettiLogic({
       sizeVariations,
@@ -226,19 +237,20 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
     );
 
     useImperativeHandle(ref, () => ({
-      pause: runOnUI(pause),
-      reset: runOnUI(() => {
-        'worklet';
-        reset();
-        cycleCount.set(0);
-      }),
-      resume: runOnUI(resume),
-      restart: runOnUI(restart),
+      pause: () => scheduleOnUI(pause),
+      reset: () =>
+        scheduleOnUI(() => {
+          'worklet';
+          reset();
+          cycleCount.set(0);
+        }),
+      resume: () => scheduleOnUI(resume),
+      restart: () => scheduleOnUI(restart),
     }));
 
     useEffect(() => {
       if (!ready || !reduceMotionReady) return;
-      runOnUI(() => {
+      scheduleOnUI(() => {
         if (visibleCount === 0) {
           if (autoplay) {
             restart(0);
@@ -258,7 +270,7 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
         } else {
           refreshBoxes();
         }
-      })();
+      });
     }, [
       autoplay,
       autoStartDelay,
@@ -292,7 +304,11 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       if (continuous) {
         const elapsed = cycleCount.get() + globalP;
         const pieceElapsed = elapsed - piece.phaseOffset;
-        p = pieceElapsed <= 0 ? 0 : pieceElapsed % 1.0;
+        if (pieceElapsed < 0) {
+          val.set(0, 0, -10000, -10000);
+          return;
+        }
+        p = pieceElapsed % 1.0;
       } else {
         p = globalP;
       }
@@ -346,6 +362,13 @@ const ConfettiInner = forwardRef<ConfettiMethods, InternalConfettiProps>(
       const c = Math.cos(rz) * scale;
       val.set(c, s, tx - c * px + s * py, ty - s * px - c * py);
     });
+
+    useLayoutEffect(() => {
+      return () => {
+        transforms.set([]);
+        sprites.set([]);
+      };
+    }, [sprites, transforms]);
 
     return (
       <ConfettiCanvas

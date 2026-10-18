@@ -1,24 +1,36 @@
+import { useScreenEffectVisible } from '../hooks/useScreenEffectVisible';
 import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { CannonConfettiMethods } from 'react-native-fast-confetti';
-import { CannonConfetti } from 'react-native-fast-confetti';
+import { CannonConfetti as SkiaCannonConfetti } from '../../../src';
+import { CannonConfetti as WebGPUCannonConfetti } from '../../../src/gpu';
 import { ConfettiControls } from '../components/ConfettiControls';
 import { ConfigDropdown } from '../components/ConfigDropdown';
 import { colors } from '../constants/colors';
-import { TEXTURE_SIZES, textureOptions } from '../constants/config';
+import {
+  PARTICLE_COUNTS,
+  rendererOptions,
+  TEXTURE_SIZES,
+  textureOptions,
+} from '../constants/config';
 import { useConfettiAssets } from '../hooks/useConfettiAssets';
 import { useScreenConfig } from '../hooks/useScreenConfig';
 import { getRotation, getTextureProps } from '../utils/confettiConfig';
 
 export default function CannonOriginalScreen() {
+  const isFocused = useScreenEffectVisible();
   const cannonConfettiRef = useRef<CannonConfettiMethods>(null);
   const { config, updateConfig } = useScreenConfig('cannon');
-  const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets();
+  const { snowFlakeSVG, moneyStackImage, isLoading } = useConfettiAssets(
+    config.textureType
+  );
 
   if (isLoading) return null;
 
+  const CannonConfetti =
+    config.renderer === 'webgpu' ? WebGPUCannonConfetti : SkiaCannonConfetti;
   const rotation = getRotation(config.textureType, 'cannon');
-  const confettiKey = `cannon-${config.textureType}`;
+  const confettiKey = `cannon-${config.renderer}-${config.textureType}`;
 
   const textureProps = getTextureProps(
     config.textureType,
@@ -54,50 +66,18 @@ export default function CannonOriginalScreen() {
     <View style={styles.container}>
       <View style={styles.controls}>
         <ConfigDropdown
+          label="Renderer:"
+          data={rendererOptions}
+          value={config.renderer}
+          onChange={(renderer) => updateConfig({ renderer })}
+        />
+        <ConfigDropdown
           label="Texture:"
           data={textureOptions}
           value={config.textureType}
           onChange={(v) => updateConfig({ textureType: v })}
         />
       </View>
-
-      <CannonConfetti
-        key={confettiKey}
-        ref={cannonConfettiRef}
-        fadeOutOnEnd
-        autoplay
-        infinite
-        rotation={rotation}
-        gravity={3}
-        sprayDuration={300}
-        initialScale={0.7}
-        flakeStyle="glossy"
-      >
-        <CannonConfetti.Origin
-          position="bottom-left"
-          count={150}
-          initialSpeed={3}
-          depth={{ min: 1, max: 1.1 }}
-        >
-          {renderFlakes()}
-        </CannonConfetti.Origin>
-        <CannonConfetti.Origin
-          position="bottom-right"
-          count={150}
-          initialSpeed={3}
-          depth={{ min: 1, max: 1.1 }}
-        >
-          {renderFlakes()}
-        </CannonConfetti.Origin>
-        <CannonConfetti.Origin
-          position="bottom-center"
-          count={150}
-          initialSpeed={4}
-          target="center"
-        >
-          {renderFlakes()}
-        </CannonConfetti.Origin>
-      </CannonConfetti>
 
       <ConfettiControls
         actions={{
@@ -107,6 +87,46 @@ export default function CannonOriginalScreen() {
           reset: () => cannonConfettiRef.current?.reset(),
         }}
       />
+
+      {isFocused ? (
+        <CannonConfetti
+          key={confettiKey}
+          ref={cannonConfettiRef}
+          opacityAnimation={{ enabled: true }}
+          autoplay
+          infinite
+          rotation={rotation}
+          gravity={2.5}
+          sprayDuration={300}
+          initialScale={0.7}
+          flakeStyle="glossy"
+        >
+          <CannonConfetti.Origin
+            position="bottom-left"
+            count={PARTICLE_COUNTS.cannonOrigin}
+            initialSpeed={3}
+            depth={{ min: 1, max: 1.1 }}
+          >
+            {renderFlakes()}
+          </CannonConfetti.Origin>
+          <CannonConfetti.Origin
+            position="bottom-right"
+            count={PARTICLE_COUNTS.cannonOrigin}
+            initialSpeed={3}
+            depth={{ min: 1, max: 1.1 }}
+          >
+            {renderFlakes()}
+          </CannonConfetti.Origin>
+          <CannonConfetti.Origin
+            position="bottom-center"
+            count={PARTICLE_COUNTS.cannonOrigin}
+            initialSpeed={4}
+            target="center"
+          >
+            {renderFlakes()}
+          </CannonConfetti.Origin>
+        </CannonConfetti>
+      ) : null}
     </View>
   );
 }

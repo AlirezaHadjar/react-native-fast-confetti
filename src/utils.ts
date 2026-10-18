@@ -692,7 +692,10 @@ export const generateFallingBoxesArray = ({
 
   const samplesPerPiece = TRAJECTORY_SAMPLE_COUNT;
   const stridePerPiece = (samplesPerPiece + 1) * 3;
-  const trajectories: number[] = new Array(count * stridePerPiece);
+  // This data is sampled as float coordinates by Skia. A typed array avoids
+  // millions of individually serialized Hermes numbers at high counts while
+  // preserving the precision of the final native transform buffer.
+  const trajectories = new Float32Array(count * stridePerPiece);
   const boxes: FallingBox[] = new Array(count);
 
   // Pre-compute stratified phase offsets and shuffle (Fisher-Yates) to

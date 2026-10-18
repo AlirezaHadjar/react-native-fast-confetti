@@ -1,11 +1,10 @@
 import { Easing } from 'react-native-reanimated';
-import type {
-  Rotation,
-  Range,
-  FlakeSize,
-} from './types';
+import type { FlakeStyle, Rotation, Range, FlakeSize } from './types';
 
 export const DEFAULT_BOXES_COUNT = 200;
+export const DEFAULT_FLAKE_STYLE: FlakeStyle = 'glossy';
+export const DEFAULT_INITIAL_SCALE = 0.3;
+export const DEFAULT_FLIP_INTENSITY = 0.85;
 
 export const DEFAULT_FLAKE_SIZE: FlakeSize[] = [
   { width: 8, height: 16, radius: undefined },
@@ -82,7 +81,7 @@ export const WOBBLE_MARGIN_PER_UNIT = 0.5;
 export const WOBBLE_MARGIN_FALLBACK = 1.5;
 
 export const DEFAULT_CANNON_ORIGIN_COUNT = 100;
-export const DEFAULT_CANNON_CONFETTI_GRAVITY = 3.0;
+export const DEFAULT_CANNON_CONFETTI_GRAVITY = 2.5;
 export const DEFAULT_CANNON_CONFETTI_DRAG = 3.0;
 export const DEFAULT_CANNON_CONFETTI_INITIAL_SPEED = 2.0;
 export const DEFAULT_CANNON_CONFETTI_SPREAD_ANGLE = Math.PI / 5;

@@ -9,8 +9,8 @@ We want this community to be friendly and respectful to each other. Please follo
 This project is a monorepo managed using [Bun workspaces](https://bun.sh/docs/install/workspaces). It contains the following packages:
 
 - The library package in the root directory.
-- A minimal example app in the `example/` directory.
-- A full-featured kitchen-sink app in the `kitchen-sink/` directory.
+- A minimal native example app in the `example/` directory.
+- A full-featured native and web kitchen-sink app in the `kitchen-sink/` directory.
 
 To get started with the project, run `bun install` in the root directory to install the required dependencies for each package:
 
@@ -19,6 +19,8 @@ bun install
 ```
 
 > Since the project relies on Bun workspaces, you cannot use [`npm`](https://github.com/npm/cli) for development.
+
+Both apps use Expo SDK 58 and this checkout. Skia v3 and WebGPU require native builds; these demos do not run in Expo Go.
 
 The [example app](/example/) demonstrates basic usage of the library. The [kitchen-sink app](/kitchen-sink/) is a full-featured showcase. You need to run one of them to test any changes you make.
 
@@ -50,17 +52,18 @@ To run the example app on Web:
 bun run kitchen-sink web
 ```
 
-Make sure your code passes TypeScript and ESLint. Run the following to verify:
+Make sure your code passes TypeScript, Oxlint, and Oxfmt. Run the following to verify:
 
 ```sh
 bun run typecheck
 bun run lint
+bun run format:check
 ```
 
 To fix formatting errors, run the following:
 
 ```sh
-bun run lint --fix
+bun run format
 ```
 
 Remember to add tests for your change if possible. Run the unit tests by:
@@ -84,9 +87,9 @@ Our pre-commit hooks verify that your commit message matches this format when co
 
 ### Linting and tests
 
-[ESLint](https://eslint.org/), [Prettier](https://prettier.io/), [TypeScript](https://www.typescriptlang.org/)
+[Oxlint](https://oxc.rs/docs/guide/usage/linter), [Oxfmt](https://oxc.rs/docs/guide/usage/formatter), [TypeScript](https://www.typescriptlang.org/)
 
-We use [TypeScript](https://www.typescriptlang.org/) for type checking, [ESLint](https://eslint.org/) with [Prettier](https://prettier.io/) for linting and formatting the code, and [Jest](https://jestjs.io/) for testing.
+We use [TypeScript](https://www.typescriptlang.org/) for type checking, [Oxlint](https://oxc.rs/docs/guide/usage/linter) with [Oxfmt](https://oxc.rs/docs/guide/usage/formatter) for linting and formatting the code, and [Jest](https://jestjs.io/) for testing.
 
 Our pre-commit hooks verify that the linter and tests pass when committing.
 
@@ -100,14 +103,39 @@ To publish new versions, run the following:
 bun run release
 ```
 
+Publishing stops unless `src/webgpu/compiledShaders.ts` matches `shaders/`,
+every compiled pipeline validates and runs on Dawn, and the packed library
+passes `bun run check:optional-peers`. That check fails if the default entry can
+reach `react-native-webgpu`, if any entry can reach TypeGPU, if TypeGPU appears
+in a dependency field, or if any shipped code file mentions it. Only `/gpu` may
+import `react-native-webgpu`; Oxlint enforces the same boundaries in `src`.
+
+### WebGPU shaders
+
+The WebGPU shaders are written in TypeGPU under `shaders/`. TypeGPU is a
+development dependency only: `bun run compile:shaders` compiles them to WGSL
+and records their bind group layouts, pipelines and buffer layouts in
+`src/webgpu/compiledShaders.ts`, which is the only form the runtime imports.
+Commit the regenerated file with every shader change: the pre-commit hook and
+CI fail when it is out of date. `bun run validate:shaders` compiles, validates
+and runs every pipeline on Dawn, the WebGPU implementation React Native WebGPU
+uses; CI runs it on a software Vulkan driver.
+
 ### Scripts
 
 The `package.json` file contains various scripts for common tasks:
 
 - `bun install`: setup project by installing dependencies.
 - `bun run typecheck`: type-check files with TypeScript.
-- `bun run lint`: lint files with ESLint.
+- `bun run lint`: lint files with Oxlint.
+- `bun run format`: format files with Oxfmt.
+- `bun run format:check`: check formatting.
 - `bun run test`: run unit tests with Jest.
+- `bun run compile:shaders`: compile `shaders/` to `src/webgpu/compiledShaders.ts` (`--check` verifies it is current).
+- `bun run validate:shaders`: compile, validate and run every compiled pipeline on Dawn.
+- `bun run check:optional-peers`: pack the library and fail if the default entry reaches an optional peer or any shipped file reaches or mentions TypeGPU.
+- `bun run smoke:skia-only`: bundle the packed library in a Skia-only Expo app without WebGPU.
+- `bun run smoke:gpu`: bundle the `/gpu` entry in an Expo app with WebGPU but without TypeGPU.
 - `bun run example start`: start the Metro server for the example app.
 - `bun run example android`: run the example app on Android.
 - `bun run example ios`: run the example app on iOS.

@@ -1,10 +1,5 @@
 import type { ComponentProps } from 'react';
-import {
-  Canvas,
-  Atlas,
-  ImageShader,
-  Vertices,
-} from '@shopify/react-native-skia';
+import { Canvas, Atlas, ImageShader, Vertices } from 'react-native-skia';
 import { StyleSheet, View } from 'react-native';
 import type { LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
 
